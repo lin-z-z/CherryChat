@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security report
+    url: https://github.com/lin-z-z/CherryChat/security/advisories/new
+    about: Report vulnerabilities privately. Do not disclose security details in a public Issue.
+  - name: Documentation
+    url: https://github.com/lin-z-z/CherryChat/blob/main/docs/README.md
+    about: Review deployment, compatibility, data, and security boundaries before filing.

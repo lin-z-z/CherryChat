@@ -1,0 +1,111 @@
+name: Bug report
+description: Report a reproducible CherryChat problem without exposing private data.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve CherryChat. Remove credentials, access codes,
+        cookies, private conversations, local paths, and private domains before
+        submitting. Security vulnerabilities belong in GitHub Security Advisories.
+
+  - type: input
+    id: version
+    attributes:
+      label: CherryChat version
+      description: Provide a commit hash, branch, or deployment date.
+      placeholder: main at a specific commit
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment shape
+      options:
+        - Local development
+        - Self-hosted BYOK-only
+        - Self-hosted with Hosted access
+        - Unknown
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and operating system
+      placeholder: Chrome version on Windows, macOS, Linux, Android, or iOS
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection mode
+      options:
+        - Browser BYOK
+        - Same-origin BYOK
+        - Hosted access
+        - Not related to a model connection
+    validations:
+      required: true
+
+  - type: dropdown
+    id: api_type
+    attributes:
+      label: API type
+      options:
+        - OpenAI Chat Completions
+        - OpenAI Responses
+        - Anthropic
+        - Gemini
+        - New API
+        - OpenAI-compatible
+        - Not applicable
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use test-only data and a minimal sequence.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include sanitized status codes or CherryChat error codes when useful.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Optional screenshots or logs with all sensitive values removed.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing Issues for this problem.
+          required: true
+        - label: I removed credentials, cookies, private content, paths, and domains.
+          required: true
+        - label: This report does not disclose a security vulnerability.
+          required: true

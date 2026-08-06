@@ -1,0 +1,479 @@
+"use client";
+
+import {
+  AlertCircle,
+  Archive,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Globe2,
+  Pencil,
+  RotateCcw,
+  SendHorizontal,
+  UserRound,
+} from "lucide-react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+
+import { BrandIcon } from "@/components/chat/brand-icon";
+import { TextEditDialog } from "@/components/chat/text-edit-dialog";
+import { TextTooltip } from "@/components/chat/text-tooltip";
+import { MessageMarkdown } from "@/components/message-markdown";
+import { useNotifications } from "@/components/notifications/notification-provider";
+import type { ChatController } from "@/features/chat/use-chat-controller";
+import { formatUserFacingError } from "@/lib/user-facing-error";
+import { textFromMessage } from "@/runtime/chat/projections";
+import type { ToolCallPart } from "@/runtime/chat/types";
+import { WEB_SEARCH_TOOL_NAME } from "@/runtime/tools/tavily-client";
+import { projectWebSearchTool } from "@/runtime/tools/tool-projections";
+
+export function MessageView({
+  chat,
+  message,
+}: {
+  chat: ChatController;
+  message: ChatController["path"][number];
+}) {
+  const { t } = useTranslation();
+  const { notify } = useNotifications();
+  const [editOpen, setEditOpen] = useState(false);
+  const [editPending, setEditPending] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const siblings = chat.allMessages
+    .filter((candidate) => candidate.parentId === message.parentId)
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  const versionIndex = siblings.findIndex(({ id }) => id === message.id);
+  const text = textFromMessage(message);
+  const reasoning = message.parts.find((part) => part.type === "reasoning");
+  const isLive = Boolean(
+    message.role === "assistant" &&
+    (message.status === "pending" || message.status === "streaming") &&
+    chat.activeGeneration?.conversationId === message.conversationId &&
+    chat.activeGeneration.assistantMessageId === message.id,
+  );
+  const visibleText = isLive ? (chat.stream?.finalText ?? "") : text;
+  const visibleReasoning = isLive
+    ? (chat.stream?.reasoningText ?? "")
+    : (reasoning?.text ?? "");
+  const duration = isLive
+    ? chat.stream?.reasoningDurationMs
+    : reasoning?.durationMs;
+  const contentParts = isLive
+    ? (chat.stream?.contentParts ?? [])
+    : message.parts.filter(
+        (part) => part.type === "text" || part.type === "tool_call",
+      );
+  const pendingToolCalls = isLive ? (chat.stream?.toolCalls ?? []) : [];
+
+  return (
+    <article
+      className={message.role === "user" ? "message-user" : "message-assistant"}
+    >
+      {message.role === "assistant" ? (
+        <div className="assistant-mark">
+          <BrandIcon size={32} />
+        </div>
+      ) : null}
+      <div
+        className={`message-body ${
+          message.role === "user"
+            ? "message-user-stack"
+            : "message-assistant-stack"
+        }`}
+      >
+        <div className="message-bubble">
+          {visibleReasoning ? (
+            <details
+              className="reasoning-panel"
+              open={isLive && chat.stream?.state === "reasoning"}
+            >
+              <summary>
+                {isLive
+                  ? t("thinking")
+                  : t("thoughtFor", {
+                      seconds: Math.max(0, Math.round((duration ?? 0) / 1000)),
+                    })}
+              </summary>
+              <p>{visibleReasoning}</p>
+            </details>
+          ) : null}
+          {contentParts.map((part, index) =>
+            part.type === "text" ? (
+              <MessageMarkdown
+                content={part.text}
+                key={`text-${index}`}
+                streaming={isLive && index === contentParts.length - 1}
+              />
+            ) : (
+              <ToolActivity key={part.id} parts={[part]} pendingNames={[]} />
+            ),
+          )}
+          <ToolActivity
+            parts={[]}
+            pendingNames={pendingToolCalls.map(({ name }) => name)}
+          />
+          {contentParts.length === 0 && isLive ? (
+            <div aria-label={t("generating")} className="typing-indicator">
+              <span />
+              <span />
+              <span />
+            </div>
+          ) : contentParts.length === 0 &&
+            message.role === "assistant" &&
+            message.status !== "error" ? (
+            <p className="terminal-message-state">
+              {message.status === "stopped"
+                ? t("generationStopped")
+                : t("emptyResponse")}
+            </p>
+          ) : null}
+          {message.role === "assistant" && message.status === "error" ? (
+            <div className="message-error-card" role="alert">
+              <AlertCircle aria-hidden="true" className="size-4" />
+              <div>
+                <strong>{t("generationFailed")}</strong>
+                <span>
+                  {message.error
+                    ? t(`chatError.${message.error.code}`)
+                    : t("unknownError")}
+                </span>
+              </div>
+              <button
+                disabled={chat.generationStarting || Boolean(chat.stream)}
+                onClick={() =>
+                  void chat
+                    .regenerateAssistant(message.id)
+                    .catch((cause: unknown) =>
+                      notify({
+                        message: formatUserFacingError(cause, t),
+                        tone: "error",
+                      }),
+                    )
+                }
+                type="button"
+              >
+                <RotateCcw aria-hidden="true" className="size-3.5" />
+                <span>{t("regenerate")}</span>
+              </button>
+            </div>
+          ) : null}
+          <div className="message-attachments">
+            {message.parts
+              .filter((part) => part.type === "image_ref")
+              .map((part) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  alt={part.alt ?? t("attachedImage")}
+                  key={part.attachmentId}
+                  src={chat.attachmentUrls[part.attachmentId]}
+                />
+              ))}
+          </div>
+        </div>
+        {message.role === "assistant" && message.modelSnapshot ? (
+          <p className="message-model-label">
+            {t("responseModel", { model: message.modelSnapshot.modelId })}
+          </p>
+        ) : null}
+        <div className="message-actions">
+          {visibleText ? (
+            <TextTooltip content={t("copy")}>
+              <button
+                aria-label={t("copy")}
+                onClick={() =>
+                  void navigator.clipboard
+                    .writeText(visibleText)
+                    .then(() =>
+                      notify({ message: t("copied"), tone: "success" }),
+                    )
+                    .catch(() =>
+                      notify({ message: t("copyError"), tone: "error" }),
+                    )
+                }
+                type="button"
+              >
+                <Copy aria-hidden="true" className="size-3.5" />
+              </button>
+            </TextTooltip>
+          ) : null}
+          {message.role === "user" ? (
+            <>
+              <TextTooltip content={t("edit")}>
+                <button
+                  aria-label={t("edit")}
+                  disabled={chat.generationStarting || Boolean(chat.stream)}
+                  onClick={() => {
+                    setEditError(null);
+                    setEditOpen(true);
+                  }}
+                  type="button"
+                >
+                  <Pencil aria-hidden="true" className="size-3.5" />
+                </button>
+              </TextTooltip>
+              {chat.currentConversation?.activeLeafId === message.id ? (
+                <TextTooltip content={t("sendEditedMessage")}>
+                  <button
+                    aria-label={t("sendEditedMessage")}
+                    disabled={chat.generationStarting || Boolean(chat.stream)}
+                    onClick={() =>
+                      void chat
+                        .generateUserMessage(message.id)
+                        .catch((cause: unknown) =>
+                          notify({
+                            message: formatUserFacingError(cause, t),
+                            tone: "error",
+                          }),
+                        )
+                    }
+                    type="button"
+                  >
+                    <SendHorizontal aria-hidden="true" className="size-3.5" />
+                  </button>
+                </TextTooltip>
+              ) : null}
+            </>
+          ) : message.status !== "error" ? (
+            <TextTooltip content={t("regenerate")}>
+              <button
+                aria-label={t("regenerate")}
+                disabled={chat.generationStarting || Boolean(chat.stream)}
+                onClick={() =>
+                  void chat
+                    .regenerateAssistant(message.id)
+                    .catch((cause: unknown) =>
+                      notify({
+                        message: formatUserFacingError(cause, t),
+                        tone: "error",
+                      }),
+                    )
+                }
+                type="button"
+              >
+                <RotateCcw aria-hidden="true" className="size-3.5" />
+              </button>
+            </TextTooltip>
+          ) : null}
+          <TextTooltip content={t("clearContextHere")}>
+            <button
+              aria-label={t("clearContextHere")}
+              onClick={() => void chat.setContextCutoff(message.id)}
+              type="button"
+            >
+              <Archive aria-hidden="true" className="size-3.5" />
+            </button>
+          </TextTooltip>
+          {siblings.length > 1 ? (
+            <span className="message-version-controls">
+              <TextTooltip content={t("previousVersion")}>
+                <button
+                  aria-label={t("previousVersion")}
+                  disabled={versionIndex <= 0}
+                  onClick={() => {
+                    const previous = siblings[versionIndex - 1];
+                    if (previous) void chat.selectVersion(previous.id);
+                  }}
+                  type="button"
+                >
+                  <ChevronLeft aria-hidden="true" className="size-3.5" />
+                </button>
+              </TextTooltip>
+              {versionIndex + 1}/{siblings.length}
+              <TextTooltip content={t("nextVersion")}>
+                <button
+                  aria-label={t("nextVersion")}
+                  disabled={versionIndex >= siblings.length - 1}
+                  onClick={() => {
+                    const next = siblings[versionIndex + 1];
+                    if (next) void chat.selectVersion(next.id);
+                  }}
+                  type="button"
+                >
+                  <ChevronRight aria-hidden="true" className="size-3.5" />
+                </button>
+              </TextTooltip>
+            </span>
+          ) : null}
+          {message.usage ? (
+            <span className="message-usage">
+              {message.usage.estimated ? t("approximately") : ""}
+              {message.usage.totalTokens ?? 0} {t("tokens")}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      {message.role === "user" ? (
+        <div aria-hidden="true" className="user-mark">
+          <UserRound size={17} strokeWidth={2.1} />
+        </div>
+      ) : null}
+      <TextEditDialog
+        cancelLabel={t("cancel")}
+        confirmLabel={t("saveAndSend")}
+        description={t("editMessageDescription")}
+        error={editError}
+        initialValue={text}
+        key={`${message.id}:${text}`}
+        label={t("messageContent")}
+        multiline
+        onOpenChange={(open) => {
+          if (!open && !editPending) {
+            setEditOpen(false);
+            setEditError(null);
+          }
+        }}
+        onSubmit={(next) => {
+          setEditError(null);
+          setEditPending(true);
+          setEditOpen(false);
+          const operation =
+            next === text
+              ? chat.generateUserMessage(message.id)
+              : chat.editAndRegenerate(message.id, next);
+          void operation
+            .catch((cause: unknown) =>
+              notify({
+                message: formatUserFacingError(cause, t),
+                tone: "error",
+              }),
+            )
+            .finally(() => setEditPending(false));
+        }}
+        open={editOpen}
+        pending={editPending}
+        secondaryLabel={t("saveOnly")}
+        onSecondarySubmit={(next) => {
+          if (next === text) {
+            setEditOpen(false);
+            return;
+          }
+          setEditError(null);
+          setEditPending(true);
+          setEditOpen(false);
+          void chat
+            .editMessage(message.id, next)
+            .catch((cause: unknown) =>
+              notify({
+                message: formatUserFacingError(cause, t),
+                tone: "error",
+              }),
+            )
+            .finally(() => setEditPending(false));
+        }}
+        title={t("editMessagePrompt")}
+      />
+    </article>
+  );
+}
+
+function ToolActivity({
+  parts,
+  pendingNames,
+}: {
+  parts: readonly ToolCallPart[];
+  pendingNames: readonly string[];
+}) {
+  const { t } = useTranslation();
+  const visiblePending = pendingNames.filter(Boolean);
+  if (parts.length === 0 && visiblePending.length === 0) return null;
+
+  return (
+    <div className="tool-activity-list">
+      {visiblePending.map((name, index) => (
+        <div
+          className="tool-activity-row is-running"
+          key={`${name}-${index}`}
+          role="status"
+        >
+          <Globe2 aria-hidden="true" size={15} />
+          <span>
+            {name === WEB_SEARCH_TOOL_NAME ? t("webSearching") : name}
+          </span>
+        </div>
+      ))}
+      {parts.map((part) => {
+        if (part.status === "running") {
+          return (
+            <div
+              className="tool-activity-row is-running"
+              key={part.id}
+              role="status"
+            >
+              <Globe2 aria-hidden="true" size={15} />
+              <span>{t("webSearching")}</span>
+            </div>
+          );
+        }
+        if (part.status === "error") {
+          return (
+            <div className="tool-activity-row is-error" key={part.id}>
+              <div className="tool-activity-status">
+                <Globe2 aria-hidden="true" size={15} />
+                <span>{t("webSearchFailed")}</span>
+              </div>
+              <p>{webSearchErrorMessage(part.errorCode, t)}</p>
+            </div>
+          );
+        }
+        const search = projectWebSearchTool(part);
+        const label = t("webSearchCompleted", {
+          count: search?.results.length ?? 0,
+        });
+        if (!search?.results.length) {
+          return (
+            <div className="tool-activity-row is-complete" key={part.id}>
+              <Globe2 aria-hidden="true" size={15} />
+              <span>{label}</span>
+            </div>
+          );
+        }
+        return (
+          <details className="tool-activity-row" key={part.id}>
+            <summary>
+              <Globe2 aria-hidden="true" size={15} />
+              <span>{label}</span>
+              <ChevronRight
+                aria-hidden="true"
+                className="tool-activity-chevron"
+                size={14}
+              />
+            </summary>
+            <ul className="tool-source-list">
+              {search.results.map((result) => (
+                <li key={result.url}>
+                  <a href={result.url} rel="noreferrer" target="_blank">
+                    {result.title || result.url}
+                  </a>
+                  <small>{new URL(result.url).hostname}</small>
+                  {result.content ? <p>{result.content}</p> : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        );
+      })}
+    </div>
+  );
+}
+
+function webSearchErrorMessage(
+  code: string | null,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  switch (code) {
+    case "TOOL_AUTH_FAILED":
+      return t("webSearchAuthFailed");
+    case "TOOL_RATE_LIMITED":
+      return t("webSearchRateLimited");
+    case "TOOL_REQUEST_TIMEOUT":
+      return t("webSearchTimedOut");
+    case "TOOL_SERVICE_UNAVAILABLE":
+      return t("webSearchUnavailable");
+    case "TOOL_REQUEST_ABORTED":
+      return t("webSearchStopped");
+    case "INVALID_TOOL_INPUT":
+      return t("webSearchInvalidRequest");
+    default:
+      return t("webSearchRequestFailed");
+  }
+}

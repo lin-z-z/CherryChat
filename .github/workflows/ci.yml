@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality and security
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install repository npm version
+        run: npm install --global npm@11.9.0 --ignore-scripts
+
+      - name: Verify toolchain
+        run: |
+          node -e "if (Number(process.versions.node.split('.')[0]) !== 22) process.exit(1)"
+          test "$(npm --version)" = "11.9.0"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Check documentation links and images
+        run: npm run docs:check
+
+      - name: Lint
+        run: npm run lint -- --max-warnings=0
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Run script regression tests
+        run: npm run test:scripts
+
+      - name: List production dependency licenses
+        run: npm run licenses:list
+
+      - name: Build production application
+        run: npm run build
+        env:
+          ACCESS_CODE: ci-access-4bb72bce1ba74296
+          AUTH_SECRET: ci-auth-secret-99a3495414054ced9ba9
+          MODELS: ci-canary-model
+          OPENAI_API_KEY: sk-ci-openai-7df8c15a5c6c4ab9
+          TAVILY_API_KEY: tvly-ci-93b27c15620d4f75
+
+      - name: Scan client bundle for server canaries
+        run: npm run security:scan-client-bundle
+        env:
+          ACCESS_CODE: ci-access-4bb72bce1ba74296
+          AUTH_SECRET: ci-auth-secret-99a3495414054ced9ba9
+          OPENAI_API_KEY: sk-ci-openai-7df8c15a5c6c4ab9
+          TAVILY_API_KEY: tvly-ci-93b27c15620d4f75
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+      - name: Audit all dependencies
+        run: npm audit
+
+  browser:
+    name: Browser - ${{ matrix.project }}
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - chromium
+          - mobile-chrome
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install repository npm version
+        run: npm install --global npm@11.9.0 --ignore-scripts
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chrome for Playwright
+        run: npx playwright install --with-deps chrome
+
+      - name: Run browser tests
+        run: npx playwright test --project=${{ matrix.project }}

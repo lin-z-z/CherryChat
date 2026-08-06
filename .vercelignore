@@ -1,0 +1,24 @@
+# Local secrets. Vercel project environment variables are injected separately.
+.env*
+!.env.example
+
+# Local linkage and development workflow state.
+.vercel/
+.git/
+.trellis/
+.agents/
+.claude/
+.codex/
+AGENTS.md
+docs/audits/
+
+# Dependencies, generated output, reports, and caches.
+node_modules/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+*.log
+.npm/
+*.tsbuildinfo

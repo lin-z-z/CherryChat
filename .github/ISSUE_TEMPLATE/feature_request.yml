@@ -1,0 +1,65 @@
+name: Feature request
+description: Propose a focused improvement that fits CherryChat's product boundary.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CherryChat is a lightweight, privacy-first, self-hostable web client for
+        individuals and small teams. Explain the user problem before proposing
+        a specific implementation.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: What is difficult or impossible today, and who is affected?
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the observable result, not only a library or architecture choice.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include existing workarounds or smaller solutions.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Primary scope
+      options:
+        - Conversation experience
+        - Model or protocol compatibility
+        - Storage, backup, or export
+        - Deployment or security
+        - Accessibility or responsive UI
+        - Documentation or contributor tooling
+        - Other focused scope
+    validations:
+      required: true
+
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Privacy, security, or compatibility considerations
+      description: Note new credentials, network paths, stored data, provider assumptions, or public cost exposure.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing Issues and the roadmap.
+          required: true
+        - label: I described a user outcome rather than only an implementation preference.
+          required: true
+        - label: I did not include credentials, private content, paths, or domains.
+          required: true

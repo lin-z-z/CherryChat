@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">CherryChat</title>
+  <desc id="desc">Two cherry-shaped chat bubbles on a dark rounded square</desc>
+  <defs>
+    <linearGradient id="background" x1="52" y1="40" x2="450" y2="472" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#090e1a"/>
+    </linearGradient>
+    <linearGradient id="cherryLeft" x1="112" y1="206" x2="278" y2="390" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fb7185"/>
+      <stop offset="1" stop-color="#e11d48"/>
+    </linearGradient>
+    <linearGradient id="cherryRight" x1="250" y1="186" x2="410" y2="372" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fda4af"/>
+      <stop offset="1" stop-color="#be123c"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="128" fill="url(#background)"/>
+  <path d="M245 219C249 145 286 102 350 83" fill="none" stroke="#65a30d" stroke-width="25" stroke-linecap="round"/>
+  <path d="M272 196C232 143 184 124 128 139" fill="none" stroke="#84cc16" stroke-width="25" stroke-linecap="round"/>
+  <path d="M347 84c34-20 72-20 105 2-21 36-54 53-99 48-17-2-24-34-6-50Z" fill="#a3e635"/>
+  <path d="M91 292c0-70 51-121 122-121s121 51 121 121-51 122-121 122c-20 0-40-5-57-14l-53 25 15-56c-17-21-27-48-27-77Z" fill="url(#cherryLeft)"/>
+  <path d="M234 275c0-66 48-114 114-114s113 48 113 114-48 114-113 114c-18 0-36-4-52-12l-48 23 13-51c-17-20-27-46-27-74Z" fill="url(#cherryRight)"/>
+  <circle cx="176" cy="292" r="14" fill="#fff"/>
+  <circle cx="220" cy="292" r="14" fill="#fff"/>
+  <circle cx="326" cy="275" r="13" fill="#fff"/>
+  <circle cx="368" cy="275" r="13" fill="#fff"/>
+</svg>
