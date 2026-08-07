@@ -8,11 +8,6 @@ import type {
 import { REASONING_EFFORT_LEVELS } from "@/runtime/chat/types";
 import { normalizeModelLookupName } from "@/runtime/models/model-id-normalization";
 
-export const MODEL_PROFILE_REFERENCE = {
-  project: "Cherry Studio",
-  commit: "84e4b13dba",
-} as const;
-
 const DEFAULT_CHOICE = { mode: "default" } as const satisfies ReasoningChoice;
 
 function effortControl(

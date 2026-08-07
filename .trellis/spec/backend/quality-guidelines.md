@@ -85,7 +85,7 @@ and is validated only when the Key activates Hosted search. The search route
 never accepts a target, Authorization header, or Key from the browser. A
 malformed Cookie is an invalid session, not a configuration failure.
 The upstream Tavily-compatible body contains exactly `query` and `max_results`,
-matching Cherry Studio's practiced minimum. Optional official Tavily fields are
+matching the reviewed compatibility minimum. Optional official Tavily fields are
 not part of the shared compatibility contract.
 
 ### 4. Validation & Error Matrix

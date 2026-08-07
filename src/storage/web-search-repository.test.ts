@@ -127,7 +127,7 @@ describe("WebSearchRepository", () => {
     await expect(database.webSearchCredentials.count()).resolves.toBe(0);
   });
 
-  it("accepts the Cherry Studio result limit and rejects values outside it", async () => {
+  it("accepts the reviewed result limit and rejects values outside it", async () => {
     await expect(
       repository.save({
         enabled: true,

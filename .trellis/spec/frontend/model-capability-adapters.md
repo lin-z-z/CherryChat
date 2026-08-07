@@ -84,8 +84,8 @@ type.
 - New API model discovery preserves `supported_endpoint_types` in
   `ModelDescriptor` and `modelListCache.v2`. Endpoint aliases map `openai`,
   `openai-response`, `anthropic`, and `gemini` to the four transport families;
-  unknown aliases are ignored. The first valid entry wins, matching the New API
-  order consumed by Cherry Studio. Missing metadata falls back to OpenAI Chat.
+  unknown aliases are ignored. The first valid entry wins, preserving the order
+  returned by New API. Missing metadata falls back to OpenAI Chat.
 - Endpoint selection always receives the target model ID explicitly. Settings,
   title generation, and normal chat may target three different models and must
   never reuse `connection.modelId` implicitly.

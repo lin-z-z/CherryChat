@@ -7,18 +7,10 @@ import {
   getQwenChatReasoningVariant,
   getModelFamilyProfile,
   isKimiK3Model,
-  MODEL_PROFILE_REFERENCE,
 } from "@/runtime/models/model-family-profiles";
 import { resolveModelCapability } from "@/runtime/models/model-capabilities";
 
 describe("reviewed model-family profile projection", () => {
-  it("pins the Cherry Studio behavior reference", () => {
-    expect(MODEL_PROFILE_REFERENCE).toEqual({
-      project: "Cherry Studio",
-      commit: "84e4b13dba",
-    });
-  });
-
   it.each([
     {
       family: "GPT",

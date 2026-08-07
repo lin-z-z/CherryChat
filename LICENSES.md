@@ -28,11 +28,3 @@ notable third-party foundations:
 published package metadata but includes an MIT license file in the package.
 Automated license inventory therefore reports it as missing metadata; its
 bundled license was reviewed manually.
-
-Open WebUI and Cherry Studio source code are not copied into CherryChat. They are
-used only as public behavior and interaction references. If code is later migrated
-from Vercel Chatbot, the exact files and Apache-2.0 attribution will be recorded
-here before release.
-
-Product names and trademarks remain the property of their respective owners.
-References in this file do not imply sponsorship, endorsement, or affiliation.

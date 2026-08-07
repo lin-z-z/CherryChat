@@ -211,9 +211,7 @@ test("renders the CherryChat shell", async ({ page }) => {
   });
 });
 
-test("uses one adaptive sidebar and an Open WebUI-shaped composer", async ({
-  page,
-}) => {
+test("uses one adaptive sidebar and a compact composer", async ({ page }) => {
   await mockConfig(page, {
     defaultModel: "gpt-5",
     models: ["gpt-5", "o3-mini"],

@@ -104,8 +104,8 @@ per user send.
 - The canonical tool-result message may retain the tool name for native Gemini
   projection, but the OpenAI Chat wire adapter emits only `role`, `content`,
   and `tool_call_id`. Do not forward the canonical `name` field to a strict
-  OpenAI-compatible gateway. This matches the `@ai-sdk/openai-compatible`
-  adapter used by Cherry Studio.
+  OpenAI-compatible gateway. This matches the reviewed
+  `@ai-sdk/openai-compatible` wire contract.
 - DeepSeek models can leak tool calls as `<｜｜DSML｜｜tool_calls>` in text
   rather than native tool-call deltas. Enable the compatibility parser only for
   DeepSeek identities, buffer tags across chunks, preserve invalid markup as
@@ -163,7 +163,7 @@ per user send.
   comes only from `TAVILY_BASE_URL`; a browser value never changes the Hosted
   route target.
 - The upstream JSON body contains exactly `{ query, max_results }`, matching
-  Cherry Studio's minimum Tavily compatibility request. Provider-specific
+  the reviewed minimum Tavily compatibility request. Provider-specific
   optional fields require an explicit capability contract; do not add them to
   the shared request because strict compatible gateways may reject them.
 - Hosted session `401 UNAUTHORIZED` invalidates only the matching auth epoch;

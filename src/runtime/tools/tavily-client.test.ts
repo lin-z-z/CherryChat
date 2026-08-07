@@ -25,7 +25,7 @@ describe("Tavily tool", () => {
     ).toThrow();
   });
 
-  it("uses Cherry Studio's strict, bounded model-facing search schema", () => {
+  it("uses a strict, bounded model-facing search schema", () => {
     const executor = createTavilyToolExecutor({
       apiKey: "tvly-test-secret",
       baseUrl: "https://api.tavily.com",

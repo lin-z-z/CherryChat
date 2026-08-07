@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { serializeToolResultForModel } from "@/runtime/transport/tool-wire";
 
 describe("tool wire projection", () => {
-  it("projects web search results to Cherry Studio's numbered source array", () => {
+  it("projects web search results to a numbered source array", () => {
     expect(
       serializeToolResultForModel({
         name: "web_search",
