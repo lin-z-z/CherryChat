@@ -26,6 +26,9 @@ The concrete boundaries are `src/app/api/`, `src/server/`, and `src/storage/`.
 
 ## Quality Check
 
-Run lint, strict type-check, unit/integration tests, production build, client
-bundle secret scan, and the relevant browser workflows. Vercel behavior must be
-reported from a real Preview separately from local Route Handler tests.
+During development, run related unit/integration tests. A local commit adds
+Lint, strict type-check, and every contract affected by the task. Full coverage,
+production build, client-bundle scan, audits, and complete browser workflows run
+before Push/PR/release or earlier for high-risk security, dependency, migration,
+build, and test-infrastructure changes. Vercel behavior must be reported from a
+real Preview separately from local Route Handler tests.

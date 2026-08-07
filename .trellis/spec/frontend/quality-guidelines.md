@@ -1,20 +1,42 @@
 # Frontend Quality Guidelines
 
-## Required Checks
+## Verification Tiers
+
+### During Development
+
+- Run `npm run test:related -- <changed-source-paths>` for the current code
+  change. Use `test:node`, `test:indexeddb`, or `test:dom` when an environment
+  group is the clearer boundary.
+- Run only the affected Playwright spec or test title. Chat workflows are split
+  into `e2e:chat-core`, `e2e:chat-models`, and `e2e:chat-data-tools`.
+- Documentation-only changes run `docs:check` and `test:scripts`; they do not
+  require browser regression unless they also change executable scripts or UI.
+
+### Before A Local Commit
 
 ```text
 npm run format:check
 npm run lint -- --max-warnings=0
 npm run typecheck
-npm run test:coverage
-npx playwright test --project=chromium --project=mobile-chrome
-npx playwright test --project=firefox --workers=1
-npm run build
+npm run test:related -- <all task-changed source paths>
+npx playwright test <affected specs or grep> --project=chromium
 ```
 
-WebKit is part of the declared matrix but may only be reported as passed when its
-Playwright browser is installed and actually run. Remote checks use
-`PLAYWRIGHT_BASE_URL`; this workstation also requires
+The final local check covers the complete impact surface of the current task,
+not only the latest edited file. Escalate to `test:coverage`, production build,
+bundle scan, audits, and the full browser matrix when changing shared schemas,
+security boundaries, persistence migrations, dependencies/lockfiles, test
+infrastructure, build configuration, or other high-fan-out contracts.
+
+### Before Push, PR, Or Release
+
+The full repository gate remains authoritative in CI: formatting, docs, Lint,
+TypeScript, Vitest coverage, script regressions, licenses, production build,
+client-bundle canary scan, production and complete audits, then the Chromium and
+Mobile Chrome matrix. A local release rehearsal uses one Playwright worker for
+reproducibility. Firefox and WebKit are optional compatibility evidence and may
+only be reported as passed when their browsers are installed and actually run.
+Remote checks use `PLAYWRIGHT_BASE_URL`; this workstation also requires
 `PLAYWRIGHT_PROXY_SERVER` for external requests.
 
 ## Test Placement
@@ -24,6 +46,16 @@ Playwright browser is installed and actually run. Remote checks use
   `tests/e2e/`.
 - Every bug fix gets a regression assertion that would fail if the bug returned.
   For the settings auth error, the assertion scopes `role="alert"` to the dialog.
+
+## Test Retention Policy
+
+- A test passing once is not a reason to remove it. Existing tests protect
+  active contracts from later shared dependency, schema, and refactor changes.
+- Remove a test only when its feature/contract is deleted, the same risk boundary
+  has genuinely duplicate coverage, or a stronger test is documented as an
+  equivalent replacement.
+- A deletion identifies the removed contract or replacement test in the change
+  description. Never lower coverage thresholds to justify deleting tests.
 
 ## Bilingual Public Documentation
 
@@ -77,6 +109,101 @@ statements/lines, 75% branches, and 100% functions. Do not enable automatic
 threshold updates. A threshold change requires a passing coverage run and one
 CLI-only higher-threshold check that exits non-zero without rewriting config.
 
+## Scenario: Tiered Test Verification
+
+### 1. Scope / Trigger
+
+Use this contract when adding or moving tests, changing `package.json` test
+commands, editing Vitest/Playwright configuration, or choosing the verification
+surface for development, commit, Push, PR, or release.
+
+### 2. Signatures
+
+```text
+npm run test:related -- <changed-source-paths...>
+npm run test:node -- [test-path]
+npm run test:indexeddb -- [test-path]
+npm run test:dom -- [test-path]
+npm run test:coverage
+npm run e2e:chat-core
+npm run e2e:chat-models
+npm run e2e:chat-data-tools
+```
+
+Vitest project names are `node`, `indexeddb`, and `dom`. The complete
+Playwright gate keeps the `chromium` and `mobile-chrome` projects.
+
+### 3. Contracts
+
+- New tests default to the Node project. Add a test to `domTests` only when it
+  uses React Testing Library, DOM globals, browser storage, or another jsdom
+  boundary; keep this as an exact file allowlist rather than a directory glob.
+- Storage tests use the IndexedDB project and `tests/setup-indexeddb.ts` unless
+  they also need DOM globals. DOM tests use `tests/setup.ts`, which includes
+  Testing Library matchers, Fake IndexedDB, and browser API stubs.
+- `test:related` receives source paths explicitly and follows Vitest's static
+  import graph. Configuration, shared type, lockfile, setup, and test-runner
+  changes are not reliably bounded by that graph and upgrade to the complete
+  affected project or `test:coverage`.
+- Chat E2E files own the `core`, `models`, and `data-tools` behavior domains and
+  reuse `tests/e2e/chat-test-helpers.ts`. Splitting a file may move tests and
+  helpers but must preserve every title and assertion.
+- Local Playwright uses four workers; CI uses one. Worker count changes runtime
+  scheduling only and never reduce the Chromium/Mobile Chrome release matrix.
+- Test deletion follows the retention policy above. A previously passing test
+  remains active unless its contract is removed or an equivalent stronger test
+  is named.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required action |
+| --- | --- |
+| Pure logic test | Keep in `node`; no jsdom setup |
+| Dexie/Fake IndexedDB only | Add to `indexeddb` |
+| React, DOM, or browser storage | Add exact path to `domTests` |
+| Test needs DOM and IndexedDB | Use `dom`; its setup provides both |
+| Source paths map cleanly | Run `test:related` during development |
+| Config/setup/lockfile or high-fan-out contract changes | Run complete coverage and affected E2E |
+| E2E title/count differs after a split | Reject the split until parity is restored |
+| Coverage falls below an existing threshold | Reject the change; do not lower the threshold |
+
+### 5. Good / Base / Bad Cases
+
+- **Good:** a pure TSX helper test reports the `node` project, while a component
+  interaction test appears once in `dom`.
+- **Base:** a narrow runtime change uses `test:related` and the affected E2E
+  behavior during development, then the task's complete impact surface before
+  commit.
+- **Bad:** include all `src/components/**/*.test.tsx` in jsdom, treat a related
+  run as proof for test-runner configuration, or delete old regressions merely
+  because they passed previously.
+
+### 6. Tests Required
+
+- Run each Vitest project independently and assert that every selected file is
+  assigned once to the intended project.
+- Run a representative pure TSX test through `test:node` and confirm the output
+  identifies the `node` project.
+- Run `test:coverage` after project-membership changes; assert the complete file
+  and test counts remain stable and every configured threshold passes.
+- After E2E file moves, compare old/new titles and `playwright --list` counts,
+  then run each affected Chromium domain plus the one-worker complete matrix.
+- Keep CI workflow coverage, build, bundle scan, audit, Chromium, and Mobile
+  Chrome jobs unchanged.
+
+### 7. Wrong vs Correct
+
+```ts
+// Wrong: every component-directory TSX test pays for jsdom, including pure logic.
+const domTests = ["src/components/**/*.test.tsx"];
+
+// Correct: environment membership follows the APIs the test actually uses.
+const domTests = [
+  "src/components/chat/model-selector.test.tsx",
+  "src/features/chat/use-chat-controller.test.tsx",
+];
+```
+
 ## Controlled Browser Request Synchronization
 
 When a Playwright route handler waits on a test-owned release callback, first
@@ -85,15 +212,17 @@ calling the release callback. UI generation state can appear before a dynamic
 runtime import reaches `page.route`; releasing an uninitialized no-op callback
 leaves the intercepted request pending and can block the retry.
 
-Use default Chromium worker concurrency for the final gate. Single-worker or
-targeted repeats are diagnostic evidence only and cannot replace the full
-concurrent project run.
+Local Playwright concurrency is bounded by `playwright.config.ts` to avoid
+resource-contention failures. CI intentionally uses one worker and bounded
+retries. Targeted runs prove only their affected behavior; the complete
+Chromium/Mobile Chrome matrix remains the Push/PR/release gate. Maximum local
+worker concurrency is not a separate correctness requirement.
 
 An interaction that intentionally performs several full navigations or reloads
-may use a local `test.slow()` after repeated default-concurrency evidence shows
+may use a local `test.slow()` after repeated bounded-concurrency evidence shows
 that the scenario exceeds the shared test timeout. Keep every assertion, scope
-the marker to that test, and still run the unchanged default-concurrency gate;
-do not raise the global timeout or use `test.slow()` to hide an unresolved wait.
+the marker to that test, and still run the affected gate; do not raise the global
+timeout or use `test.slow()` to hide an unresolved wait.
 
 After `page.reload()`, persistence tests wait for the visible
 `[data-settings-trigger]` to have the expected localized accessible name and to

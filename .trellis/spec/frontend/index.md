@@ -28,7 +28,10 @@ not belong in React components.
 
 ## Quality Check
 
-Run `npm run format:check`, `npm run lint -- --max-warnings=0`,
-`npm run typecheck`, `npm run test:coverage`, and the affected Playwright
-projects. A browser-facing bug fix requires an assertion at the interaction
-boundary, not only a unit test of an implementation detail.
+During development, run related Vitest files and affected Playwright behavior.
+Before a local commit, run format, zero-warning Lint, strict type-check, and the
+current task's complete impact surface. Full coverage, build, audits, bundle
+scan, and the Chromium/Mobile Chrome matrix belong to Push/PR/release, unless a
+high-risk local change requires earlier escalation. A browser-facing bug fix
+requires an assertion at the interaction boundary, not only a unit test of an
+implementation detail.

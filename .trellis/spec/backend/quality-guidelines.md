@@ -28,10 +28,13 @@ Hosted search additionally requires fixed-target, session, origin, bounded-body,
 timeout/cancel, upstream error, and secret-isolation tests in
 `hosted-web-search.test.ts`.
 
-Run the full project quality commands listed in the backend index. After a build,
-scan `.next/static` for server environment names and test secrets. Run
-`npm audit --omit=dev`; do not apply a force fix that downgrades Next.js or adds
-an unverified override.
+During development, run the affected tests above through `test:related` or a
+direct test path. A local commit also requires format, zero-warning Lint, strict
+type-check, and the task's complete backend impact surface. Full coverage,
+production build, `.next/static` canary scan, audits, and browser matrix belong
+to Push/PR/release unless the change touches security, dependencies, build/test
+configuration, migrations, or another high-fan-out contract. Never apply a force
+fix that downgrades Next.js or adds an unverified override.
 
 ## Forbidden Patterns
 
@@ -138,10 +141,10 @@ not part of the shared compatibility contract.
 - `src/server/hosted-web-search.test.ts`: origin/session, strict body,
   environment-selected Tavily target, client target rejection, 401/403/429/5xx,
   timeout, abort, response bound, redaction, and exact two-field upstream body.
-- `tests/e2e/chat.spec.ts`: BYOK-disabled UI and dialog-local auth error.
-- `tests/e2e/chat.spec.ts`: `403` remains a rejected-connection message and
+- `tests/e2e/chat-core.spec.ts`: BYOK-disabled UI and connection-method state.
+- `tests/e2e/chat-data-tools.spec.ts`: `403` remains a rejected-connection message and
   `401` remains an invalid-code message.
-- `tests/e2e/chat.spec.ts`: login becomes usable without reload, personal Key
+- `tests/e2e/chat-data-tools.spec.ts`: login becomes usable without reload, personal Key
   wins, clearing it restores hosted search, and expired auth cannot silently
   send a tool-free answer while search still appears enabled.
 - Real Preview evidence: both deployment shapes, browser network paths, and
@@ -620,8 +623,9 @@ Chrome after quality succeeds.
   output contains only environment names and hit counts, never canary values.
 - Browser validation is a separate job that depends on quality and runs
   `chromium` plus `mobile-chrome`. It uses the same toolchain, owns no Secrets,
-  and may use CI-only single-worker execution and bounded retries; the local
-  default-concurrency Chromium run remains the race-condition gate.
+  and uses single-worker execution with bounded retries. Local development uses
+  bounded workers for affected browser behavior; the complete CI matrix is the
+  final repository regression gate.
 - Disable Next telemetry. CI validates only; deployment belongs in a separate
   trusted workflow if introduced later.
 
@@ -668,8 +672,8 @@ Chrome after quality succeeds.
   fixtures. The matched fixture exits nonzero and its combined output does not
   contain the canary value.
 - Run `npm run licenses:list` on Windows and let the same package script run on
-  Linux CI. Run the target reload regression three times, then full default-
-  concurrency Chromium and Mobile Chrome.
+  Linux CI. Run the target reload regression three times, then the complete
+  single-worker Chromium and Mobile Chrome matrix.
 - GitHub-hosted execution remains the final Linux/Actions-runtime proof after
   the workflow is pushed; local Windows validation is not a substitute for the
   remote run.

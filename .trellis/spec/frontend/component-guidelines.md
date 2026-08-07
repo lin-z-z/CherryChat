@@ -31,7 +31,7 @@ repositories or transports inside those dialogs.
   class for a separator, but must not invent separate alignment rules.
 
 The regression reference for error placement is
-`tests/e2e/chat.spec.ts` (`localizes stable hosted authentication errors`).
+`tests/e2e/chat-data-tools.spec.ts` (Hosted authentication error boundaries).
 
 ```tsx
 // Wrong: a Settings action leaks into the page-level chat banner.
