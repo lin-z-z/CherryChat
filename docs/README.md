@@ -1,7 +1,8 @@
 # CherryChat documentation
 
+**English** · [简体中文](./README_CN.md)
+
 [Project home](../README.md) · [Live demo](https://cherrychat-xi.vercel.app) ·
-[简体中文入口](../README_CN.md) ·
 [Contributing](../CONTRIBUTING.md) · [License](../LICENSE)
 
 CherryChat is a lightweight, privacy-first, self-hostable web AI client for
@@ -11,8 +12,9 @@ README too dense.
 
 ## Start here
 
-- [Deployment and connection modes](./DEPLOYMENT.md) — local setup, BYOK,
-  Hosted access, environment variables, Vercel, and release checks.
+- [Deployment and connection modes](./DEPLOYMENT.md) — plain-language BYOK,
+  Hosted access, and self-hosting definitions, plus local setup, environment
+  variables, Vercel, and release checks.
 - [Model and protocol compatibility](./MODEL_COMPATIBILITY.md) — endpoint
   routing, provider adapters, model-aware reasoning controls, and compatibility
   limits.
@@ -42,8 +44,11 @@ are deliberately designed and verified.
 ## Documentation policy
 
 - `README.md` and `README_CN.md` are equivalent product entry points.
-- Detailed technical documentation is maintained in English as the single
-  source of truth.
+- Every formal document in this directory has an English baseline and a full
+  Simplified Chinese counterpart. If the two differ, the English document is
+  authoritative until the translation is corrected.
+- Navigation, product boundaries, and security warnings must stay aligned
+  across both languages.
 - Public statements must match current code and tests. Provider-specific claims
   are scoped to the reviewed endpoint and request format.
 - Security vulnerabilities belong in

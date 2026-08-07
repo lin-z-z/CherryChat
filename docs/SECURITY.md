@@ -1,5 +1,7 @@
 # Security policy and model
 
+**English** · [简体中文](./SECURITY_CN.md)
+
 [Documentation](./README.md) · [Deployment](./DEPLOYMENT.md) ·
 [Data behavior](./DATA.md) · [Project home](../README.md)
 

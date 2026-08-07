@@ -1,5 +1,5 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import { dirname, relative, resolve, sep } from "node:path";
+import { basename, dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -20,6 +20,15 @@ const SCREENSHOT_PATHS = [
 
 const SCREENSHOT_MAX_BYTES = 1_500_000;
 
+const DOCUMENTATION_PAIRS = [
+  ["docs/README.md", "docs/README_CN.md"],
+  ["docs/DEPLOYMENT.md", "docs/DEPLOYMENT_CN.md"],
+  ["docs/MODEL_COMPATIBILITY.md", "docs/MODEL_COMPATIBILITY_CN.md"],
+  ["docs/SECURITY.md", "docs/SECURITY_CN.md"],
+  ["docs/DATA.md", "docs/DATA_CN.md"],
+  ["docs/ROADMAP.md", "docs/ROADMAP_CN.md"],
+];
+
 const FORBIDDEN_TARGETS = [
   /(?:^|\/)docs\/audits(?:\/|$)/u,
   /(?:^|\/)\.trellis\/tasks(?:\/|$)/u,
@@ -32,10 +41,14 @@ const PLACEHOLDERS = [
   { label: "TODO placeholder", pattern: /\bTODO\b/u },
 ];
 
-const REQUIRED_README_TOKENS = {
+const REQUIRED_FILE_TOKENS = {
   "README.md": [
     "./README_CN.md",
     "Preview",
+    "Bring Your Own Key (BYOK)",
+    "Hosted access",
+    "Self-hosting",
+    "./docs/README.md",
     "./docs/DEPLOYMENT.md",
     "./docs/SECURITY.md",
     "./CONTRIBUTING.md",
@@ -45,11 +58,29 @@ const REQUIRED_README_TOKENS = {
   "README_CN.md": [
     "./README.md",
     "Preview",
-    "./docs/DEPLOYMENT.md",
-    "./docs/SECURITY.md",
+    "自带 API Key（BYOK",
+    "托管访问（Hosted access）",
+    "自托管（Self-hosting）",
+    "./docs/README_CN.md",
+    "./docs/DEPLOYMENT_CN.md",
+    "./docs/SECURITY_CN.md",
     "./CONTRIBUTING.md",
     "./LICENSE",
     "vercel.com/new/clone",
+  ],
+  "docs/DEPLOYMENT.md": [
+    "Bring Your Own Key (BYOK)",
+    "Hosted access",
+    "Self-hosting",
+    "Who supplies the provider key",
+    "Who pays the provider",
+  ],
+  "docs/DEPLOYMENT_CN.md": [
+    "自带 API Key（BYOK",
+    "托管访问（Hosted access）",
+    "自托管（Self-hosting）",
+    "谁提供 Provider Key",
+    "谁承担 Provider 费用",
   ],
 };
 
@@ -92,19 +123,58 @@ export async function checkDocumentation({ root = defaultRoot } = {}) {
     }
   }
 
-  for (const [readmePath, tokens] of Object.entries(REQUIRED_README_TOKENS)) {
-    const absolutePath = resolve(absoluteRoot, readmePath);
+  for (const [documentPath, tokens] of Object.entries(REQUIRED_FILE_TOKENS)) {
+    const absolutePath = resolve(absoluteRoot, documentPath);
     let content;
     try {
       content = await readFile(absolutePath, "utf8");
     } catch {
-      errors.push(`${readmePath}: file is missing`);
+      errors.push(`${documentPath}: file is missing`);
       continue;
     }
     for (const token of tokens) {
       if (!content.includes(token)) {
-        errors.push(`${readmePath}: missing required entry ${token}`);
+        errors.push(`${documentPath}: missing required entry ${token}`);
       }
+    }
+  }
+
+  for (const [englishPath, chinesePath] of DOCUMENTATION_PAIRS) {
+    const english = await readRequiredDocument({
+      root: absoluteRoot,
+      path: englishPath,
+      errors,
+    });
+    const chinese = await readRequiredDocument({
+      root: absoluteRoot,
+      path: chinesePath,
+      errors,
+    });
+    if (english === null || chinese === null) continue;
+
+    const chineseLink = `./${basename(chinesePath)}`;
+    const englishLink = `./${basename(englishPath)}`;
+    if (!english.includes(chineseLink)) {
+      errors.push(`${englishPath}: missing language link ${chineseLink}`);
+    }
+    if (!chinese.includes(englishLink)) {
+      errors.push(`${chinesePath}: missing language link ${englishLink}`);
+    }
+
+    const englishHeadings = extractHeadingLevels(english);
+    const chineseHeadings = extractHeadingLevels(chinese);
+    if (englishHeadings.join(",") !== chineseHeadings.join(",")) {
+      errors.push(
+        `${chinesePath}: heading structure differs from ${englishPath}`,
+      );
+    }
+
+    const englishLength = countNonWhitespace(english);
+    const chineseLength = countNonWhitespace(chinese);
+    if (chineseLength < englishLength * 0.45) {
+      errors.push(
+        `${chinesePath}: translation is too short for ${englishPath}`,
+      );
     }
   }
 
@@ -129,6 +199,25 @@ export async function checkDocumentation({ root = defaultRoot } = {}) {
     markdownCount: markdownFiles.length,
     screenshotCount: SCREENSHOT_PATHS.length,
   };
+}
+
+async function readRequiredDocument({ root, path, errors }) {
+  try {
+    return await readFile(resolve(root, path), "utf8");
+  } catch {
+    errors.push(`${path}: file is missing`);
+    return null;
+  }
+}
+
+function extractHeadingLevels(content) {
+  return [...content.matchAll(/^(#{1,6})\s+/gmu)].map(
+    (match) => match[1]?.length ?? 0,
+  );
+}
+
+function countNonWhitespace(content) {
+  return content.replace(/\s/gu, "").length;
 }
 
 export function extractDocumentTargets(content) {

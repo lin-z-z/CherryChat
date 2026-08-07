@@ -1,5 +1,7 @@
 # Data and backup behavior
 
+**English** · [简体中文](./DATA_CN.md)
+
 [Documentation](./README.md) · [Security](./SECURITY.md) ·
 [Deployment](./DEPLOYMENT.md) · [Project home](../README.md)
 

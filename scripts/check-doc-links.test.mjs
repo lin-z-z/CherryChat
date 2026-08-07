@@ -55,11 +55,43 @@ test("reports release placeholders and oversized screenshots", async () => {
   assert.ok(result.errors.some((error) => error.includes("exceeds")));
 });
 
+test("reports missing language links and translation structure drift", async () => {
+  await writeText(
+    "docs/ROADMAP_CN.md",
+    "# 路线图\n\n[English](./ROADMAP.md)\n\n## 边界\n\n### 额外标题\n",
+  );
+  await writeText("docs/SECURITY.md", "# Security\n\n## Boundary\n");
+
+  const result = await checkDocumentation({ root: workingDirectory });
+
+  assert.ok(
+    result.errors.some((error) => error.includes("missing language link")),
+  );
+  assert.ok(
+    result.errors.some((error) => error.includes("heading structure differs")),
+  );
+});
+
+test("reports missing plain-language connection terminology", async () => {
+  await writeText(
+    "docs/DEPLOYMENT_CN.md",
+    "# 部署\n\n[English](./DEPLOYMENT.md)\n\n## 边界\n\n连接说明。\n",
+  );
+
+  const result = await checkDocumentation({ root: workingDirectory });
+
+  assert.ok(
+    result.errors.some(
+      (error) =>
+        error.includes("docs/DEPLOYMENT_CN.md") &&
+        error.includes("missing required entry"),
+    ),
+  );
+});
+
 async function createValidFixture(root) {
   const readmeShared = [
     "Preview",
-    "[Deployment](./docs/DEPLOYMENT.md)",
-    "[Security](./docs/SECURITY.md)",
     "[Contributing](./CONTRIBUTING.md)",
     "[License](./LICENSE)",
     "https://vercel.com/new/clone",
@@ -67,18 +99,40 @@ async function createValidFixture(root) {
 
   await writeText(
     "README.md",
-    `# CherryChat\n\n[简体中文](./README_CN.md)\n${readmeShared}\n`,
+    `# CherryChat\n\n[简体中文](./README_CN.md)\n[Docs](./docs/README.md)\n[Deployment](./docs/DEPLOYMENT.md)\n[Security](./docs/SECURITY.md)\nBring Your Own Key (BYOK)\nHosted access\nSelf-hosting\n${readmeShared}\n`,
   );
   await writeText(
     "README_CN.md",
-    `# CherryChat\n\n[English](./README.md)\n${readmeShared}\n`,
+    `# CherryChat\n\n[English](./README.md)\n[文档](./docs/README_CN.md)\n[部署](./docs/DEPLOYMENT_CN.md)\n[安全](./docs/SECURITY_CN.md)\n自带 API Key（BYOK）\n托管访问（Hosted access）\n自托管（Self-hosting）\n${readmeShared}\n`,
   );
   await writeText("CONTRIBUTING.md", "# Contributing\n");
   await writeText("LICENSES.md", "# Licenses\n");
   await writeText("LICENSE", "MIT\n");
-  await writeText("docs/README.md", "# Docs\n\n[Security](./SECURITY.md)\n");
-  await writeText("docs/DEPLOYMENT.md", "# Deployment\n");
-  await writeText("docs/SECURITY.md", "# Security\n");
+  for (const [englishName, chineseName] of [
+    ["README.md", "README_CN.md"],
+    ["DEPLOYMENT.md", "DEPLOYMENT_CN.md"],
+    ["MODEL_COMPATIBILITY.md", "MODEL_COMPATIBILITY_CN.md"],
+    ["SECURITY.md", "SECURITY_CN.md"],
+    ["DATA.md", "DATA_CN.md"],
+    ["ROADMAP.md", "ROADMAP_CN.md"],
+  ]) {
+    const englishTerms =
+      englishName === "DEPLOYMENT.md"
+        ? "\nBring Your Own Key (BYOK)\nHosted access\nSelf-hosting\nWho supplies the provider key\nWho pays the provider\n"
+        : "";
+    const chineseTerms =
+      chineseName === "DEPLOYMENT_CN.md"
+        ? "\n自带 API Key（BYOK）\n托管访问（Hosted access）\n自托管（Self-hosting）\n谁提供 Provider Key\n谁承担 Provider 费用\n"
+        : "";
+    await writeText(
+      `docs/${englishName}`,
+      `# English\n\n[简体中文](./${chineseName})\n\n## Boundary\n\nComplete English content.\n${englishTerms}`,
+    );
+    await writeText(
+      `docs/${chineseName}`,
+      `# 中文\n\n[English](./${englishName})\n\n## 边界\n\n这是用于测试的完整中文技术文档内容，覆盖与英文相同的边界。\n${chineseTerms}`,
+    );
+  }
 
   for (const imageName of [
     "cherrychat-desktop.png",

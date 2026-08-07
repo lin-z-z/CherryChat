@@ -25,6 +25,27 @@ Playwright browser is installed and actually run. Remote checks use
 - Every bug fix gets a regression assertion that would fail if the bug returned.
   For the settings auth error, the assertion scopes `role="alert"` to the dialog.
 
+## Bilingual Public Documentation
+
+- Every formal English document under `docs/` has a complete Simplified Chinese
+  counterpart named `<NAME>_CN.md`. This includes the documentation index,
+  deployment, model compatibility, security, data, and roadmap documents.
+- Each document links to its language counterpart at the top. The English and
+  Chinese root READMEs link to the matching-language documentation set.
+- English is the correction baseline when translations disagree, but the Chinese
+  document must preserve the same heading structure and public product, security,
+  and deployment boundaries; it must not become a summary.
+- `npm run docs:check` enforces file pairs, reciprocal language links, heading
+  levels, a minimum translation-size guard, local links, screenshots, and private
+  path exclusions. `npm run test:scripts` covers the failure cases.
+- Exact comparison-project research belongs in ignored local Trellis task
+  evidence. Public docs, runtime metadata, tests, and specs use contract-focused
+  wording; required third-party license attribution remains in `LICENSES.md`.
+- Public READMEs and the deployment pair define Bring Your Own Key (BYOK),
+  Hosted access, and self-hosting in terms of credential owner, provider cost,
+  request path, and visitor input. Never use `Host` as the connection-mode label,
+  and never imply that self-hosting automatically means Hosted access.
+
 ## Forbidden Patterns
 
 - `any`, `@ts-ignore`, unchecked external JSON, or broad ESLint suppression.

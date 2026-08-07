@@ -2,7 +2,7 @@
   <img src="./public/icon-192.png" alt="CherryChat 图标" width="96" height="96" />
   <h1>CherryChat</h1>
   <p><strong>轻量、隐私优先、可自托管的 Web AI 对话客户端。</strong></p>
-  <p>适合希望使用浏览器本地数据、BYOK 连接和简单 Vercel 部署的个人用户与小型团队。</p>
+  <p>适合希望使用浏览器本地数据、自带 API Key（BYOK）连接和简单 Vercel 部署的个人用户与小型团队。</p>
   <p><a href="./README.md">English</a> · <strong>简体中文</strong></p>
   <p>
     <a href="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml"><img src="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml/badge.svg" alt="CI 状态" /></a>
@@ -14,14 +14,14 @@
 > [!IMPORTANT]
 > CherryChat 目前是持续验证中的 Preview（预览版）MVP。项目尚未提供账号、云同步、
 > 组织权限、集中审计或计费控制。将 Hosted Key 实例分享给他人前，请先阅读
-> [安全说明](./docs/SECURITY.md)和[部署边界](./docs/DEPLOYMENT.md)。
+> [安全说明](./docs/SECURITY_CN.md)和[部署边界](./docs/DEPLOYMENT_CN.md)。
 
 <p align="center">
   <a href="https://cherrychat-xi.vercel.app"><strong>体验 BYOK-only Demo</strong></a>
   ·
   <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Flin-z-z%2FCherryChat"><strong>部署到 Vercel</strong></a>
   ·
-  <a href="./docs/README.md"><strong>查看文档</strong></a>
+  <a href="./docs/README_CN.md"><strong>查看文档</strong></a>
   ·
   <a href="./CONTRIBUTING.md"><strong>参与贡献</strong></a>
 </p>
@@ -47,6 +47,25 @@ Production 不代表产品已经成熟，CherryChat 仍处于 Preview 阶段。
 - **实用对话工作流** —— 流式输出、推理展示、图片输入、Tavily 搜索、消息分支、
   本地搜索、助手、备份、导入导出、打印和可安装的 Web App manifest。
 - **英文与简体中文** —— 首次进入时跟随浏览器语言，之后在本地保存你的选择。
+
+## BYOK、托管访问与自托管
+
+这三个词描述的是不同责任，并不是一回事：
+
+- **自带 API Key（BYOK，Bring Your Own Key）**：每位用户填写模型 Provider
+  发给自己的 API Key。模型用量计入该用户自己的 Provider 账号，CherryChat 不会
+  提供模型额度。Key 为方便使用而保存在当前浏览器中，请求可以由浏览器直连
+  Provider，也可以经过部署固定的同源路由。
+- **托管访问（Hosted access）**：部署者把 Provider Key 配置在服务端环境变量中。
+  访客不填写 Provider API Key，而是输入 CherryChat 访问码。请求使用部署者固定的
+  模型白名单和 Provider 账号，因此费用和滥用风险由部署者承担。
+- **自托管（Self-hosting）**：只表示你在自己的 Vercel 或服务器上运行 CherryChat，
+  并不代表采用哪种凭据模式。一个自托管实例可以只开放 BYOK、只开放托管访问，
+  或同时开放两种选择。
+
+不要把 **Hosted access** 简写成 **Host**；“Host”还可能表示服务器、域名或部署
+应用这个动作。请求路径和凭据边界见
+[通俗对照表](./docs/DEPLOYMENT_CN.md#通俗术语说明)。
 
 ## 产品界面
 
@@ -74,7 +93,7 @@ Production 不代表产品已经成熟，CherryChat 仍处于 Preview 阶段。
 Hosted access 不会把 CherryChat 变成任意模型服务代理。原生 Anthropic、Gemini、
 OpenAI Responses 和 New API endpoint routing 属于 BYOK 能力；Hosted access
 始终使用部署固定的 Chat Completions 适配器。完整说明见
-[部署与连接模式](./docs/DEPLOYMENT.md)。
+[部署与连接模式](./docs/DEPLOYMENT_CN.md)。
 
 ## 快速开始
 
@@ -103,21 +122,21 @@ BYOK-only 部署不需要在 Vercel 中配置模型服务凭据。Hosted access 
 Vercel Firewall 限流规则。CherryChat 的进程内保护只是纵深防御，不是全局配额或
 计费账本。
 
-部署前请完整阅读 [Vercel 与环境变量指南](./docs/DEPLOYMENT.md)。直接使用 CLI
+部署前请完整阅读 [Vercel 与环境变量指南](./docs/DEPLOYMENT_CN.md)。直接使用 CLI
 部署时，提交到 Vercel 的源文件边界由仓库内的 `.vercelignore` 决定。
 
 ## 文档导航
 
-- [文档索引（英文）](./docs/README.md)
-- [部署与连接模式（英文）](./docs/DEPLOYMENT.md)
-- [模型和协议兼容性（英文）](./docs/MODEL_COMPATIBILITY.md)
-- [安全模型与漏洞报告（英文）](./docs/SECURITY.md)
-- [数据存储、删除、备份与导出（英文）](./docs/DATA.md)
-- [路线图与暂缓边界（英文）](./docs/ROADMAP.md)
+- [中文文档索引](./docs/README_CN.md)
+- [部署与连接模式](./docs/DEPLOYMENT_CN.md)
+- [模型和协议兼容性](./docs/MODEL_COMPATIBILITY_CN.md)
+- [安全模型与漏洞报告](./docs/SECURITY_CN.md)
+- [数据存储、删除、备份与导出](./docs/DATA_CN.md)
+- [路线图与暂缓边界](./docs/ROADMAP_CN.md)
 - [开源许可证与归属（英文）](./LICENSES.md)
 
-详细技术文档以英文版本作为单一事实来源；这份中文 README 保留完成首次运行、
-部署和安全判断所需的关键边界。
+每份正式技术文档均提供英文和简体中文版本；如果两者出现语义差异，以英文版本
+为基准。中英文版本应同步维护相同的能力、安全和部署边界。
 
 ## 安全与数据边界
 
@@ -134,7 +153,7 @@ Vercel Firewall 限流规则。CherryChat 的进程内保护只是纵深防御�
 安全漏洞请通过
 [GitHub Security Advisories](https://github.com/lin-z-z/CherryChat/security/advisories/new)
 私密报告，不要把细节放进公开 Issue。提交复现材料前请先阅读
-[安全策略](./docs/SECURITY.md)。
+[安全策略](./docs/SECURITY_CN.md)。
 
 ## 参与贡献
 
@@ -144,6 +163,5 @@ Vercel Firewall 限流规则。CherryChat 的进程内保护只是纵深防御�
 
 ## 许可证
 
-CherryChat 为独立实现，使用 [MIT License](./LICENSE) 发布。第三方依赖和行为
-参考记录在 [LICENSES.md](./LICENSES.md)。Cherry Studio 等参考项目与 CherryChat
-不存在官方关联，其代码、文案、截图和品牌资源均未包含在本仓库中。
+CherryChat 为独立实现，使用 [MIT License](./LICENSE) 发布。主要第三方依赖及其
+许可证信息记录在 [LICENSES.md](./LICENSES.md)。

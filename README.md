@@ -2,7 +2,7 @@
   <img src="./public/icon-192.png" alt="CherryChat logo" width="96" height="96" />
   <h1>CherryChat</h1>
   <p><strong>A lightweight, privacy-first, self-hostable web client for AI conversations.</strong></p>
-  <p>Built for individuals and small teams that prefer browser-local data, BYOK connections, and a simple Vercel deployment.</p>
+  <p>Built for individuals and small teams that prefer browser-local data, Bring Your Own Key (BYOK) connections, and a simple Vercel deployment.</p>
   <p><strong>English</strong> · <a href="./README_CN.md">简体中文</a></p>
   <p>
     <a href="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml"><img src="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
@@ -54,6 +54,28 @@ status.
   print, and an installable Web App manifest.
 - **English and Simplified Chinese** — the interface follows browser language on
   first use and keeps the selected language locally.
+
+## BYOK, Hosted access, and self-hosting
+
+These terms describe different responsibilities:
+
+- **Bring Your Own Key (BYOK)** means each user enters an API key issued by
+  their model provider. Provider usage is charged to that user's provider
+  account; CherryChat does not supply model credit. The key is saved in the
+  current browser for convenience and may be sent either directly to the
+  provider or through the deployment's fixed same-origin route.
+- **Hosted access** means the deployment operator configures a provider key in
+  the server environment. Visitors enter a CherryChat access code instead of a
+  provider API key. Requests use the operator's fixed model allowlist and
+  provider account, so the operator owns the usage cost and abuse risk.
+- **Self-hosting** only means running your own CherryChat deployment. It is not a
+  credential mode: a self-hosted instance can be BYOK-only, Hosted access, or
+  expose both choices.
+
+Do not shorten **Hosted access** to **Host**: “host” may mean a server, domain,
+or the act of deploying the application. See the
+[plain-language comparison](./docs/DEPLOYMENT.md#terms-in-plain-language) for
+the request paths and credential boundaries.
 
 ## Product tour
 
@@ -155,7 +177,5 @@ logs, local workflow state, and generated reports before submitting changes.
 ## License
 
 CherryChat is independently implemented and released under the
-[MIT License](./LICENSE). Third-party dependencies and behavioral references are
-listed in [LICENSES.md](./LICENSES.md). Cherry Studio and other referenced
-projects are not affiliated with CherryChat, and their code, copy, screenshots,
-or branding are not included here.
+[MIT License](./LICENSE). Notable third-party dependencies and their licenses
+are listed in [LICENSES.md](./LICENSES.md).

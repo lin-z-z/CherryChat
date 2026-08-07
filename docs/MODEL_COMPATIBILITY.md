@@ -1,5 +1,7 @@
 # Model and protocol compatibility
 
+**English** · [简体中文](./MODEL_COMPATIBILITY_CN.md)
+
 [Documentation](./README.md) · [Deployment](./DEPLOYMENT.md) ·
 [Security](./SECURITY.md) · [Project home](../README.md)
 

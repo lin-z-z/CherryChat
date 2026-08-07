@@ -1,5 +1,7 @@
 # Deployment and connection modes
 
+**English** · [简体中文](./DEPLOYMENT_CN.md)
+
 [Documentation](./README.md) · [Live demo](https://cherrychat-xi.vercel.app) ·
 [Security](./SECURITY.md) ·
 [Model compatibility](./MODEL_COMPATIBILITY.md) · [Project home](../README.md)
@@ -8,6 +10,37 @@ CherryChat runs as one Next.js application. A BYOK-only deployment does not
 need Postgres, Redis, object storage, or a deployment-owned model credential.
 Hosted access adds a fixed server-side OpenAI-compatible upstream protected by
 access codes and signed browser sessions.
+
+## Terms in plain language
+
+**Bring Your Own Key (BYOK)** means the model-provider credential belongs to
+the user. It does not mean free model access: the provider charges the account
+that issued the key. CherryChat is the client that sends requests; it does not
+create a provider account or grant model credit.
+
+**Hosted access** is CherryChat's name for a different credential arrangement.
+The deployment operator owns the provider key and stores it in the server
+environment. A visitor supplies only a CherryChat access code. The operator's
+provider account pays for successful upstream usage. This is shared access to a
+fixed deployment, not an individual CherryChat account, team role, or billing
+system.
+
+**Self-hosting** answers where CherryChat runs, not who owns the provider key.
+A self-hosted deployment can use either credential arrangement or expose both.
+Do not shorten Hosted access to “Host”; that word can also mean the server,
+domain, or deployment action.
+
+| Mode             | Who supplies the provider key | Who pays the provider | What the visitor enters                   |
+| ---------------- | ----------------------------- | --------------------- | ----------------------------------------- |
+| Browser BYOK     | Each user                     | Each user's account   | API key, API type, Base URL, and model    |
+| Same-origin BYOK | Each user                     | Each user's account   | API key and model; Base URL is left empty |
+| Hosted access    | Deployment operator           | Operator's account    | CherryChat access code                    |
+| Self-hosting     | Not a credential mode         | Depends on mode       | Means running the deployment yourself     |
+
+In same-origin BYOK, the user's key passes through the CherryChat Route Handler
+only for the deployment-fixed `BASE_URL`; it is not read from the deployment
+environment as an operator-owned credential. The verified public Demo is
+self-hosted on Vercel but BYOK-only, so it holds no project-owner model key.
 
 ## Choose a connection mode
 
