@@ -4,11 +4,13 @@ import { I18nextProvider } from "react-i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useChatController } from "@/features/chat/use-chat-controller";
+import { connectionScope } from "@/features/chat/connection-controller";
 import { createI18n } from "@/i18n/create-i18n";
 import type { ConnectionBundle } from "@/runtime/chat/types";
 import { DEFAULT_REQUEST_TIMEOUT_POLICY } from "@/runtime/transport/request-timeout-policy";
 import { ConnectionStore } from "@/storage/connection-store";
 import { ChatDatabase } from "@/storage/database";
+import { ModelListCacheRepository } from "@/storage/model-list-cache-repository";
 
 const hostedConfig = {
   byokEnabled: true,
@@ -74,6 +76,19 @@ describe("useChatController integration", () => {
     expect(requestPath(fetchMock.mock.calls[0]?.[0])).toBe("/api/config");
   });
 
+  it("rejects operations before services are ready and blank model selection", async () => {
+    installFetchMock();
+    const { result } = renderController();
+    const earlyBackup = result.current.createBackup();
+
+    await expect(earlyBackup).rejects.toThrow("Chat services are not ready");
+    await waitForController(result);
+
+    await act(async () => {
+      await expect(result.current.selectModel("  ")).rejects.toThrow();
+    });
+  });
+
   it("keeps a saved BYOK connection on a Hosted deployment", async () => {
     await persistConnection(savedByokConnection);
     const fetchMock = installFetchMock();
@@ -93,6 +108,35 @@ describe("useChatController integration", () => {
     expect(result.current.titleModel).toBe("saved-model");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(requestPath(fetchMock.mock.calls[0]?.[0])).toBe("/api/config");
+  });
+
+  it("restores a saved BYOK discovered list and enabled subset", async () => {
+    await persistConnection(savedByokConnection);
+    const database = new ChatDatabase();
+    await new ModelListCacheRepository(database).saveEnabled(
+      connectionScope({
+        mode: "byok",
+        baseUrl: "https://gateway.example",
+        apiType: "openai-compatible",
+      }),
+      ["optional-model"],
+      [
+        { id: "saved-model", ownedBy: null, endpointTypes: [] },
+        { id: "optional-model", ownedBy: null, endpointTypes: [] },
+      ],
+    );
+    database.close();
+    installFetchMock();
+
+    const { result } = renderController();
+    await waitForController(result);
+
+    expect(result.current.availableModels).toEqual([
+      "saved-model",
+      "optional-model",
+    ]);
+    expect(result.current.enabledModels).toEqual(["optional-model"]);
+    expect(result.current.models).toEqual(["optional-model", "saved-model"]);
   });
 
   it("exposes Hosted web search when the deployment default is usable", async () => {
@@ -116,6 +160,52 @@ describe("useChatController integration", () => {
     expect(result.current.webSearchAvailable).toBe(true);
   });
 
+  it("restores saved model roles and the active conversation on reload", async () => {
+    installFetchMock();
+    const first = renderController();
+    await waitForController(first.result);
+
+    await act(async () => {
+      await first.result.current.saveDefaultModel("hosted-title");
+      await first.result.current.saveTitleModel("hosted-default");
+      await first.result.current.createConversation();
+    });
+    const conversationId = first.result.current.currentConversation?.id;
+    first.unmount();
+
+    const second = renderController();
+    await waitForController(second.result);
+
+    expect(second.result.current.defaultModel).toBe("hosted-title");
+    expect(second.result.current.titleModel).toBe("hosted-default");
+    expect(second.result.current.currentConversation?.id).toBe(conversationId);
+  });
+
+  it("rejects blank or unavailable saved model roles", async () => {
+    installFetchMock();
+    const { result } = renderController();
+    await waitForController(result);
+
+    await act(async () => {
+      await expect(result.current.saveDefaultModel("  ")).rejects.toThrow();
+      await expect(
+        result.current.saveTitleModel("unavailable-model"),
+      ).rejects.toThrow();
+      await expect(
+        result.current.resolveModelCapability("  "),
+      ).resolves.toBeNull();
+      await expect(
+        result.current.resolveModelExecutionCapability("  "),
+      ).resolves.toBeNull();
+      await expect(
+        result.current.resolveModelCapability("hosted-default"),
+      ).resolves.not.toBeNull();
+      await expect(
+        result.current.resolveModelExecutionCapability("hosted-default"),
+      ).resolves.not.toBeNull();
+    });
+  });
+
   it("authenticates and persists a Hosted connection through the facade", async () => {
     const fetchMock = installFetchMock({
       models: ["hosted-next", "hosted-title"],
@@ -128,7 +218,7 @@ describe("useChatController integration", () => {
         mode: "hosted",
         baseUrl: "https://ignored.example/v1",
         apiKey: "unused-key",
-        accessCode: "next-chat-code",
+        accessCode: "replacement-access-code",
         modelId: "hosted-next",
         apiType: "anthropic",
       });
@@ -138,7 +228,7 @@ describe("useChatController integration", () => {
       mode: "hosted",
       baseUrl: "https://ignored.example/v1",
       apiKey: "unused-key",
-      accessCode: "next-chat-code",
+      accessCode: "replacement-access-code",
       modelId: "hosted-next",
       apiType: "openai",
     });
@@ -156,7 +246,7 @@ describe("useChatController integration", () => {
       headers: { "Content-Type": "application/json" },
     });
     expect(JSON.parse(String(authCall?.[1]?.body))).toEqual({
-      accessCode: "next-chat-code",
+      accessCode: "replacement-access-code",
     });
     expect(
       fetchMock.mock.calls.some(
@@ -181,10 +271,91 @@ describe("useChatController integration", () => {
       credential: {
         id: "current",
         apiKey: "unused-key",
-        accessCode: "next-chat-code",
+        accessCode: "replacement-access-code",
         encrypted: false,
       },
     });
+  });
+
+  it("keeps every Hosted model when model refresh fails", async () => {
+    installFetchMock({ modelsStatus: 502 });
+    const { result } = renderController();
+    await waitForController(result);
+
+    const database = new ChatDatabase();
+    await new ModelListCacheRepository(database).saveEnabled(
+      "hosted:same-origin",
+      ["hosted-default"],
+      [{ id: "hosted-default", ownedBy: null, endpointTypes: [] }],
+    );
+    database.close();
+
+    let refreshError: unknown;
+    await act(async () => {
+      try {
+        await result.current.refreshModels();
+      } catch (cause) {
+        refreshError = cause;
+      }
+    });
+
+    expect(refreshError).toBeDefined();
+    expect(result.current.availableModels).toEqual([
+      "hosted-default",
+      "hosted-title",
+    ]);
+    expect(result.current.enabledModels).toEqual([
+      "hosted-default",
+      "hosted-title",
+    ]);
+    expect(result.current.models).toEqual(["hosted-default", "hosted-title"]);
+  });
+
+  it("restores every deployment model after importing a stale Hosted enabled subset", async () => {
+    installFetchMock();
+    const { result } = renderController();
+    await waitForController(result);
+
+    const database = new ChatDatabase();
+    await new ModelListCacheRepository(database).saveEnabled(
+      "hosted:same-origin",
+      ["hosted-default"],
+      [
+        {
+          id: "hosted-default",
+          ownedBy: null,
+          endpointTypes: [],
+        },
+      ],
+    );
+    database.close();
+
+    window.localStorage.setItem("cherrychat.language", "en");
+    window.localStorage.setItem("cherrychat.theme", "dark");
+    await act(async () => {
+      await result.current.saveDefaultModel("hosted-title");
+      await result.current.saveTitleModel("hosted-default");
+    });
+
+    await act(async () => {
+      const backup = await result.current.createBackup();
+      const { prepared } = await result.current.inspectBackup(backup);
+      await result.current.restoreBackup(prepared);
+    });
+
+    expect(result.current.availableModels).toEqual([
+      "hosted-default",
+      "hosted-title",
+    ]);
+    expect(result.current.enabledModels).toEqual([
+      "hosted-default",
+      "hosted-title",
+    ]);
+    expect(result.current.models).toEqual(["hosted-default", "hosted-title"]);
+    expect(result.current.defaultModel).toBe("hosted-title");
+    expect(result.current.titleModel).toBe("hosted-default");
+    expect(window.localStorage.getItem("cherrychat.language")).toBe("en");
+    expect(window.localStorage.getItem("cherrychat.theme")).toBe("dark");
   });
 });
 
@@ -209,7 +380,11 @@ async function waitForController(
 }
 
 function installFetchMock(
-  options: { config?: typeof hostedConfig; models?: string[] } = {},
+  options: {
+    config?: typeof hostedConfig;
+    models?: string[];
+    modelsStatus?: number;
+  } = {},
 ) {
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -219,10 +394,16 @@ function installFetchMock(
         return jsonResponse(options.config ?? hostedConfig);
       if (path === "/api/auth") return new Response(null, { status: 204 });
       if (path === "/api/models") {
-        return jsonResponse({
-          object: "list",
-          data: (options.models ?? hostedConfig.models).map((id) => ({ id })),
-        });
+        return new Response(
+          JSON.stringify({
+            object: "list",
+            data: (options.models ?? hostedConfig.models).map((id) => ({ id })),
+          }),
+          {
+            status: options.modelsStatus ?? 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
       }
       throw new Error(`Unexpected fetch: ${path}`);
     },

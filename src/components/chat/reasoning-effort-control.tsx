@@ -72,7 +72,7 @@ export function ReasoningEffortControl({
       : capability.reasoningControl.options;
   const glmVariant = getGlmOpenAIChatReasoningVariant(capability);
   const qwenVariant = getQwenOpenAIChatReasoningVariant(capability);
-  const defaultLabel = isDeepSeekV4OpenAIChatCapability(capability)
+  const defaultOptionLabel = isDeepSeekV4OpenAIChatCapability(capability)
     ? t("deepSeekProviderDefault")
     : glmVariant === "glm-5.2"
       ? t("glm52ProviderDefault")
@@ -90,7 +90,13 @@ export function ReasoningEffortControl({
   const selected =
     options.find((option) => sameReasoningChoice(option, value)) ??
     DEFAULT_REASONING_CHOICE;
-  const label = reasoningChoiceLabel(selected, t, defaultLabel);
+  const selectedOptionLabel = reasoningChoiceLabel(
+    selected,
+    t,
+    defaultOptionLabel,
+  );
+  const triggerLabel =
+    selected.mode === "default" ? t("providerDefault") : selectedOptionLabel;
 
   const selectChoice = (nextValue: ReasoningChoice) => {
     if (disabled) return;
@@ -109,7 +115,7 @@ export function ReasoningEffortControl({
       >
         <Popover.Trigger asChild>
           <button
-            aria-label={`${t("reasoningEffort")}: ${label}`}
+            aria-label={`${t("reasoningEffort")}: ${selectedOptionLabel}`}
             className="reasoning-control-trigger"
             disabled={disabled}
             name="reasoningEffort"
@@ -120,7 +126,7 @@ export function ReasoningEffortControl({
               className="reasoning-control-icon"
               size={15}
             />
-            <span className="reasoning-control-label">{label}</span>
+            <span className="reasoning-control-label">{triggerLabel}</span>
             <ChevronDown
               aria-hidden="true"
               className="reasoning-control-chevron"
@@ -145,7 +151,7 @@ export function ReasoningEffortControl({
             >
               <ReasoningOption
                 disabled={disabled}
-                label={defaultLabel}
+                label={defaultOptionLabel}
                 onSelect={() => selectChoice(DEFAULT_REASONING_CHOICE)}
                 selected={selected.mode === "default"}
               />
@@ -153,7 +159,7 @@ export function ReasoningEffortControl({
                 <ReasoningOption
                   disabled={disabled}
                   key={reasoningChoiceKey(option)}
-                  label={reasoningChoiceLabel(option, t, defaultLabel)}
+                  label={reasoningChoiceLabel(option, t, defaultOptionLabel)}
                   onSelect={() => selectChoice(option)}
                   selected={sameReasoningChoice(selected, option)}
                 />

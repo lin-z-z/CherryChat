@@ -494,7 +494,7 @@ test("shows model changes only inside an active chat", async ({ page }) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
-        data: [{ id: "gpt-4.1-mini" }, { id: "o3-mini" }],
+        data: [{ id: "gpt-4.1-mini" }, { id: "gpt-5-mini" }, { id: "o3-mini" }],
       }),
     });
   });
@@ -517,6 +517,7 @@ test("shows model changes only inside an active chat", async ({ page }) => {
   );
   await page.goto("/");
   await saveByokConnection(page, test.info().project.name === "mobile-chrome", [
+    "gpt-5-mini",
     "o3-mini",
   ]);
 
@@ -533,15 +534,22 @@ test("shows model changes only inside an active chat", async ({ page }) => {
 
   await modelTrigger.click();
   await page.getByRole("option", { name: "gpt-4.1-mini" }).click();
-  await expect(modelTrigger).toHaveAccessibleName(
-    "Selected model: gpt-4.1-mini",
-  );
+  await modelTrigger.click();
+  await page.getByRole("option", { name: "gpt-5-mini" }).click();
+  await expect(modelTrigger).toHaveAccessibleName("Selected model: gpt-5-mini");
   await expect(page.locator(".chat-error")).toHaveCount(0);
   const notice = page.locator(".model-switch-divider");
-  await expect(notice).toHaveText("Model changed from o3-mini to gpt-4.1-mini");
+  await expect(notice).toHaveText("Model changed from o3-mini to gpt-5-mini");
   await expect(
     notice.locator("xpath=ancestor::*[contains(@class, 'message-column')]"),
   ).toHaveCount(1);
+
+  await modelTrigger.click();
+  await page.getByRole("option", { name: "o3-mini" }).click();
+  await expect(notice).toHaveCount(0);
+
+  await modelTrigger.click();
+  await page.getByRole("option", { name: "gpt-4.1-mini" }).click();
 
   await page
     .getByRole("textbox", { name: "Message CherryChat" })
@@ -556,6 +564,12 @@ test("shows model changes only inside an active chat", async ({ page }) => {
       .locator("xpath=following::article[contains(@class, 'message-user')]")
       .filter({ hasText: "After switch" }),
   ).toHaveCount(1);
+
+  await modelTrigger.click();
+  await page.getByRole("option", { name: "gpt-5-mini" }).click();
+  await expect(notice).toHaveText(
+    "Model changed from gpt-4.1-mini to gpt-5-mini",
+  );
 });
 
 test("regenerates with the newly selected model and keeps the old reply", async ({
@@ -1059,12 +1073,15 @@ test("saves a user edit without sending and can send the saved user leaf", async
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Original answer")).toBeVisible();
 
-  await page.getByRole("button", { name: "Edit" }).click();
-  const editDialog = page.getByRole("dialog", { name: "Edit message" });
-  await editDialog
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  const inlineEditor = page.locator("article.message-user.is-editing");
+  await expect(page.getByRole("dialog", { name: "Edit message" })).toHaveCount(
+    0,
+  );
+  await inlineEditor
     .getByRole("textbox", { name: "Message content" })
     .fill("Edited hello");
-  await editDialog.getByRole("button", { name: "Save only" }).click();
+  await inlineEditor.getByRole("button", { name: "Save only" }).click();
   await expect(page.getByText("Edited hello", { exact: true })).toBeVisible();
   await expect(page.getByText("2/2")).toBeVisible();
   expect(generationRequests).toHaveLength(1);
@@ -1126,12 +1143,15 @@ test("saves and sends an edited message immediately", async ({ page }) => {
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Original immediate answer")).toBeVisible();
 
-  await page.getByRole("button", { name: "Edit" }).click();
-  const editDialog = page.getByRole("dialog", { name: "Edit message" });
-  await editDialog
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  const inlineEditor = page.locator("article.message-user.is-editing");
+  await expect(page.getByRole("dialog", { name: "Edit message" })).toHaveCount(
+    0,
+  );
+  await inlineEditor
     .getByRole("textbox", { name: "Message content" })
     .fill("Edited and sent immediately");
-  await editDialog.getByRole("button", { name: "Save and send" }).click();
+  await inlineEditor.getByRole("button", { name: "Save and send" }).click();
 
   await expect(page.getByText("Edited immediate answer")).toBeVisible();
   expect(generationRequests).toHaveLength(2);
@@ -1144,6 +1164,77 @@ test("saves and sends an edited message immediately", async ({ page }) => {
     ]),
   });
   await expect(page.getByText("2/2")).toBeVisible();
+});
+
+test("keeps the inline message editor usable at desktop and mobile widths", async ({
+  page,
+}) => {
+  await mockConfig(page);
+  await mockModels(page);
+  await page.route(
+    "https://api.openai.com/v1/chat/completions",
+    async (route) => {
+      const payload = route.request().postDataJSON() as { stream?: boolean };
+      if (payload.stream === false) {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            choices: [{ message: { content: "Inline editor title" } }],
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: "text/event-stream",
+        body: `data: ${JSON.stringify({
+          choices: [
+            {
+              index: 0,
+              delta: { content: "Inline editor answer" },
+              finish_reason: null,
+            },
+          ],
+        })}\n\ndata: [DONE]\n\n`,
+      });
+    },
+  );
+
+  const mobile = test.info().project.name === "mobile-chrome";
+  await page.goto("/");
+  await saveByokConnection(page, mobile);
+  await page
+    .getByRole("textbox", { name: "Message CherryChat" })
+    .fill("Open the inline editor");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Inline editor answer")).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  const editor = page.locator("article.message-user.is-editing");
+  const content = editor.getByRole("textbox", { name: "Message content" });
+  await content.fill(
+    "Keep a long editable draft visible inside the original message bubble. ".repeat(
+      8,
+    ),
+  );
+  await expect(page.getByRole("dialog", { name: "Edit message" })).toHaveCount(
+    0,
+  );
+  await expect(editor.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(editor.getByRole("button", { name: "Save only" })).toBeVisible();
+  const saveAndSend = editor.getByRole("button", { name: "Save and send" });
+  await expect(saveAndSend).toBeVisible();
+  await expectNoHorizontalOverflow(page.locator("body"));
+  await expectNoHorizontalOverflow(editor);
+
+  if (mobile) {
+    const saveOnlyBox = await editor
+      .getByRole("button", { name: "Save only" })
+      .boundingBox();
+    const saveAndSendBox = await saveAndSend.boundingBox();
+    expect(saveOnlyBox).not.toBeNull();
+    expect(saveAndSendBox).not.toBeNull();
+    expect(saveAndSendBox?.y).toBeGreaterThan(saveOnlyBox?.y ?? 0);
+  }
 });
 
 test("keeps pending and sent images inside their composer and message layers on mobile", async ({
@@ -1430,7 +1521,7 @@ test("keeps both connection methods discoverable when Custom API is disabled", a
   await mockConfig(page, {
     byokEnabled: false,
     hostedEnabled: true,
-    models: ["hosted-model"],
+    models: ["hosted-model", "hosted-model-2"],
     defaultModel: "hosted-model",
   });
   await page.goto("/");
@@ -1448,6 +1539,19 @@ test("keeps both connection methods discoverable when Custom API is disabled", a
   ).toBeVisible();
   await expect(page.getByLabel("API key")).toHaveCount(0);
   await expect(page.getByLabel("API URL")).toHaveCount(0);
+  await expect(settings.getByRole("checkbox")).toHaveCount(0);
+
+  await settings.getByRole("button", { name: "Close" }).click();
+  await page.locator(".model-selector-trigger").click();
+  await expect(
+    page.getByRole("option", { name: "hosted-model", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: "hosted-model-2" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Settings" }).click();
+  await selectSettingsPage(page, settings, "Model service");
 
   await page
     .getByRole("button", { name: "Connection method: Use an access code" })
@@ -2079,6 +2183,9 @@ test("shows GLM-5.2 controls for Hosted OpenAI Chat", async ({ page }) => {
     name: `Reasoning effort: ${defaultLabel}`,
   });
   await expect(trigger).toBeVisible();
+  await expect(trigger.locator(".reasoning-control-label")).toHaveText(
+    "Model default",
+  );
   await trigger.click();
   expect(await page.getByRole("option").allTextContents()).toEqual([
     defaultLabel,
@@ -2086,6 +2193,14 @@ test("shows GLM-5.2 controls for Hosted OpenAI Chat", async ({ page }) => {
     "High",
     "Maximum",
   ]);
+  const defaultOption = page.getByRole("option", {
+    name: defaultLabel,
+    exact: true,
+  });
+  await expect(
+    defaultOption.locator(".reasoning-control-option-label"),
+  ).toHaveCSS("white-space", "normal");
+  await expectNoHorizontalOverflow(page.locator(".reasoning-control-popover"));
   await expectNoHorizontalOverflow(page.locator("body"));
 });
 

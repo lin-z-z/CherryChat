@@ -192,11 +192,12 @@ describe("ReasoningEffortControl", () => {
       });
       renderControl({ capability, modelId });
 
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: `Reasoning effort: ${labels[0]}`,
-        }),
-      );
+      const trigger = screen.getByRole("button", {
+        name: `Reasoning effort: ${labels[0]}`,
+      });
+      expect(trigger).toHaveTextContent("Model default");
+      expect(trigger).not.toHaveTextContent("DeepSeek official");
+      fireEvent.click(trigger);
 
       expect(
         screen.getAllByRole("option").map((option) => option.textContent),
@@ -225,11 +226,12 @@ describe("ReasoningEffortControl", () => {
     });
     renderControl({ capability, modelId });
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: `Reasoning effort: ${labels[0]}`,
-      }),
-    );
+    const trigger = screen.getByRole("button", {
+      name: `Reasoning effort: ${labels[0]}`,
+    });
+    expect(trigger).toHaveTextContent("Model default");
+    expect(trigger).not.toHaveTextContent("GLM official");
+    fireEvent.click(trigger);
 
     expect(
       screen.getAllByRole("option").map((option) => option.textContent),

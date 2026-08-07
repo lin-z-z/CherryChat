@@ -341,7 +341,7 @@ export function ModelServicePage({
               </SettingsButton>
             </div>
           </SettingsRow>
-          {availableModels.length > 0 ? (
+          {connection.mode === "byok" && availableModels.length > 0 ? (
             <div className="settings-model-enablement-block">
               <div className="settings-model-enablement-heading">
                 <div>

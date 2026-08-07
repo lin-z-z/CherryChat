@@ -529,8 +529,10 @@ describe("ChatShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
 
     const content = screen.getByRole("textbox", { name: "消息内容" });
-    expect(screen.getByRole("dialog")).toHaveTextContent(
-      "修改后会从这里创建新分支，并使用当前模型重新生成回答。",
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(content.closest("article")).toHaveClass(
+      "message-user",
+      "is-editing",
     );
     expect(content).toHaveValue("User bubble content");
 
@@ -563,6 +565,79 @@ describe("ChatShell", () => {
       ),
     );
     expect(controller.editMessage).not.toHaveBeenCalled();
+  });
+
+  it("cancels an inline user message edit without changing the message", async () => {
+    const controller = createController(createUserMessage());
+    vi.mocked(useChatController).mockReturnValue(controller);
+
+    renderShell();
+    const editButton = screen.getByRole("button", { name: "编辑" });
+    fireEvent.click(editButton);
+    fireEvent.change(screen.getByRole("textbox", { name: "消息内容" }), {
+      target: { value: "Discard this draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(
+      screen.queryByRole("textbox", { name: "消息内容" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("User bubble content")).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "编辑" })).toHaveFocus(),
+    );
+    expect(controller.editMessage).not.toHaveBeenCalled();
+    expect(controller.editAndRegenerate).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed inline edit draft and shows a local error", async () => {
+    const controller = createController(createUserMessage());
+    controller.editMessage = vi.fn(async () => {
+      throw new Error("storage detail must stay hidden");
+    });
+    vi.mocked(useChatController).mockReturnValue(controller);
+
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    const content = screen.getByRole("textbox", { name: "消息内容" });
+    fireEvent.change(content, { target: { value: "Keep this draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "仅保存" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("发生未知错误");
+    expect(content).toHaveValue("Keep this draft");
+    expect(content).toBeEnabled();
+  });
+
+  it("disables blank and duplicate inline edit submissions while pending", async () => {
+    let finishSave!: () => void;
+    const controller = createController(createUserMessage());
+    controller.editMessage = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    vi.mocked(useChatController).mockReturnValue(controller);
+
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    const content = screen.getByRole("textbox", { name: "消息内容" });
+    fireEvent.change(content, { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "仅保存" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存并发送" })).toBeDisabled();
+
+    fireEvent.change(content, { target: { value: "Pending draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "仅保存" }));
+    await waitFor(() => expect(content).toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "仅保存" }));
+    expect(controller.editMessage).toHaveBeenCalledTimes(1);
+
+    await act(async () => finishSave());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("textbox", { name: "消息内容" }),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   it("can send a user leaf that was saved without a reply", async () => {
@@ -973,6 +1048,8 @@ describe("ChatShell", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("兼容服务")).not.toBeInTheDocument();
     expect(screen.getByLabelText("访问码")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(controller.saveEnabledModels).not.toHaveBeenCalled();
   });
 
   it("saves enabled-model changes immediately without locking models in use", async () => {

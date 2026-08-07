@@ -3,7 +3,11 @@ import {
   type ConnectionDraft,
   type PublicConfig,
 } from "@/features/chat/connection-controller";
-import type { ChatEndpointType, ModelDescriptor } from "@/runtime/chat/types";
+import type {
+  ChatEndpointType,
+  MessageNode,
+  ModelDescriptor,
+} from "@/runtime/chat/types";
 import { createTavilyToolExecutor } from "@/runtime/tools/tavily-client";
 import {
   resolveTavilyExecutionSource,
@@ -92,6 +96,50 @@ export function resolvePersistedEnabledModelIds(
     : currentModelId.normalize("NFKC").trim()
       ? [currentModelId.normalize("NFKC").trim()]
       : [];
+}
+
+export interface ConnectionModelProjection {
+  enabledModels: string[];
+  models: string[];
+}
+
+export function projectConnectionModels({
+  mode,
+  currentModelId,
+  availableModelIds,
+  persistedEnabledModelIds,
+  requiredModelIds = [],
+}: {
+  mode: ConnectionDraft["mode"];
+  currentModelId: string;
+  availableModelIds: readonly string[];
+  persistedEnabledModelIds: readonly string[] | null;
+  requiredModelIds?: readonly string[];
+}): ConnectionModelProjection {
+  const enabledModels = resolvePersistedEnabledModelIds(
+    currentModelId,
+    mode === "hosted" ? availableModelIds : persistedEnabledModelIds,
+  );
+  return {
+    enabledModels,
+    models: resolveEnabledModelIds(
+      currentModelId,
+      enabledModels,
+      requiredModelIds,
+    ),
+  };
+}
+
+export function lastGeneratedModelId(
+  messages: readonly MessageNode[],
+): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === "assistant" && message.modelSnapshot) {
+      return message.modelSnapshot.modelId;
+    }
+  }
+  return null;
 }
 
 export function resolveWebSearchSource(

@@ -16,9 +16,10 @@ import {
   createGenerationPreparation,
   createWebSearchExecutor,
   descriptorsFromIds,
+  lastGeneratedModelId,
   modelCapabilityIdentity,
+  projectConnectionModels,
   resolveEnabledModelIds,
-  resolvePersistedEnabledModelIds,
   resolveVisibleModelIds,
   resolveWebSearchSource,
   type GenerationPreparation,
@@ -155,7 +156,6 @@ export function useChatController() {
   const generationPreparationRef = useRef<GenerationPreparation | null>(null);
   const generationStartingRef = useRef(false);
   const currentConversationIdRef = useRef<string | null>(null);
-  const currentConversationHasMessagesRef = useRef(false);
   const connectionRef = useRef<ConnectionDraft>(EMPTY_CONNECTION);
   const requestTimeoutsRef = useRef<RequestTimeoutPolicy>(
     DEFAULT_REQUEST_TIMEOUT_POLICY,
@@ -268,7 +268,6 @@ export function useChatController() {
   const clearCurrentProjection = useCallback(() => {
     conversationLoadEpochRef.current += 1;
     currentConversationIdRef.current = null;
-    currentConversationHasMessagesRef.current = false;
     requireServices().objectUrls.dispose();
     setCurrentConversation(null);
     setPath([]);
@@ -408,7 +407,6 @@ export function useChatController() {
       }
 
       currentConversationIdRef.current = conversationRecord.id;
-      currentConversationHasMessagesRef.current = messages.length > 0;
       webSearchEnabledRef.current = conversationRecord.webSearchEnabled;
       setWebSearchEnabled(conversationRecord.webSearchEnabled);
       setCurrentConversation(
@@ -525,12 +523,15 @@ export function useChatController() {
           nextConnection.modelId,
           initialModelDescriptors.map(({ id }) => id),
         );
-        const initialModels = resolveEnabledModelIds(
-          nextConnection.modelId,
-          cachedModelState.enabledModelIds ??
+        const initialModelProjection = projectConnectionModels({
+          mode: nextConnection.mode,
+          currentModelId: nextConnection.modelId,
+          availableModelIds: initialAvailableModels,
+          persistedEnabledModelIds:
+            cachedModelState.enabledModelIds ??
             (stored ? null : initialAvailableModels),
-          [nextDefaultModel, nextTitleModel],
-        );
+          requiredModelIds: [nextDefaultModel, nextTitleModel],
+        });
         if (disposed) return;
         setPublicConfig(config);
         connectionRef.current = nextConnection;
@@ -538,15 +539,9 @@ export function useChatController() {
         setConnection(nextConnection);
         setDefaultModel(nextDefaultModel);
         setTitleModel(nextTitleModel);
-        setEnabledModels(
-          resolvePersistedEnabledModelIds(
-            nextConnection.modelId,
-            cachedModelState.enabledModelIds ??
-              (stored ? null : initialAvailableModels),
-          ),
-        );
+        setEnabledModels(initialModelProjection.enabledModels);
         setAvailableModels(initialAvailableModels);
-        setModels(initialModels);
+        setModels(initialModelProjection.models);
         setWebSearchConfig(nextWebSearchConfig);
         setConversations(active);
         setArchivedConversations(archived);
@@ -682,23 +677,20 @@ export function useChatController() {
         const modelState = await requireServices().modelLists.loadState(scope);
         if (refreshEpoch === modelRefreshEpochRef.current) {
           modelDescriptorsRef.current = structuredClone(nextDescriptors);
-          const persistedEnabledModels = resolvePersistedEnabledModelIds(
+          const nextAvailableModels = resolveVisibleModelIds(
             value.modelId,
-            modelState.enabledModelIds,
+            nextDescriptors.map(({ id }) => id),
           );
-          setEnabledModels(persistedEnabledModels);
-          setAvailableModels(
-            resolveVisibleModelIds(
-              value.modelId,
-              nextDescriptors.map(({ id }) => id),
-            ),
-          );
-          setModels(
-            resolveEnabledModelIds(value.modelId, persistedEnabledModels, [
-              defaultModel ?? "",
-              titleModel ?? "",
-            ]),
-          );
+          const nextModelProjection = projectConnectionModels({
+            mode: value.mode,
+            currentModelId: value.modelId,
+            availableModelIds: nextAvailableModels,
+            persistedEnabledModelIds: modelState.enabledModelIds,
+            requiredModelIds: [defaultModel ?? "", titleModel ?? ""],
+          });
+          setEnabledModels(nextModelProjection.enabledModels);
+          setAvailableModels(nextAvailableModels);
+          setModels(nextModelProjection.models);
           await resolveCapability(value);
         }
         return nextDescriptors.map(({ id }) => id);
@@ -710,23 +702,26 @@ export function useChatController() {
           .modelLists.loadState(scope)
           .catch(() => null);
         if (refreshEpoch === modelRefreshEpochRef.current) {
-          modelDescriptorsRef.current = structuredClone(
-            modelState?.discoveredModels ?? descriptorsFromIds(cachedModels),
-          );
-          const persistedEnabledModels = resolvePersistedEnabledModelIds(
+          const fallbackDescriptors =
+            value.mode === "hosted" && publicConfig
+              ? descriptorsFromIds(publicConfig.models)
+              : (modelState?.discoveredModels ??
+                descriptorsFromIds(cachedModels));
+          modelDescriptorsRef.current = structuredClone(fallbackDescriptors);
+          const fallbackAvailableModels = resolveVisibleModelIds(
             value.modelId,
-            modelState?.enabledModelIds ?? null,
+            fallbackDescriptors.map(({ id }) => id),
           );
-          setEnabledModels(persistedEnabledModels);
-          setAvailableModels(
-            resolveVisibleModelIds(value.modelId, cachedModels),
-          );
-          setModels(
-            resolveEnabledModelIds(value.modelId, persistedEnabledModels, [
-              defaultModel ?? "",
-              titleModel ?? "",
-            ]),
-          );
+          const fallbackModelProjection = projectConnectionModels({
+            mode: value.mode,
+            currentModelId: value.modelId,
+            availableModelIds: fallbackAvailableModels,
+            persistedEnabledModelIds: modelState?.enabledModelIds ?? null,
+            requiredModelIds: [defaultModel ?? "", titleModel ?? ""],
+          });
+          setEnabledModels(fallbackModelProjection.enabledModels);
+          setAvailableModels(fallbackAvailableModels);
+          setModels(fallbackModelProjection.models);
           await resolveCapability(value);
         }
         throw cause;
@@ -736,6 +731,7 @@ export function useChatController() {
       buildTransport,
       connection,
       defaultModel,
+      publicConfig,
       requireServices,
       resolveCapability,
       titleModel,
@@ -794,19 +790,23 @@ export function useChatController() {
       setModelPreferences(createDefaultModelPreferences());
       setReasoningChoice(DEFAULT_REASONING_CHOICE);
       setConnection(nextConnection);
-      setAvailableModels(resolveVisibleModelIds(nextConnection.modelId, []));
-      const nextEnabledModels = resolvePersistedEnabledModelIds(
+      const nextAvailableModels = resolveVisibleModelIds(
         nextConnection.modelId,
-        null,
+        nextConnection.mode === "hosted" ? (publicConfig?.models ?? []) : [],
       );
-      setEnabledModels(nextEnabledModels);
-      setModels(
-        resolveEnabledModelIds(nextConnection.modelId, nextEnabledModels),
-      );
+      const nextModelProjection = projectConnectionModels({
+        mode: nextConnection.mode,
+        currentModelId: nextConnection.modelId,
+        availableModelIds: nextAvailableModels,
+        persistedEnabledModelIds: null,
+      });
+      setAvailableModels(nextAvailableModels);
+      setEnabledModels(nextModelProjection.enabledModels);
+      setModels(nextModelProjection.models);
       await resolveCapability(nextConnection);
       await refreshModels(nextConnection).catch(() => undefined);
     },
-    [refreshModels, requireServices, resolveCapability, t],
+    [publicConfig, refreshModels, requireServices, resolveCapability, t],
   );
 
   const saveDefaultModel = useCallback(
@@ -843,6 +843,18 @@ export function useChatController() {
 
   const saveEnabledModels = useCallback(
     async (modelIds: readonly string[]) => {
+      if (connection.mode === "hosted") {
+        const projection = projectConnectionModels({
+          mode: connection.mode,
+          currentModelId: connection.modelId,
+          availableModelIds: modelDescriptorsRef.current.map(({ id }) => id),
+          persistedEnabledModelIds: null,
+          requiredModelIds: [defaultModel ?? "", titleModel ?? ""],
+        });
+        setEnabledModels(projection.enabledModels);
+        setModels(projection.models);
+        return projection.enabledModels;
+      }
       const normalized = Array.from(
         new Set(
           modelIds
@@ -1373,7 +1385,6 @@ export function useChatController() {
           ],
         },
       );
-      currentConversationHasMessagesRef.current = true;
       if (path.length === 0 && draft.trim()) {
         await services.conversations.setLocalTitle(
           conversationRecord.id,
@@ -1556,8 +1567,8 @@ export function useChatController() {
 
   const selectModel = useCallback(
     async (modelId: string) => {
-      const from = connection.modelId;
       const conversationId = currentConversationIdRef.current;
+      const from = lastGeneratedModelId(path);
       if (conversationId) {
         await requireServices().conversations.setActiveModel(
           conversationId,
@@ -1572,11 +1583,11 @@ export function useChatController() {
             : current,
         );
       }
-      return currentConversationHasMessagesRef.current && conversationId
+      return conversationId && from && from !== modelId
         ? { conversationId, from, to: modelId }
         : null;
     },
-    [connection.modelId, requireServices, setActiveModel],
+    [path, requireServices, setActiveModel],
   );
 
   const resolveModelCapability = useCallback(
@@ -1907,34 +1918,35 @@ export function useChatController() {
       const restoredModelState = await requireServices().modelLists.loadState(
         connectionScope(connectionRef.current),
       );
-      modelDescriptorsRef.current = structuredClone(
-        restoredModelState.discoveredModels,
-      );
-      setAvailableModels(
-        resolveVisibleModelIds(
-          connectionRef.current.modelId,
-          restoredModelState.discoveredModelIds,
-        ),
-      );
-      const restoredEnabledModels = resolvePersistedEnabledModelIds(
+      const restoredDescriptors =
+        connectionRef.current.mode === "hosted"
+          ? descriptorsFromIds(
+              publicConfig?.models ??
+                modelDescriptorsRef.current.map(({ id }) => id),
+            )
+          : restoredModelState.discoveredModels;
+      modelDescriptorsRef.current = structuredClone(restoredDescriptors);
+      const restoredAvailableModels = resolveVisibleModelIds(
         connectionRef.current.modelId,
-        restoredModelState.enabledModelIds,
+        restoredDescriptors.map(({ id }) => id),
       );
-      setEnabledModels(restoredEnabledModels);
-      setModels(
-        resolveEnabledModelIds(
-          connectionRef.current.modelId,
-          restoredEnabledModels,
-          [
-            typeof restoredDefaultModel?.value === "string"
-              ? restoredDefaultModel.value
-              : (defaultModel ?? ""),
-            typeof restoredTitleModel?.value === "string"
-              ? restoredTitleModel.value
-              : (titleModel ?? ""),
-          ],
-        ),
-      );
+      const restoredProjection = projectConnectionModels({
+        mode: connectionRef.current.mode,
+        currentModelId: connectionRef.current.modelId,
+        availableModelIds: restoredAvailableModels,
+        persistedEnabledModelIds: restoredModelState.enabledModelIds,
+        requiredModelIds: [
+          typeof restoredDefaultModel?.value === "string"
+            ? restoredDefaultModel.value
+            : (defaultModel ?? ""),
+          typeof restoredTitleModel?.value === "string"
+            ? restoredTitleModel.value
+            : (titleModel ?? ""),
+        ],
+      });
+      setAvailableModels(restoredAvailableModels);
+      setEnabledModels(restoredProjection.enabledModels);
+      setModels(restoredProjection.models);
       await resolveCapability(connectionRef.current);
       clearCurrentProjection();
       await refreshLists();
@@ -1942,6 +1954,7 @@ export function useChatController() {
     [
       clearCurrentProjection,
       defaultModel,
+      publicConfig,
       refreshLists,
       requireServices,
       resolveCapability,

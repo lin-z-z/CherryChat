@@ -4,7 +4,9 @@ import {
   createGenerationPreparation,
   createWebSearchExecutor,
   descriptorsFromIds,
+  lastGeneratedModelId,
   modelCapabilityIdentity,
+  projectConnectionModels,
   resolveEnabledModelIds,
   resolvePersistedEnabledModelIds,
   resolveVisibleModelIds,
@@ -12,6 +14,7 @@ import {
 } from "@/features/chat/chat-controller-projections";
 import { WEB_SEARCH_TOOL_NAME } from "@/runtime/tools/tavily-client";
 import { DEFAULT_REQUEST_TIMEOUT_POLICY } from "@/runtime/transport/request-timeout-policy";
+import type { MessageNode } from "@/runtime/chat/types";
 
 describe("chat controller projections", () => {
   it("creates one externally releasable generation preparation", async () => {
@@ -67,6 +70,65 @@ describe("chat controller projections", () => {
     expect(resolvePersistedEnabledModelIds(" fallback ", null)).toEqual([
       "fallback",
     ]);
+  });
+
+  it("uses every Hosted model while preserving the BYOK enabled subset", () => {
+    expect(
+      projectConnectionModels({
+        mode: "hosted",
+        currentModelId: "hosted-a",
+        availableModelIds: ["hosted-a", "hosted-b", "hosted-c"],
+        persistedEnabledModelIds: ["hosted-a"],
+        requiredModelIds: ["hosted-c"],
+      }),
+    ).toEqual({
+      enabledModels: ["hosted-a", "hosted-b", "hosted-c"],
+      models: ["hosted-a", "hosted-b", "hosted-c"],
+    });
+    expect(
+      projectConnectionModels({
+        mode: "byok",
+        currentModelId: "custom-a",
+        availableModelIds: ["custom-a", "custom-b", "custom-c"],
+        persistedEnabledModelIds: ["custom-b"],
+        requiredModelIds: ["custom-c"],
+      }),
+    ).toEqual({
+      enabledModels: ["custom-b"],
+      models: ["custom-b", "custom-a", "custom-c"],
+    });
+  });
+
+  it("finds the latest model that actually generated on the current path", () => {
+    const message = (
+      id: string,
+      role: MessageNode["role"],
+      modelId: string | null,
+    ): MessageNode => ({
+      id,
+      conversationId: "conversation-1",
+      parentId: null,
+      role,
+      parts: [{ type: "text", text: id }],
+      status: "completed",
+      modelSnapshot: modelId
+        ? { modelId, connectionScope: "hosted:same-origin" }
+        : null,
+      usage: null,
+      error: null,
+      createdAt: "2026-08-07T00:00:00.000Z",
+      updatedAt: "2026-08-07T00:00:00.000Z",
+    });
+    const path = [
+      message("user-a", "user", null),
+      message("assistant-a", "assistant", "model-a"),
+      message("user-b", "user", null),
+      message("assistant-b", "assistant", "model-b"),
+      message("user-c", "user", null),
+    ];
+
+    expect(lastGeneratedModelId(path)).toBe("model-b");
+    expect(lastGeneratedModelId([message("user", "user", null)])).toBeNull();
   });
 
   it("selects only the connection-owned web search source", () => {

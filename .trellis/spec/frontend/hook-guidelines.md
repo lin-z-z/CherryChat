@@ -255,9 +255,12 @@ saveConnectionChange(
   unsaved global search permission; repository persistence remains authoritative
   after the user explicitly enables or disables it. The per-conversation search
   toggle still initializes off and never incurs search cost by itself.
-- `availableModels` is the discovered projection. `models` is the user-enabled
-  projection consumed by selectors. Refreshing discovery never replaces the
-  enabled list, and required active/default/title models remain visible.
+- `availableModels` is the discovered projection. In BYOK, `models` is the
+  user-enabled projection consumed by selectors; refreshing discovery never
+  replaces that enabled list. In Hosted, the server's available list is the
+  enabled list, and startup, refresh, fallback, connection save, and backup
+  restore all ignore but do not delete a browser-saved subset. Required
+  active/default/title models remain visible.
 - Capability and preference writes are stored together and scoped by the
   current connection scope plus explicit `modelId`; header selection never
   rewrites the persisted default model.
@@ -279,6 +282,10 @@ saveConnectionChange(
 - Explicit New chat creation activates the persisted default model. If the user
   selects a model on an empty workspace and sends directly, implicit creation
   preserves that selection instead of silently restoring the default.
+- `selectModel` persists the target for the next request, but its optional
+  switch event derives `from` from the current branch's last Assistant
+  `modelSnapshot`. Before any Assistant reply, or when selecting that same
+  answered model again, it returns `null`.
 - `ModelPreferences.streaming` defaults to `true`. `temperature` and `topP`
   each use `{ enabled, value }`; disabled values are omitted from the request.
 - An explicitly `unsupported` model capability disables the corresponding
@@ -321,10 +328,13 @@ saveConnectionChange(
 | Hosted mode has only a saved personal Tavily Key | Keep the key, but report site search unavailable until authenticated |
 | Custom API has only a valid Hosted Session | Report personal setup required; do not call `/api/web-search` |
 | Model discovery fails for the current scope | Keep its last-known-good list; reject to the settings action |
+| Hosted cache/backup enables only a subset | Project every current server model; keep the stale subset stored but inactive |
 | Cached New API list has endpoint metadata | Restore descriptors and recompute capability before rethrowing the refresh error |
 | Title model uses another New API endpoint | Build title transport from the title model descriptor |
 | An older model refresh finishes after a new connection starts | Return to its caller but do not write cache or React state |
 | Connection scope or credential changes | Clear the target list cache before persisting the new connection |
+| A answered, B selected without sending, then C selected | Return a switch event from A to C |
+| A answered, B selected without sending, then A selected | Return `null`; do not invent a switch event |
 | Capability override is malformed | Repository schema rejects the write |
 | Temperature outside `0..2` or Top P outside `0..1` | Repository schema rejects the write |
 | Non-streaming response is not valid Chat Completions JSON | Surface `STREAM_PROTOCOL_ERROR` and finalize the failed message |
@@ -385,6 +395,10 @@ saveConnectionChange(
   ConnectionStore round trip.
 - Repository/component: discovery refresh preserves enabled IDs; required
   models cannot be deselected; legacy records without enablement stay valid.
+- Hook/component: Hosted initialization and backup restore ignore stale enabled
+  subsets, and the Hosted Model service renders no enablement checkboxes.
+- Projection/browser: model switch events cover no prior answer, A -> B -> C
+  without a B reply, selecting A again, and B replying before switching to C.
 - Playwright: cached models survive reload and transient failure; a delayed
   connection-A response cannot replace connection B's list.
 - Repository/Playwright: source-aware defaults apply only without records;
