@@ -8,7 +8,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  ...(process.env.CI ? { workers: 1 } : {}),
+  workers: process.env.CI ? 1 : 4,
   reporter: "html",
   use: {
     baseURL: remoteBaseUrl ?? "http://127.0.0.1:3000",

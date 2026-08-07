@@ -1,6 +1,25 @@
 import { defineConfig } from "vitest/config";
 import path from "node:path";
 
+const allTests = ["src/**/*.test.{ts,tsx}"];
+const domTests = [
+  "src/components/chat/assistant-selector.test.tsx",
+  "src/components/chat/model-enablement-list.test.tsx",
+  "src/components/chat/model-selector.test.tsx",
+  "src/components/chat/reasoning-effort-control.test.tsx",
+  "src/components/chat/theme-switcher.test.tsx",
+  "src/components/chat-shell.test.tsx",
+  "src/components/message-markdown.test.tsx",
+  "src/components/settings/settings-controls.test.tsx",
+  "src/features/chat/use-chat-controller.test.tsx",
+  "src/storage/clear-local-data.test.ts",
+  "src/storage/connection-store.test.ts",
+];
+const indexedDbTests = [
+  "src/storage/**/*.test.ts",
+  "src/runtime/models/model-capabilities.test.ts",
+];
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -8,9 +27,36 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "jsdom",
-    setupFiles: ["./tests/setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}"],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: allTests,
+          exclude: [...indexedDbTests, ...domTests],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "indexeddb",
+          environment: "node",
+          include: indexedDbTests,
+          exclude: domTests,
+          setupFiles: ["./tests/setup-indexeddb.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "dom",
+          environment: "jsdom",
+          include: domTests,
+          setupFiles: ["./tests/setup.ts"],
+        },
+      },
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
