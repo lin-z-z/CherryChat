@@ -3,11 +3,12 @@
 **English** · [简体中文](./ROADMAP_CN.md)
 
 [Documentation](./README.md) · [Security](./SECURITY.md) ·
-[Deployment](./DEPLOYMENT.md) · [Project home](../README.md)
+[Deployment](./DEPLOYMENT.md) · [Releases](./RELEASES.md) ·
+[Project home](../README.md)
 
 ## Restricted CORS proxy
 
-The MVP deliberately does not proxy arbitrary BYOK Base URLs. If real usage
+The product deliberately does not proxy arbitrary BYOK Base URLs. If real usage
 shows that browser CORS blocks important providers, a restricted proxy requires a
 separate security review and must include, at minimum:
 
@@ -36,7 +37,8 @@ Do not extend the existing fixed-target route with a client URL parameter or an
 - Multiple named BYOK connection profiles and cross-device credential handling.
 - A custom production domain and any deployment-funded Hosted configuration,
   including verified Firewall, spending-limit, and operating notes.
-- A maintained release/version policy beyond the latest `main` state.
+- Long-term support branches or compatibility guarantees for older Beta
+  releases beyond the current [release policy](./RELEASES.md).
 
 Each item should enter a new requirements and security review rather than being
 added as an untested switch in the current Chat Completions runtime.

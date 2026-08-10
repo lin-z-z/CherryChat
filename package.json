@@ -27,7 +27,7 @@
     "test:dom": "vitest run --project=dom",
     "test:related": "vitest related --run",
     "test:coverage": "vitest run --coverage",
-    "test:scripts": "node --test scripts/check-client-secrets.test.mjs scripts/check-doc-links.test.mjs",
+    "test:scripts": "node --test scripts/check-client-secrets.test.mjs scripts/check-doc-links.test.mjs scripts/release.test.mjs",
     "e2e": "playwright test",
     "e2e:chat-core": "playwright test tests/e2e/chat-core.spec.ts",
     "e2e:chat-models": "playwright test tests/e2e/chat-models.spec.ts",
