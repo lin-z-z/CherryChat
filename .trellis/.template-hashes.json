@@ -8,7 +8,6 @@
     ".claude/hooks/inject-subagent-context.py": "4e7889074f93d668c6a312a7e9ddc65c8c619b17c2454bf72e5c563371c6bb98",
     ".claude/hooks/inject-workflow-state.py": "0946e5b5c4c154538c1848c25c7f92a76c8ecc863b9a1c0f4b2e03bee071fcd0",
     ".claude/hooks/session-start.py": "74de6c1822f6815770ffd462c39e55e17c859eedb55a4666621ac4ef4575c380",
-    ".claude/hooks/statusline.py": "019130b79f062192e149b6b09fda2103ee2aaac9e2f0ccba0efd6fbc5e156cf3",
     ".claude/commands/trellis/continue.md": "eade769e466179010d6a044b03fb57620b4f5eb142fa11a55afec781e2bfec05",
     ".claude/commands/trellis/finish-work.md": "f11f661cff6d5d26dccb5e9574c3d2c7873a9dfaed7962d471ff5ea2fd48d691",
     ".claude/skills/trellis-before-dev/SKILL.md": "8f897d8dd76c1eeb532cf15ba784360f45a93229f8dcd0acfc14282f014f92a0",
@@ -139,6 +138,7 @@
     ".trellis/scripts/init_developer.py": "0943f1c240993649ab89b91a2c5b379e84daa8c53b35f0490774bff05a552873",
     ".trellis/scripts/task.py": "3ed0a3a1cf5a31b46539361c89bca4912d92b06741534afd02b9b2f908a3229d",
     ".trellis/scripts/__init__.py": "1242be5b972094c2e141aecbe81a4efd478f6534e3d5e28306374e6a18fcf46c",
-    ".trellis/workflow.md": "8b226f7ff8e0388a85978c4cc0f7277f49cd06a3ef1275490a4c555430ddec3d"
+    ".trellis/workflow.md": "8b226f7ff8e0388a85978c4cc0f7277f49cd06a3ef1275490a4c555430ddec3d",
+    ".trellis/.gitignore": "3bc42434cbe61c937a1c26ea3c880b496bfad4e7d683750169e27ade509aa798"
   }
 }
