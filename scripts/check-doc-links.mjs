@@ -8,6 +8,8 @@ const defaultRoot = resolve(dirname(scriptPath), "..");
 const ROOT_MARKDOWN_FILES = [
   "README.md",
   "README_CN.md",
+  "CHANGELOG.md",
+  "CHANGELOG_CN.md",
   "CONTRIBUTING.md",
   "LICENSES.md",
 ];
@@ -21,12 +23,14 @@ const SCREENSHOT_PATHS = [
 const SCREENSHOT_MAX_BYTES = 1_500_000;
 
 const DOCUMENTATION_PAIRS = [
+  ["CHANGELOG.md", "CHANGELOG_CN.md"],
   ["docs/README.md", "docs/README_CN.md"],
   ["docs/DEPLOYMENT.md", "docs/DEPLOYMENT_CN.md"],
   ["docs/MODEL_COMPATIBILITY.md", "docs/MODEL_COMPATIBILITY_CN.md"],
   ["docs/SECURITY.md", "docs/SECURITY_CN.md"],
   ["docs/DATA.md", "docs/DATA_CN.md"],
   ["docs/ROADMAP.md", "docs/ROADMAP_CN.md"],
+  ["docs/RELEASES.md", "docs/RELEASES_CN.md"],
 ];
 
 const FORBIDDEN_TARGETS = [
@@ -41,29 +45,40 @@ const PLACEHOLDERS = [
   { label: "TODO placeholder", pattern: /\bTODO\b/u },
 ];
 
+const FORBIDDEN_PRODUCT_TERMS = [
+  {
+    label: "obsolete product maturity term MVP",
+    pattern: /\bMVP\b/iu,
+  },
+];
+
 const REQUIRED_FILE_TOKENS = {
   "README.md": [
     "./README_CN.md",
-    "Preview",
+    "Beta",
     "Bring Your Own Key (BYOK)",
     "Hosted access",
     "Self-hosting",
     "./docs/README.md",
     "./docs/DEPLOYMENT.md",
     "./docs/SECURITY.md",
+    "./docs/RELEASES.md",
+    "./CHANGELOG.md",
     "./CONTRIBUTING.md",
     "./LICENSE",
     "vercel.com/new/clone",
   ],
   "README_CN.md": [
     "./README.md",
-    "Preview",
+    "Beta",
     "自带 API Key（BYOK",
     "托管访问（Hosted access）",
     "自托管（Self-hosting）",
     "./docs/README_CN.md",
     "./docs/DEPLOYMENT_CN.md",
     "./docs/SECURITY_CN.md",
+    "./docs/RELEASES_CN.md",
+    "./CHANGELOG_CN.md",
     "./CONTRIBUTING.md",
     "./LICENSE",
     "vercel.com/new/clone",
@@ -82,6 +97,38 @@ const REQUIRED_FILE_TOKENS = {
     "谁提供 Provider Key",
     "谁承担 Provider 费用",
   ],
+  "docs/README.md": ["Beta", "./RELEASES.md", "../CHANGELOG.md"],
+  "docs/README_CN.md": ["Beta", "./RELEASES_CN.md", "../CHANGELOG_CN.md"],
+  "CHANGELOG.md": [
+    "## [0.1.0]",
+    "### Known limitations",
+    "Backup v2",
+    "./docs/DEPLOYMENT.md",
+    "./docs/SECURITY.md",
+    "./docs/RELEASES.md",
+  ],
+  "CHANGELOG_CN.md": [
+    "## [0.1.0]",
+    "### 已知限制",
+    "Backup v2",
+    "./docs/DEPLOYMENT_CN.md",
+    "./docs/SECURITY_CN.md",
+    "./docs/RELEASES_CN.md",
+  ],
+  "docs/RELEASES.md": [
+    "v0.MINOR.PATCH",
+    "workflow_dispatch",
+    "actions: read",
+    "contents: write",
+    "Public tags are immutable",
+  ],
+  "docs/RELEASES_CN.md": [
+    "v0.MINOR.PATCH",
+    "workflow_dispatch",
+    "actions: read",
+    "contents: write",
+    "公开 Tag 不可移动",
+  ],
 };
 
 export async function checkDocumentation({ root = defaultRoot } = {}) {
@@ -94,6 +141,12 @@ export async function checkDocumentation({ root = defaultRoot } = {}) {
     const displayPath = toRepositoryPath(absoluteRoot, filePath);
 
     for (const { label, pattern } of PLACEHOLDERS) {
+      if (pattern.test(content)) {
+        errors.push(`${displayPath}: contains ${label}`);
+      }
+    }
+
+    for (const { label, pattern } of FORBIDDEN_PRODUCT_TERMS) {
       if (pattern.test(content)) {
         errors.push(`${displayPath}: contains ${label}`);
       }

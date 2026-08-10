@@ -89,9 +89,59 @@ test("reports missing plain-language connection terminology", async () => {
   );
 });
 
+test("reports obsolete product maturity language", async () => {
+  await writeText("README.md", "# CherryChat\n\nThis product is an MVP.\n");
+
+  const result = await checkDocumentation({ root: workingDirectory });
+
+  assert.ok(
+    result.errors.some((error) =>
+      error.includes("obsolete product maturity term MVP"),
+    ),
+  );
+});
+
+test("reports missing bilingual release documents", async () => {
+  await rm(join(workingDirectory, "docs/RELEASES_CN.md"));
+
+  const result = await checkDocumentation({ root: workingDirectory });
+
+  assert.ok(
+    result.errors.some(
+      (error) =>
+        error.includes("docs/RELEASES_CN.md") &&
+        error.includes("file is missing"),
+    ),
+  );
+});
+
+test("reports missing release navigation", async () => {
+  await writeText(
+    "docs/README.md",
+    "# Docs\n\n[简体中文](./README_CN.md)\n\n## Boundary\n\nBeta documentation.\n",
+  );
+
+  const result = await checkDocumentation({ root: workingDirectory });
+
+  assert.ok(
+    result.errors.some(
+      (error) =>
+        error.includes("docs/README.md") &&
+        error.includes("missing required entry ./RELEASES.md"),
+    ),
+  );
+  assert.ok(
+    result.errors.some(
+      (error) =>
+        error.includes("docs/README.md") &&
+        error.includes("missing required entry ../CHANGELOG.md"),
+    ),
+  );
+});
+
 async function createValidFixture(root) {
   const readmeShared = [
-    "Preview",
+    "Beta",
     "[Contributing](./CONTRIBUTING.md)",
     "[License](./LICENSE)",
     "https://vercel.com/new/clone",
@@ -99,11 +149,19 @@ async function createValidFixture(root) {
 
   await writeText(
     "README.md",
-    `# CherryChat\n\n[简体中文](./README_CN.md)\n[Docs](./docs/README.md)\n[Deployment](./docs/DEPLOYMENT.md)\n[Security](./docs/SECURITY.md)\nBring Your Own Key (BYOK)\nHosted access\nSelf-hosting\n${readmeShared}\n`,
+    `# CherryChat\n\n[简体中文](./README_CN.md)\n[Docs](./docs/README.md)\n[Deployment](./docs/DEPLOYMENT.md)\n[Security](./docs/SECURITY.md)\n[Releases](./docs/RELEASES.md)\n[Changelog](./CHANGELOG.md)\nBring Your Own Key (BYOK)\nHosted access\nSelf-hosting\n${readmeShared}\n`,
   );
   await writeText(
     "README_CN.md",
-    `# CherryChat\n\n[English](./README.md)\n[文档](./docs/README_CN.md)\n[部署](./docs/DEPLOYMENT_CN.md)\n[安全](./docs/SECURITY_CN.md)\n自带 API Key（BYOK）\n托管访问（Hosted access）\n自托管（Self-hosting）\n${readmeShared}\n`,
+    `# CherryChat\n\n[English](./README.md)\n[文档](./docs/README_CN.md)\n[部署](./docs/DEPLOYMENT_CN.md)\n[安全](./docs/SECURITY_CN.md)\n[发布](./docs/RELEASES_CN.md)\n[变更记录](./CHANGELOG_CN.md)\n自带 API Key（BYOK）\n托管访问（Hosted access）\n自托管（Self-hosting）\n${readmeShared}\n`,
+  );
+  await writeText(
+    "CHANGELOG.md",
+    "# Changelog\n\n[简体中文](./CHANGELOG_CN.md)\n\n## [0.1.0]\n\n### Known limitations\n\nBackup v2.\n\n[Deployment](./docs/DEPLOYMENT.md)\n[Security](./docs/SECURITY.md)\n[Releases](./docs/RELEASES.md)\n",
+  );
+  await writeText(
+    "CHANGELOG_CN.md",
+    "# 变更记录\n\n[English](./CHANGELOG.md)\n\n## [0.1.0]\n\n### 已知限制\n\nBackup v2。\n\n[部署](./docs/DEPLOYMENT_CN.md)\n[安全](./docs/SECURITY_CN.md)\n[发布](./docs/RELEASES_CN.md)\n",
   );
   await writeText("CONTRIBUTING.md", "# Contributing\n");
   await writeText("LICENSES.md", "# Licenses\n");
@@ -115,15 +173,30 @@ async function createValidFixture(root) {
     ["SECURITY.md", "SECURITY_CN.md"],
     ["DATA.md", "DATA_CN.md"],
     ["ROADMAP.md", "ROADMAP_CN.md"],
+    ["RELEASES.md", "RELEASES_CN.md"],
   ]) {
-    const englishTerms =
+    const englishTerms = [
       englishName === "DEPLOYMENT.md"
         ? "\nBring Your Own Key (BYOK)\nHosted access\nSelf-hosting\nWho supplies the provider key\nWho pays the provider\n"
-        : "";
-    const chineseTerms =
+        : "",
+      englishName === "README.md"
+        ? "\nBeta\n[Releases](./RELEASES.md)\n[Changelog](../CHANGELOG.md)\n"
+        : "",
+      englishName === "RELEASES.md"
+        ? "\nv0.MINOR.PATCH\nworkflow_dispatch\nactions: read\ncontents: write\nPublic tags are immutable\n"
+        : "",
+    ].join("");
+    const chineseTerms = [
       chineseName === "DEPLOYMENT_CN.md"
         ? "\n自带 API Key（BYOK）\n托管访问（Hosted access）\n自托管（Self-hosting）\n谁提供 Provider Key\n谁承担 Provider 费用\n"
-        : "";
+        : "",
+      chineseName === "README_CN.md"
+        ? "\nBeta\n[发布](./RELEASES_CN.md)\n[变更记录](../CHANGELOG_CN.md)\n"
+        : "",
+      chineseName === "RELEASES_CN.md"
+        ? "\nv0.MINOR.PATCH\nworkflow_dispatch\nactions: read\ncontents: write\n公开 Tag 不可移动\n"
+        : "",
+    ].join("");
     await writeText(
       `docs/${englishName}`,
       `# English\n\n[简体中文](./${chineseName})\n\n## Boundary\n\nComplete English content.\n${englishTerms}`,

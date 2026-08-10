@@ -7,12 +7,12 @@
   <p>
     <a href="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml"><img src="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
     <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
-    <img src="https://img.shields.io/badge/status-Preview-f59e0b.svg" alt="Preview status" />
+    <img src="https://img.shields.io/badge/status-Beta-2563eb.svg" alt="Beta status" />
   </p>
 </div>
 
 > [!IMPORTANT]
-> CherryChat is a Preview-stage MVP under active verification. It does not yet
+> CherryChat is a Beta release under active verification. It does not yet
 > provide accounts, cloud sync, organization permissions, centralized audit, or
 > billing controls. Review the [security](./docs/SECURITY.md) and
 > [deployment](./docs/DEPLOYMENT.md) boundaries before sharing a hosted-key
@@ -31,7 +31,7 @@
 Try the verified [public BYOK-only demo](https://cherrychat-xi.vercel.app). It
 uses a stable Vercel Production alias but has no project-owned model, Hosted
 access, or Tavily credential. Visitors configure their own provider in the
-browser. The Vercel target does not change CherryChat's Preview-stage product
+browser. The Vercel target does not change CherryChat's Beta product
 status.
 
 ![CherryChat desktop conversation](./docs/images/cherrychat-desktop.png)
@@ -148,6 +148,8 @@ direct CLI deployments.
 - [Security model and vulnerability reporting](./docs/SECURITY.md)
 - [Data storage, deletion, backup, and export](./docs/DATA.md)
 - [Roadmap and deferred boundaries](./docs/ROADMAP.md)
+- [Release and version policy](./docs/RELEASES.md)
+- [Changelog](./CHANGELOG.md)
 - [Open-source licenses and attribution](./LICENSES.md)
 
 ## Security and data boundaries

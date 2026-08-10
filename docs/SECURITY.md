@@ -17,7 +17,7 @@ reproduction steps, and sanitized evidence. Use test-only credentials and remove
 tokens, cookies, private domains, prompt content, and user data from screenshots
 or logs.
 
-CherryChat is currently a Preview-stage project without a security response SLA
+CherryChat is currently a Beta project without a security response SLA
 or bug bounty. Security fixes target the latest `main` state; older release
 branches are not currently maintained. If GitHub Private Vulnerability
 Reporting is unavailable, do not publish the details while the repository owner
