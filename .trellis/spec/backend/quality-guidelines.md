@@ -789,3 +789,125 @@ lineBytes = encoder.encode(accumulatedLine).byteLength;
 // Correct: count each raw byte once and reset at LF boundaries.
 trackLineBytes(chunk);
 ```
+
+## Scenario: Manual GitHub Beta Release Workflow
+
+### 1. Scope / Trigger
+
+Use this contract when changing `scripts/release.mjs`,
+`scripts/release.test.mjs`, `.github/workflows/release.yml`, the release
+Changelog, or the version/release policy. Release publication is a trusted
+default-branch operation and must remain separate from untrusted PR CI.
+
+### 2. Signatures
+
+```ts
+validatePackageVersions({
+  packageVersion,
+  lockVersion,
+  lockRootVersion,
+}): { version: string; tagName: string };
+extractChangelogSection(content, version): string;
+waitForSuccessfulCi({
+  getWorkflowRuns,
+  sha,
+  timeoutMs?,
+  pollIntervalMs?,
+  now?,
+  sleep?,
+}): Promise<WorkflowRun>;
+createReleaseWithRecovery({ createRelease, readState, expectedSha }): Promise<{
+  release: unknown;
+  recovered: boolean;
+}>;
+```
+
+The executable entry point is `node scripts/release.mjs`; it accepts no
+command-line overrides and reads only GitHub Actions context variables.
+
+### 3. Contracts
+
+- `.github/workflows/release.yml` declares only `workflow_dispatch`, runs on
+  the default branch, and uses the trigger's `GITHUB_SHA` as the immutable
+  target. It must not accept a user-selected version or SHA.
+- The workflow has only `actions: read` and `contents: write`, uses a fixed
+  repository-level concurrency lock with `cancel-in-progress: false`, pins
+  checkout/setup-node to reviewed 40-character SHAs, and sets
+  `persist-credentials: false`.
+- `package.json`, root `package-lock.json`, and its `packages[""].version`
+  must contain the same stable three-part SemVer. The release Tag is
+  `v${version}` and the title is `CherryChat v${version} (Beta)`.
+- The current English and Chinese Changelog sections must exist and contain
+  structured `###` notes. The body includes the English section, target SHA,
+  same-tag Chinese Changelog link, and GitHub-generated notes.
+- Before the single Create Release request, the script rejects any existing
+  Tag or Release and waits for the exact SHA's `CI` push run to conclude with
+  `success`. The request uses `draft: false`, `prerelease: false`, and
+  `make_latest: "true"`; GitHub creates the Tag at the locked SHA.
+- API errors are reduced to method/status messages. Never print the token,
+  Authorization header, or response body. Public Tags are immutable; later
+  fixes use a new patch version.
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+| --- | --- |
+| Local execution or non-default branch | Stop before any GitHub write |
+| Package/lock versions differ, invalid SemVer, or Changelog section missing | Stop before any GitHub write |
+| Target Tag or Release already exists | Stop before CI wait and Create Release |
+| Exact `CI` push run is queued/in progress | Poll until success or timeout |
+| Exact run fails, cancels, times out, or stays missing | Stop without creating Tag/Release |
+| Generate-notes fails or returns no body | Stop before Create Release |
+| Create response is ambiguous and matching Tag plus Release exist | Treat as recovered success |
+| No objects exist after ambiguous Create response | Fail and allow a later retry |
+| Only one object exists or Tag points elsewhere | Fail and require manual review |
+
+### 5. Good / Base / Bad Cases
+
+- **Good:** an approved `main` workflow reads matching `0.1.0` metadata,
+  reuses successful CI for the exact SHA, creates one ordinary Latest Release,
+  and verifies the Tag and public URL.
+- **Base:** a local `node scripts/release.mjs` invocation is rejected safely;
+  local tests exercise pure logic and mocked API state without remote writes.
+- **Bad:** accept arbitrary SHA input, publish from a feature branch, rerun
+  the full quality suite with deployment credentials, move an existing Tag,
+  or expose GitHub API response details in logs.
+
+### 6. Tests Required
+
+- Unit tests must cover matching/mismatched versions, stable SemVer rejection,
+  structured Changelog extraction, body/payload composition, and exact
+  push-SHA CI selection across queued, running, success, failure, cancel, and
+  timeout states.
+- API tests must cover absent/pre-existing/inconsistent Tag and Release state,
+  one Create request, ambiguous-response recovery, retry-safe absence, and
+  manual-review mismatch. Assert error messages contain no token or response
+  body.
+- Workflow contract tests must assert manual-only triggering, no inputs,
+  least-privilege permissions, serialized concurrency, default-branch check,
+  pinned Actions, disabled credential persistence, and the script entry point.
+- Before merging, run `npm run test:scripts`, `npm run format:check`,
+  `npm run docs:check`, the full repository quality gates, and `git diff --check`.
+
+### 7. Wrong vs Correct
+
+```yaml
+# Wrong: caller-controlled target and mutable publishing Action.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        required: true
+steps:
+  - uses: some/publish-action@v1
+
+# Correct: lock the trigger SHA and let the reviewed script validate metadata.
+on:
+  workflow_dispatch:
+steps:
+  - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+    with:
+      ref: ${{ github.sha }}
+      persist-credentials: false
+  - run: node scripts/release.mjs
+```
