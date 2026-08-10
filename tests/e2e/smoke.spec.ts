@@ -518,6 +518,22 @@ test("supports the six settings destinations without horizontal overflow", async
   await expect(searchResultSlider).toHaveAttribute("aria-valuenow", "5");
   await searchResultSlider.press("ArrowRight");
   await expect(searchResultSlider).toHaveAttribute("aria-valuenow", "6");
+  for (const control of [
+    settings.locator(".settings-source-value"),
+    settings.getByRole("switch", { name: "Allow web search" }),
+  ]) {
+    const rightAlignment = await control.evaluate((element) => {
+      const controlColumn = element.closest<HTMLElement>(
+        ".settings-ui-row-control",
+      );
+      if (!controlColumn) throw new Error("Missing Web search control column");
+      return (
+        controlColumn.getBoundingClientRect().right -
+        element.getBoundingClientRect().right
+      );
+    });
+    expect(Math.abs(rightAlignment)).toBeLessThanOrEqual(1);
+  }
   await expectNoHorizontalOverflow(settings);
   await page.screenshot({
     path: `test-results/settings-web-search-${test.info().project.name}-light.png`,

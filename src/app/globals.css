@@ -2416,6 +2416,12 @@ button {
   flex: 0 0 min(18rem, 48%);
 }
 
+.settings-web-search-control-row .settings-ui-row-control {
+  display: flex;
+  justify-content: flex-end;
+  text-align: right;
+}
+
 .settings-web-search-result-row .settings-ui-row-control {
   min-width: min(30rem, 56%);
   flex-basis: min(30rem, 56%);

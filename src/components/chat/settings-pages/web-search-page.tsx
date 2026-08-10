@@ -84,6 +84,7 @@ export function WebSearchPage({
     >
       <div className="settings-ui-panel">
         <SettingsRow
+          className="settings-web-search-control-row"
           description={t(`webSearchServiceDescription.${serviceState}`)}
           icon={ServiceStateIcon}
           title={t("webSearchService")}
@@ -93,6 +94,7 @@ export function WebSearchPage({
           </strong>
         </SettingsRow>
         <SettingsRow
+          className="settings-web-search-control-row"
           description={t("webSearchEnableDescription")}
           icon={Globe2}
           title={t("webSearchEnable")}
