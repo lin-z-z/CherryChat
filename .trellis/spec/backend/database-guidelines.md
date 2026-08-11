@@ -38,19 +38,28 @@ encryption; same-origin scripts can read it.
 Avoid direct table access outside repositories, non-transactional multi-table
 writes, destructive migration rewrites, and persisted derived totals.
 
-## Scenario: Web Search Credentials And Interrupted Messages
+## Scenario: Multi-Provider Web Search Credentials And Interrupted Messages
 
 ### 1. Scope / Trigger
 
-Use this contract when changing Tavily settings, credentials, database
-migrations, backup/export, tool checkpoints, or startup recovery.
+Use this contract when changing Tavily, Exa, or Grok search settings,
+credentials, database migrations, backup/export, tool checkpoints, or startup
+recovery.
 
 ### 2. Signatures
 
 ```ts
-// Database v6
+// Database v8
 webSearchCredentials: "&id, updatedAt";
 ConversationRecord.webSearchEnabled: boolean;
+
+type WebSearchProviderId = "tavily" | "exa" | "grok";
+
+interface WebSearchSettings {
+  enabled: boolean;
+  maxResults: number;
+  provider: WebSearchProviderId;
+}
 
 interface WebSearchLoadOptions {
   defaultEnabled?: boolean;
@@ -62,8 +71,17 @@ WebSearchRepository.load(
 WebSearchRepository.save(input: {
   enabled: boolean;
   maxResults: number;
-  apiKey: string;
-  baseUrl: string;
+  provider: WebSearchProviderId;
+  providers: {
+    tavily: { apiKey: string; baseUrl: string };
+    exa: { apiKey: string; baseUrl: string };
+    grok: {
+      apiKey: string;
+      responsesUrl: string;
+      model: string;
+      xSearch: boolean;
+    };
+  };
 }): Promise<WebSearchConfiguration>;
 
 ConversationRepository.recoverInterruptedMessages(): Promise<number>;
@@ -71,18 +89,29 @@ ConversationRepository.recoverInterruptedMessages(): Promise<number>;
 
 ### 3. Contracts
 
-- Non-secret settings use `settings["webSearch.v1"]`; the personal Tavily key
-  and URL use the dedicated `webSearchCredentials["tavily"]` record.
+- Non-secret settings use `settings["webSearch.v2"]` and store `enabled`,
+  `maxResults`, and the selected Provider. Personal configurations use the
+  dedicated `webSearchCredentials` records `tavily`, `exa`, and `grok`.
+- Database v8 migrates a valid `webSearch.v1` value to `webSearch.v2` with
+  `provider: "tavily"`, preserves the existing Tavily credential, then deletes
+  only the legacy settings key. The Dexie upgrade transaction rolls back the
+  write and delete together.
 - `load({ defaultEnabled })` applies a source-aware default only when no valid
-  `webSearch.v1` record exists. A valid personal credential also defaults the
+  `webSearch.v2` record exists. A valid credential for the selected Provider
+  also defaults the
   unsaved setting on. Once the user saves either enabled or disabled, that
   persisted value always wins over deployment capability and credentials.
-- Save settings and credential in one Dexie transaction. A key is 8..2048
-  trimmed characters, a URL is absolute HTTP(S) without credentials/query/
-  fragment and at most 2048 characters, and result count is 1..50 with a
-  default of 5.
+- Save settings and all three Provider records in one Dexie transaction.
+  Switching Provider preserves valid inactive records; clearing one Provider's
+  Key deletes only that record. A Key is 8..2048 trimmed characters, a URL is
+  absolute HTTP(S) without credentials/query/fragment and at most 2048
+  characters, and result count is 1..50 with a default of 5.
+- Tavily and Exa store normalized base URLs. Grok stores a normalized complete
+  Responses URL, a non-empty model of at most 512 characters, and `xSearch`;
+  the defaults are `https://api.x.ai/v1/responses`, `grok-4.5`, and `false`.
 - Backup/export includes the per-conversation toggle and non-secret settings,
-  but excludes the credential table entirely. Clear-local-data includes it.
+  but excludes the complete credential table, including Provider URLs, Grok
+  model, and X Search. Clear-local-data includes the table.
 - On startup, Assistant rows left `pending` or `streaming` by a reload/crash are
   changed to `stopped`. A running tool part becomes the safe retryable
   `TOOL_REQUEST_ABORTED` projection; prior ordered text/tool parts remain.
@@ -92,22 +121,29 @@ ConversationRepository.recoverInterruptedMessages(): Promise<number>;
 | Condition | Result |
 | --- | --- |
 | Personal key is non-empty but shorter than 8 characters | Repository rejects before writing |
-| Personal Key has an invalid URL | Reject the transaction before writing |
+| Any personal Key has an invalid Provider URL | Reject the transaction before writing |
+| Grok model is empty or over 512 characters | Reject the transaction before writing |
+| Selected Provider has no valid credential | Keep the setting; expose `hasApiKey=false` |
+| Switching from Tavily to Exa or Grok | Preserve valid inactive Provider records |
 | No settings record and `defaultEnabled=true` | Return enabled defaults without writing a preference |
-| No settings record and a valid personal credential exists | Return enabled defaults and the credential |
+| No settings record and a valid selected-Provider credential exists | Return enabled defaults and all Provider configurations |
 | Saved `enabled=false` with any available source | Preserve the explicit disabled preference |
-| Settings or credential write fails | Transaction rolls back both records |
-| Backup contains no Tavily credential | Expected; restore leaves local key unchanged/absent |
+| Settings or any credential write fails | Transaction rolls back all search records |
+| v7 has `webSearch.v1` plus Tavily credential | v8 writes `webSearch.v2` with Tavily selected and preserves the credential |
+| Backup contains no Provider credential | Expected; restore leaves local configurations unchanged/absent |
 | Pending Assistant has no parts | Recover as an empty stopped message |
 | Streaming Assistant has a running tool | Preserve parts and mark that tool interrupted |
 | Recovery runs again | Return zero; completed/stopped/error rows are unchanged |
 
 ### 5. Good/Base/Bad Cases
 
-- Good: one browser stores its Tavily key and URL, exports a backup, and the
-  archive has search preferences but no personal credential or URL bytes.
+- Good: one browser configures Tavily, Exa, and Grok, switches among them, and
+  each valid configuration remains available after reload.
+- Good: export includes `webSearch.v2` preferences but no Key, Provider URL,
+  Grok model, or X Search value from the credential table.
 - Base: a browser with no Hosted source, personal credential, or saved setting
-  loads disabled search defaults.
+  loads disabled Tavily defaults, including Grok `grok-4.5` and X Search off in
+  the inactive default configuration.
 - Good: Hosted search becomes available on first use, so the controller passes
   `defaultEnabled: true`; a later explicit opt-out remains off after reload.
 - Bad: put the key in `settings`, a conversation, a tool result, or an exported
@@ -115,11 +151,15 @@ ConversationRepository.recoverInterruptedMessages(): Promise<number>;
 
 ### 6. Tests Required
 
-- Repository: source-aware unsaved defaults, persisted opt-out priority,
-  personal-credential defaults, transactional save/load/delete, range
-  validation, and normalized storage errors.
-- Migration: v5 to v6 adds the table and defaults every conversation toggle.
-- Backup/clear: credential exclusion and destructive-clear inclusion.
+- Repository: three-Provider round trip, switching without credential loss,
+  source-aware unsaved defaults, persisted opt-out priority, selected-credential
+  defaults, transactional save/load/delete, range/model/URL validation, and
+  normalized storage errors.
+- Migration: v5 to v6 adds the credential table and conversation toggles; v7 to
+  v8 converts `webSearch.v1` to `webSearch.v2`, selects Tavily, preserves its
+  credential, and removes only the legacy setting after the new write.
+- Backup/clear: exclude all three Provider records and include the credential
+  table in destructive clear.
 - Recovery: text plus running tool becomes ordered stopped content; second run
   is idempotent.
 - Build security: scan client static files for configured long secret values
@@ -128,14 +168,26 @@ ConversationRepository.recoverInterruptedMessages(): Promise<number>;
 ### 7. Wrong vs Correct
 
 ```ts
-// Wrong: portable settings leak the browser BYOK secret into backups.
-await database.settings.put({ key: "tavilyKey", value: apiKey, updatedAt });
+// Wrong: portable settings leak BYOK secrets and make Provider switching lossy.
+await database.settings.put({
+  key: "webSearch.v2",
+  value: { provider, apiKey, responsesUrl, model, xSearch },
+  updatedAt,
+});
 
-// Correct: one non-exported credential table owns the secret.
+// Correct: portable settings select a Provider; one non-exported table owns
+// every Provider-specific credential bundle.
+await database.settings.put({
+  key: "webSearch.v2",
+  value: { enabled, maxResults, provider },
+  updatedAt,
+});
 await database.webSearchCredentials.put({
-  id: "tavily",
+  id: "grok",
   apiKey,
-  baseUrl,
+  responsesUrl,
+  model,
+  xSearch,
   encrypted: false,
   updatedAt,
 });

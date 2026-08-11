@@ -4,12 +4,13 @@ CherryChat normalizes provider tool calls into one ordered message contract.
 React never parses provider payloads, and tool executors never write messages
 directly.
 
-## Scenario: Ordered Tools And Tavily Search
+## Scenario: Ordered Tools And Multi-Provider Web Search
 
 ### 1. Scope / Trigger
 
 Use this contract when changing provider tool encoding, stream events, message
-parts, Tavily, tool errors, cancellation, or source rendering.
+parts, Tavily/Exa/Grok execution, tool errors, cancellation, or source
+rendering.
 
 ### 2. Signatures
 
@@ -50,22 +51,36 @@ resolveAgentRuntimeKind(connection):
   | "ai-sdk-google"
   | "ai-sdk-anthropic";
 loadAgentRuntime(kind: AgentRuntimeKind): Promise<AgentRuntime>;
-createTavilyToolExecutor(options: TavilyClientOptions): ToolExecutor;
-resolveTavilyExecutionSource(context: {
+type WebSearchProviderId = "tavily" | "exa" | "grok";
+
+interface WebSearchToolOutput {
+  query: string;
+  answer?: string;
+  results: Array<{ title: string; url: string; content: string }>;
+}
+
+resolveWebSearchExecutionSource(context: {
   connectionMode: "hosted" | "byok";
-  browserApiKey: string;
-  browserBaseUrl: string;
+  webSearch: WebSearchConfiguration;
   hostedWebSearchEnabled: boolean;
+  hostedWebSearchProvider: WebSearchProviderId | null;
   authenticated: boolean;
-}):
-  | { kind: "browser"; apiKey: string; baseUrl: string }
-  | { kind: "hosted" }
-  | null;
+}): WebSearchExecutionSource | null;
+
+createWebSearchProviderExecutor(options: {
+  source: WebSearchExecutionSource;
+  maxResults: number;
+  fetchImplementation?: FetchLike;
+  timeoutMs?: number;
+  onUnauthorized?: () => void;
+}): ToolExecutor;
 ```
 
-The default Tavily base URL is `https://api.tavily.com`. A configured base URL
-or full trailing `/search` URL is normalized before the runtime appends exactly
-one `/search`. The runtime allows at most five model steps and three tool calls
+Tavily defaults to `https://api.tavily.com`; Exa defaults to
+`https://api.exa.ai`; their base or trailing `/search` URLs normalize before
+exactly one `/search` is appended. Grok uses a complete Responses endpoint,
+defaults to `https://api.x.ai/v1/responses` and model `grok-4.5`, and does not
+append a path. The runtime allows at most five model steps and three tool calls
 per user send.
 
 ### 3. Contracts
@@ -128,48 +143,59 @@ per user send.
 - Deduplicate only after a model step has complete arguments and before tool
   limits, running parts, execution, and continuation messages. A repeated
   non-empty ID is always one logical call. Parameter-level deduplication is
-  opt-in through `ToolExecutor.dedupeKey`; Tavily returns its schema-validated,
-  trimmed query. Reset dedupe state for every model step, preserve different
-  queries, and never infer idempotency for tools that omit `dedupeKey`.
+  opt-in through `ToolExecutor.dedupeKey`; every web-search Provider returns the
+  shared schema-validated, trimmed query. Reset dedupe state for every model
+  step, preserve different queries, and never infer idempotency for tools that
+  omit `dedupeKey`.
 - Before execution, persist a `running` part. Replace that exact ID with the
   completed/error part and checkpoint again. Do not append a duplicate.
 - The continuation request contains the current step's Assistant text plus its
   tool calls, followed by tool-result messages. Persisted history reconstructs
   the same sequence from ordered `MessagePart[]`.
-- A `web_search` tool result sent to the model is projected to
-  `[{ id, title, url, content }]`. The richer `{ query, results }` envelope is
-  retained only for local rendering and persistence.
+- A `web_search` tool result sent to the model is projected to an optional,
+  bounded answer followed by
+  `[{ id, title, url, content }]`. The richer
+  `{ query, answer?, results }` envelope is retained only for local rendering
+  and persistence; raw Provider JSON never crosses the adapter.
 - The `web_search` definition uses `strict: true`, requires only `query`, rejects
   extra properties, and caps the model-facing query at 200 characters. OpenAI
   Chat preserves `strict`; Anthropic and Gemini project only their native schema
   fields, while Responses keeps its existing strict function contract.
-- Register Tavily only when the conversation toggle is on, a resolved source
-  exists, global search is enabled, and effective model capability has
-  `tools=true`. If intent is still on but any condition becomes false, persist a
-  visible `WEB_SEARCH_UNAVAILABLE` Assistant error instead of silently sending a
-  tool-free request.
+- Register the single `web_search` tool only when the conversation toggle is
+  on, a resolved source exists, global search is enabled, and effective model
+  capability has `tools=true`. If intent is still on but any condition becomes
+  false, persist a visible `WEB_SEARCH_UNAVAILABLE` Assistant error instead of
+  silently sending a tool-free request.
 - Source selection is a strict resource bundle. Hosted mode resolves only an
-  authenticated deployment source; BYOK mode resolves only a non-empty browser
-  Key and its URL. Select once before execution; failure never falls back to the
-  other connection mode or billing source.
-- Keep inactive credentials persisted but do not execute them: access-code mode
-  disables personal Tavily editing, while Custom API ignores an otherwise valid
-  Hosted Session.
-- Browser credentials and their personal URL come from `webSearchCredentials`.
+  authenticated deployment source; BYOK mode resolves only the selected
+  Provider's non-empty browser Key and its URL/model/options. Select once before
+  execution; failure never falls back to the other connection mode or billing
+  source.
+- Keep inactive Provider credentials persisted but do not execute them:
+  access-code mode disables personal search editing, while Custom API ignores
+  an otherwise valid Hosted Session.
+- Browser credentials and their Provider-specific URL/model/options come from
+  `webSearchCredentials`.
   Hosted execution calls fixed `/api/web-search` with `credentials: same-origin`,
-  no Authorization, Key, or target fields. Neither credential or URL enters
-  backup/export, logs, parts, or errors.
+  no Authorization, Provider, Key, URL, model, or X Search fields. No credential
+  bundle enters backup/export, logs, parts, or errors.
 - A personal URL is browser-direct and must support CORS. The deployment URL
-  comes only from `TAVILY_BASE_URL`; a browser value never changes the Hosted
-  route target.
-- The upstream JSON body contains exactly `{ query, max_results }`, matching
-  the reviewed minimum Tavily compatibility request. Provider-specific
-  optional fields require an explicit capability contract; do not add them to
-  the shared request because strict compatible gateways may reject them.
+  comes only from the selected Provider's server env; a browser value never
+  changes the Hosted route target.
+- Provider request bodies remain isolated: Tavily sends exactly
+  `{ query, max_results }`; Exa sends `{ query, type: "auto", numResults,
+  contents: { highlights: true } }`; Grok sends `{ model, input, tools,
+  store: false }`. Grok always includes `web_search` and includes `x_search`
+  only when the saved/deployment switch is true.
+- Tavily and Exa produce normalized source rows. Grok may additionally produce
+  a generated answer capped at 12,000 characters and derives de-duplicated
+  sources only from structured `url_citation` annotations; naked URLs in text
+  are not trusted as citations.
 - Hosted session `401 UNAUTHORIZED` invalidates only the matching auth epoch;
   an older delayed 401 cannot overwrite a newer successful access-code login.
-- One abort signal covers model fetch, Tavily response headers, and bounded body
-  reading. Timeout is 30 seconds and response size is at most 1 MiB.
+- One abort signal covers model fetch, selected search Provider response
+  headers, and bounded body reading. Timeout is 30 seconds and response size is
+  at most 1 MiB.
 - Persist only stable tool code/status/retryability. Accept source links only
   with `http:` or `https:`; drop invalid/missing URLs individually so one bad
   result cannot hide valid sources.
@@ -184,10 +210,10 @@ per user send.
 | Tool is not registered | `TOOL_NOT_AVAILABLE`, not retryable |
 | Tool arguments are invalid | `INVALID_TOOL_INPUT`, not retryable |
 | Personal URL is not absolute HTTP(S), contains credentials/query/fragment, or exceeds 2048 characters | `INVALID_REQUEST` before fetch/save |
-| Tavily returns 401/403 | `TOOL_AUTH_FAILED`, status retained |
+| Any direct Provider returns 401/403 | `TOOL_AUTH_FAILED`, status retained |
 | Hosted Session is missing/expired | Proxy `UNAUTHORIZED` -> local `TOOL_AUTH_FAILED`; mark current auth epoch invalid |
-| Tavily returns 429 | `TOOL_RATE_LIMITED`, retryable |
-| Tavily returns 5xx | `TOOL_SERVICE_UNAVAILABLE`, retryable |
+| Any Provider returns 429 | `TOOL_RATE_LIMITED`, retryable |
+| Any Provider returns 5xx | `TOOL_SERVICE_UNAVAILABLE`, retryable |
 | Header or body exceeds timeout | `TOOL_REQUEST_TIMEOUT`, retryable |
 | User aborts during execution | `TOOL_REQUEST_ABORTED`; generation is stopped |
 | Response exceeds 1 MiB or JSON is invalid | `TOOL_REQUEST_FAILED` |
@@ -197,14 +223,18 @@ per user send.
 | EOF has neither `[DONE]` nor any finish reason | `STREAM_PROTOCOL_ERROR`; retain partial output |
 | Canonical OpenAI tool result contains `name` | Strip `name` at the OpenAI Chat transport boundary |
 | Hosted mode has personal Key but no authenticated Hosted source | Search unavailable; do not use the personal Key |
-| BYOK mode has a valid Hosted Session but no personal Key | Search unavailable; do not use deployment Tavily |
+| BYOK mode has a valid Hosted Session but no selected-Provider Key | Search unavailable; do not use deployment search |
+| Exa returns no highlights but valid text | Use bounded text as content fallback |
+| Grok X Search is off | Request contains exactly `web_search`, never `x_search` |
+| Grok X Search is on | Request contains both `web_search` and `x_search` |
+| Grok output contains duplicate/invalid citation URLs | Keep the first HTTP(S) citation and drop invalid/duplicates |
 | DeepSeek returns a complete DSML invoke split across chunks | Emit a normalized tool call with a unique ID |
 | DeepSeek returns malformed or unclosed DSML | Preserve the original markup as text |
 | OpenAI-compatible web-search definition omits `strict` | Contract drift; exact serializer test must fail |
 | A secondary choice contains text, finish reason, or tools | Ignore it; consume the primary choice only |
 | One tool index changes to a different non-empty ID | `STREAM_PROTOCOL_ERROR`; do not guess or concatenate |
-| One model step repeats a Tavily query with another ID | Execute once and emit one Assistant call/result pair |
-| A later model step repeats the same Tavily query | Execute again; deduplication never crosses steps |
+| One model step repeats a web-search query with another ID | Execute once and emit one Assistant call/result pair |
+| A later model step repeats the same web-search query | Execute again; deduplication never crosses steps |
 | AI SDK runtime receives an upstream 401/403/429/5xx | Return one redacted `ChatTransportError`; do not retry or switch runtimes |
 | Canonical request omits `tool_choice` | Remove AI SDK's injected `toolChoice`; omit the wire field |
 | AI SDK emits a raw stream error | Suppress its default console handler and persist only the stable projected error |
@@ -212,11 +242,13 @@ per user send.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: the model writes "I will check", calls Tavily, receives one source,
-  and continues. Live UI, reload, export, and the next request keep that order.
-- Good: one step returns the same trimmed Tavily query under two IDs; the first
-  ID is retained, one request runs, and the continuation contains one result.
-- Good: the AI SDK path receives the same Native and DSML Tavily invocation,
+- Good: the model writes "I will check", calls the selected search Provider,
+  receives one source, and continues. Live UI, reload, export, and the next
+  request keep that order.
+- Good: one step returns the same trimmed web-search query under two IDs; the
+  first ID is retained, one request runs, and the continuation contains one
+  result.
+- Good: the AI SDK path receives the same Native and DSML web-search invocation,
   middleware emits one normalized call, and `ToolLoopAgent` executes it once.
 - Base: one step requests two different queries, or a later step repeats the
   previous query; each intended call runs in order.
@@ -227,8 +259,10 @@ per user send.
   native provider is inferred from the model name.
 - Good: access-code mode uses the authenticated site source and keeps personal
   fields disabled even if a personal Key was saved earlier.
-- Good: switching to Custom API immediately requires the saved personal Tavily
-  source; the still-valid Hosted Session cannot fund the search.
+- Good: switching to Custom API immediately requires the personal Provider
+  selected by that user; the still-valid Hosted Session cannot fund the search.
+- Good: Hosted Grok uses only env-selected Key, complete Responses URL, model,
+  and X Search switch while the browser sends only `{ query, maxResults }`.
 - Base: search is configured globally but disabled in a conversation; the
   normal single-stream chat path sends no tool fields.
 - Good: global search is disabled after a conversation enabled it; the composer
@@ -259,7 +293,7 @@ per user send.
 - Middleware/projector: mixed text/tool/text order, running checkpoint, result
   replacement, continuation request, step/call limits, and abort during
   execution.
-- Middleware/projector: repeated ID, Tavily-equivalent query under different IDs,
+- Middleware/projector: repeated ID, equivalent web-search query under different IDs,
   native-plus-DSML equivalent search, different queries in one step, repeated
   query across steps, and a non-idempotent executor without `dedupeKey`.
 - AI SDK runtime: text/reasoning/usage projection, streaming and non-streaming
@@ -278,12 +312,17 @@ per user send.
 - Provider fetch/runtime: primary terminal choice, `[DONE]`, explicit finish
   without `[DONE]`, and true truncation; SDK-reconstructed native calls cannot
   collide with ordered DSML calls.
-- Tavily: URL normalization, direct custom target, request schema, 401/429/5xx
-  mapping, header/body timeout, caller abort, 1 MiB bound, secret absence, and
-  invalid URL filtering. Assert the exact two-field upstream body so optional
-  official parameters cannot silently return.
-- Storage: schema round trip, backup credential exclusion, interrupted startup
-  recovery, and content-part order.
+- Tavily: URL normalization and exact `{ query, max_results }` body.
+- Exa: URL normalization, fixed `type:auto` plus highlights body, highlight/text
+  fallback, result cap, and invalid URL filtering.
+- Grok: complete third-party Responses URL, `grok-4.5` default, exact
+  `web_search`/optional `x_search` tools, `store:false`, bounded generated answer,
+  structured citation de-duplication, and invalid URL filtering.
+- Every Provider: direct custom target, 401/429/5xx mapping, header/body timeout,
+  caller abort, 1 MiB bound, invalid JSON, and secret absence.
+- Storage: v1-to-v2 migration, three-Provider schema round trip and switching,
+  backup credential exclusion, interrupted startup recovery, and content-part
+  order.
 - Browser: settings save, composer on/off, actual mocked cross-origin POST,
   sources, localized errors, reload, and desktop/mobile overflow.
 - Browser: same-origin hosted POST has no Authorization; Custom API requests
@@ -304,7 +343,7 @@ snapshot.contentParts = replaceToolPart(snapshot.contentParts, part);
 await persistence.checkpoint(snapshot);
 
 // Correct: resolve one mode-bound billing source before constructing the executor.
-const resolvedSource = resolveTavilyExecutionSource(context);
+const resolvedSource = resolveWebSearchExecutionSource(context);
 const executor = resolvedSource
   ? createExecutorForSource(resolvedSource)
   : null;
@@ -317,7 +356,7 @@ const crossModeSource = browserKey
     : null;
 
 // Correct: the connection mode owns the resource bundle.
-const modeBoundSource = resolveTavilyExecutionSource({
+const modeBoundSource = resolveWebSearchExecutionSource({
   connectionMode,
   ...context,
 });
@@ -325,11 +364,11 @@ const modeBoundSource = resolveTavilyExecutionSource({
 // Wrong: forward a browser URL through the Hosted route.
 fetch("/api/web-search", { body: JSON.stringify({ query, target: baseUrl }) });
 
-// Wrong: treat optional official Tavily fields as universally compatible.
-const body = { query, max_results, search_depth: "basic" };
+// Wrong: leak Provider options into one supposedly shared upstream body.
+const body = { query, max_results, type: "auto", x_search: true };
 
-// Correct: keep the shared compatibility payload minimal.
-const body = { query, max_results };
+// Correct: the registry selects one adapter; each adapter owns its exact body.
+const executor = createWebSearchProviderExecutor({ source, maxResults });
 
 // Wrong: leak a canonical helper field into a strict OpenAI-compatible wire.
 const toolResult = { role: "tool", tool_call_id, name, content };
@@ -365,7 +404,7 @@ await (await loadAgentRuntime(runtimeKind)).run(options);
 const unique = new Map(calls.map((call) => [call.arguments, call]));
 
 // Correct: only the executor that owns validated input declares idempotency.
-const tavilyExecutor = {
+const webSearchExecutor = {
   dedupeKey(input) {
     const parsed = inputSchema.safeParse(input);
     return parsed.success ? parsed.data.query : null;
@@ -506,7 +545,7 @@ unique and bounded from 0 through 4.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: GLM-5.2 High step 0 reasons, calls Tavily, and checkpoints; step 1
+- Good: GLM-5.2 High step 0 reasons, calls `web_search`, and checkpoints; step 1
   reasons and answers. Both steps survive reload, while the next High request
   places step 0 on the tool Assistant and step 1 on the final Assistant.
 - Good: the same flow works with streaming disabled; the provider may omit
@@ -784,7 +823,7 @@ and 1 MiB total. `toolCallId` is non-empty and at most 512 characters.
 - Preserve native tool-call `providerMetadata` through `wrapStream` and
   `wrapGenerate`. Validate only `providerMetadata.google.thoughtSignature`,
   then bind it to the normalized `(step, toolCallId)`.
-- Tool durability checkpoints persist a signature before Tavily continuation.
+- Tool durability checkpoints persist a signature before web-search continuation.
   IndexedDB, stopped/completed messages, selected branches and full backup
   retain it; ordinary export, rendering, search, print, copy, errors, logs and
   every non-Google wire omit it.
@@ -792,7 +831,8 @@ and 1 MiB total. `toolCallId` is non-empty and at most 512 characters.
   `providerOptions.google.thoughtSignature` only to the owning tool-call. Never
   store AI SDK message or metadata objects.
 - Keep `maxRetries:0`, no raw `console.error`, five model steps, three tool
-  calls, Tavily-only tools, and no cross-runtime fallback after Google fails.
+  calls, the single `web_search` tool, and no cross-runtime fallback after
+  Google fails.
 
 ### 4. Validation & Error Matrix
 
@@ -808,7 +848,7 @@ and 1 MiB total. `toolCallId` is non-empty and at most 512 characters.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: New API Gemini calls Tavily, the second model request returns the exact
+- Good: New API Gemini calls `web_search`, the second model request returns the exact
   signature, and an immediate reload replays it from IndexedDB.
 - Good: the same flow works through streaming and non-streaming Google paths.
 - Base: a text-only answer has no signature; default reasoning omits
@@ -823,13 +863,13 @@ and 1 MiB total. `toolCallId` is non-empty and at most 512 characters.
 - Factory/fetch: direct, New API, Hosted and unknown endpoints; exact model URL,
   direct/dual headers, function-only tools, timeout/abort and pre-fetch rejection.
 - Runtime: stream/non-stream text, reasoning, image, usage, Gemini 2.5 budget,
-  Gemini 3/3.1 level, Tavily, signature replay and no retry/log/fallback.
+  Gemini 3/3.1 level, web search, signature replay and no retry/log/fallback.
 - Schema/context/storage: UTF-8 and aggregate limits, Token pruning,
   branch/cutoff/regeneration, checkpoints, backup and ordinary-export isolation.
 - Wire isolation: compatible Chat, Responses, Anthropic, and auxiliary title
   requests contain none of the signature fixture.
 - Browser/build: Chromium, Mobile Chrome, Firefox, and WebKit cover direct/New
-  API, Tavily, reload, and stop; the `google.generative-ai` marker stays outside
+  API, web search, reload, and stop; the `google.generative-ai` marker stays outside
   `/page` `entryJSFiles`.
 
 ### 7. Wrong vs Correct
@@ -937,7 +977,7 @@ message is limited to 2 MiB of Anthropic replay payload.
   empty redacted reasoning part only to the retained Assistant step and orders
   it before that step's text/tool calls.
 - Keep `maxRetries: 0`, no raw `console.error`, five model steps, three tool
-  calls, Tavily-only tools, and no cross-runtime fallback after native
+  calls, the single `web_search` tool, and no cross-runtime fallback after native
   Anthropic has been selected.
 
 ### 4. Validation & Error Matrix
@@ -956,7 +996,7 @@ message is limited to 2 MiB of Anthropic replay payload.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: New API Anthropic calls Tavily, the continuation returns the exact
+- Good: New API Anthropic calls `web_search`, the continuation returns the exact
   signed thinking and redacted block, and a reload replays both from IndexedDB.
 - Good: direct Anthropic and New API share one metadata namespace while retaining
   their different authentication headers.
@@ -974,7 +1014,7 @@ message is limited to 2 MiB of Anthropic replay payload.
   disabled compensation, timeout/abort, CORS/mixed content, and pre-fetch
   rejection.
 - Resolver/runtime: `default|off|auto|effort`, adaptive/budget wire fields,
-  sampling/max-token constraints, text, reasoning, image, usage, Tavily two-step
+  sampling/max-token constraints, text, reasoning, image, usage, web-search two-step
   continuation, semantic deduplication, 401/429/5xx, cancellation, no retry,
   no log, and no fallback.
 - Schema/context/storage: streaming/non-streaming signature and redacted data,
@@ -985,7 +1025,7 @@ message is limited to 2 MiB of Anthropic replay payload.
   requests contain none of the Anthropic fixture unless the native Anthropic
   converter owns that request.
 - Browser/build: Chromium, Mobile Chrome, Firefox, and WebKit cover direct/New
-  API, Tavily, reload, and stop; the `ai-sdk/anthropic` marker stays in an async
+  API, web search, reload, and stop; the `ai-sdk/anthropic` marker stays in an async
   chunk absent from `/page` `entryJSFiles`; static output contains no real/test
   Key or hidden fixture.
 

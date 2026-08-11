@@ -2,8 +2,8 @@
 
 ## Security Invariants
 
-- Hosted `OPENAI_API_KEY`, `TAVILY_API_KEY`, and `TAVILY_BASE_URL` are read only
-  on the server and never enter public config or client bundles.
+- Hosted chat and search Keys, Provider URLs, Grok model, and Grok X Search are
+  read only on the server and never enter public config or client bundles.
 - Access codes are normalized, bounded, HMAC-SHA-256 digested, and compared over
   every configured code with `timingSafeEqual` (`src/server/auth.ts`).
 - State-changing auth routes require an exact same-origin `Origin`. Accept an
@@ -11,9 +11,9 @@
   protocol plus the validated HTTP `Host` authority, because Next.js may
   normalize a local/LAN hostname internally. Do not use a client-selected
   target or `X-Forwarded-Host` as an origin override.
-- Server proxy targets come only from validated `BASE_URL` or
-  `TAVILY_BASE_URL`; client headers, query parameters, and bodies cannot
-  override either one.
+- Server proxy targets come only from validated `BASE_URL`,
+  `TAVILY_BASE_URL`, `EXA_BASE_URL`, or `GROK_RESPONSES_URL`; client headers,
+  query parameters, and bodies cannot override any target.
 - Request bodies are streamed through byte and UTF-8 limits before parsing.
 - Hosted model IDs are restricted to the configured allowlist.
 
@@ -49,7 +49,7 @@ fix that downgrades Next.js or adds an unverified override.
 ### 1. Scope / Trigger
 
 Use this contract whenever changing Vercel environment wiring, hosted login,
-session cookies, public configuration, or same-origin model/chat routes.
+session cookies, public configuration, or same-origin model/chat/search routes.
 
 ### 2. Signatures
 
@@ -57,7 +57,8 @@ session cookies, public configuration, or same-origin model/chat routes.
 - `POST /api/auth` accepts `{ accessCode: string }`; `DELETE /api/auth` signs out.
 - `GET /api/models` and `POST /api/chat` use `x-cherrychat-mode: byok | hosted`.
 - `POST /api/web-search` accepts `{ query, maxResults }` and uses only the
-  deployment Tavily Key after same-origin and signed-session validation.
+  deployment-selected Tavily, Exa, or Grok configuration after same-origin and
+  signed-session validation.
 - `parseServerConfig(process.env)` is the only environment-to-domain adapter.
 - `TITLE_MODEL?: string` is the deployment default for automatic chat titles.
 
@@ -70,8 +71,8 @@ plus at least one comma-separated `MODELS` entry. `BASE_URL` defaults to
 `MODELS`. `DISABLE_BYOK` is exactly `true` or `false`.
 
 The public response contains only `byokEnabled`, `hostedEnabled`,
-`hostedWebSearchEnabled`, `models`, `defaultModel`, `titleModel`,
-`authenticated`, and the
+`hostedWebSearchEnabled`, `hostedWebSearchProvider`, `models`, `defaultModel`,
+`titleModel`, `authenticated`, and the
 validated millisecond `requestTimeouts` policy. Server Keys, access codes,
 secrets, raw environment strings, fixed upstream URLs, and signed tokens never
 enter that response or client bundles.
@@ -81,15 +82,24 @@ Hosted sign-in preserves the HTTP failure class at the browser boundary. A
 The controller must not report every non-2xx `/api/auth` response as an invalid
 code.
 
-`TAVILY_API_KEY` is optional and trimmed/validated as 8 through 2048 characters,
-but it is accepted only with the complete Hosted trio. `TAVILY_BASE_URL`
-defaults to `https://api.tavily.com`, accepts a base or trailing `/search` URL,
-and is validated only when the Key activates Hosted search. The search route
-never accepts a target, Authorization header, or Key from the browser. A
-malformed Cookie is an invalid session, not a configuration failure.
-The upstream Tavily-compatible body contains exactly `query` and `max_results`,
-matching the reviewed compatibility minimum. Optional official Tavily fields are
-not part of the shared compatibility contract.
+`WEB_SEARCH_PROVIDER` is exactly `tavily | exa | grok` and defaults to Tavily.
+Each Provider Key is optional, trimmed, validated as 8 through 2048 characters,
+and accepted only with the complete Hosted trio. Search is available only when
+the selected Provider has a valid Key; an unselected configured Key does not
+enable or replace it.
+
+`TAVILY_BASE_URL` defaults to `https://api.tavily.com` and `EXA_BASE_URL`
+defaults to `https://api.exa.ai`; either accepts a base or trailing `/search`
+URL. `GROK_RESPONSES_URL` is a complete endpoint and defaults to
+`https://api.x.ai/v1/responses`; `GROK_MODEL` defaults to `grok-4.5` and
+`GROK_X_SEARCH` defaults to `false`. URLs are absolute credential-free HTTP(S)
+without query/fragment and use HTTPS in production; only explicit loopback
+development may use HTTP.
+
+The search route never accepts a Provider, target, Authorization header, Key,
+model, or X Search override from the browser. A malformed Cookie is an invalid
+session, not a configuration failure. Tavily, Exa, and Grok adapters own their
+exact upstream bodies; only their normalized `WebSearchToolOutput` is returned.
 
 ### 4. Validation & Error Matrix
 
@@ -106,11 +116,15 @@ not part of the shared compatibility contract.
 | Browser Origin matches HTTP Host while `request.url` uses a normalized hostname | Accept as same-origin |
 | Wrong access code or invalid session | `401 UNAUTHORIZED` |
 | Hosted model outside the allowlist | `403 MODEL_NOT_ALLOWED` |
-| `TAVILY_API_KEY` without complete Hosted config | `CONFIGURATION_ERROR` |
-| Active `TAVILY_BASE_URL` is unsafe or malformed | `CONFIGURATION_ERROR` |
-| Search route without valid same-origin Session | `401 UNAUTHORIZED` before Tavily |
-| Deployment Tavily Key rejected upstream | `502 TOOL_AUTH_FAILED`, never `401` |
-| Tavily 429 / timeout / 5xx | `429 TOOL_RATE_LIMITED` / `504 TOOL_REQUEST_TIMEOUT` / `503 TOOL_SERVICE_UNAVAILABLE` |
+| Any search Provider Key without complete Hosted config | `CONFIGURATION_ERROR` |
+| `WEB_SEARCH_PROVIDER` is not Tavily, Exa, or Grok | `CONFIGURATION_ERROR` |
+| Selected Provider has no Key | Hosted search disabled; Hosted chat remains available |
+| Any configured Provider URL is unsafe or malformed | `CONFIGURATION_ERROR` |
+| Empty/overlong Grok model | `CONFIGURATION_ERROR` |
+| Search route without valid same-origin Session | `401 UNAUTHORIZED` before Provider fetch |
+| Browser adds Provider/Key/URL/model/X Search field | `400 INVALID_REQUEST`; no Provider fetch |
+| Deployment Provider Key rejected upstream | `502 TOOL_AUTH_FAILED`, never `401` |
+| Provider 429 / timeout / 5xx | `429 TOOL_RATE_LIMITED` / `504 TOOL_REQUEST_TIMEOUT` / `503 TOOL_SERVICE_UNAVAILABLE` |
 
 ### 5. Good / Base / Bad Cases
 
@@ -123,15 +137,19 @@ not part of the shared compatibility contract.
 - **Bad:** a client sends a target host, deployment Key, or disallowed model; the
   server ignores/rejects it before upstream fetch.
 - **Good:** a signed-in visitor in Hosted mode uses the fixed hosted route;
-  Custom API mode bypasses it and requires a personal Tavily source. Failures
-  never change mode or billing source.
-- **Bad:** expose a Tavily proxy with no Session because the client tool runner
+  Custom API mode bypasses it and requires the selected personal Provider
+  source. Failures never change mode or billing source.
+- **Good:** Hosted Grok uses env-selected `grok-4.5` with Web Search always on;
+  X Search appears upstream only when `GROK_X_SEARCH=true`.
+- **Bad:** expose a search proxy with no Session because the client tool runner
   already limits calls. Client limits are not deployment-wide abuse controls.
 
 ### 6. Tests Required
 
-- `src/server/config.test.ts`: combinations, default/title allowlist validation,
-  normalization, and public projection.
+- `src/server/config.test.ts`: Hosted trio combinations, search Provider
+  selection, every Key/URL/default, Grok model/X Search validation,
+  default/title allowlist validation, normalization, and secret-free public
+  projection.
 - `src/server/auth.test.ts`: normalization, HMAC comparison, expiry, and tampering.
 - `src/server/routes.test.ts`: public fields, wrong/correct code, Cookie,
   logout, and a browser Host that differs from the normalized request URL.
@@ -139,8 +157,9 @@ not part of the shared compatibility contract.
   missing/malformed Origin, malformed Host, and cross-origin rejection.
 - `src/server/upstream-proxy.test.ts`: fixed target, allowlist, redaction, abort.
 - `src/server/hosted-web-search.test.ts`: origin/session, strict body,
-  environment-selected Tavily target, client target rejection, 401/403/429/5xx,
-  timeout, abort, response bound, redaction, and exact two-field upstream body.
+  environment-selected target for all three Providers, client Provider/Key/URL/
+  model/X Search rejection, 401/403/429/5xx, timeout, abort, response bound,
+  redaction, and each exact upstream body.
 - `tests/e2e/chat-core.spec.ts`: BYOK-disabled UI and connection-method state.
 - `tests/e2e/chat-data-tools.spec.ts`: `403` remains a rejected-connection message and
   `401` remains an invalid-code message.
@@ -618,9 +637,11 @@ Chrome after quality succeeds.
   production audit, and complete dependency audit are sequential blocking
   steps. Do not add `continue-on-error` to a gate.
 - Build with explicit non-production values for `OPENAI_API_KEY`, `ACCESS_CODE`,
-  `AUTH_SECRET`, and `TAVILY_API_KEY`, then scan only `.next/static` for those
-  exact values. Missing canaries, a missing build directory, or any match fails;
-  output contains only environment names and hit counts, never canary values.
+  `AUTH_SECRET`, `TAVILY_API_KEY`, `TAVILY_BASE_URL`, `EXA_API_KEY`,
+  `EXA_BASE_URL`, `GROK_API_KEY`, `GROK_RESPONSES_URL`, and `GROK_MODEL`, then
+  scan only `.next/static` for all ten exact values. Missing canaries, a missing
+  build directory, or any match fails; output contains only environment names
+  and hit counts, never canary values.
 - Browser validation is a separate job that depends on quality and runs
   `chromium` plus `mobile-chrome`. It uses the same toolchain, owns no Secrets,
   and uses single-worker execution with bounded retries. Local development uses
@@ -731,9 +752,9 @@ validateChatCompletionStream(response, limits?): Response;
 - Session verification accepts only the exact v2 payload and checks `codeId`
   against every currently active code. Removing code A invalidates only A's
   Sessions; v1 and unknown versions fail closed.
-- Production Hosted `BASE_URL` and active `TAVILY_BASE_URL` require HTTPS.
-  Outside production, `ALLOW_INSECURE_LOCAL_UPSTREAM=true` allows HTTP only for
-  localhost, `.localhost`, IPv4 127/8, or IPv6 loopback.
+- Production Hosted `BASE_URL` and every configured search Provider URL require
+  HTTPS. Outside production, `ALLOW_INSECURE_LOCAL_UPSTREAM=true` allows HTTP
+  only for localhost, `.localhost`, IPv4 127/8, or IPv6 loopback.
 - Error bodies are 64 KiB, model lists are 4 MiB and 2,000 items, and native
   JSON is 16 MiB. Limit failures cancel the Reader and map to stable safe errors.
 - Chat Completions SSE limits are 64 MiB total, 1 MiB per line, 2 MiB per
@@ -765,9 +786,9 @@ validateChatCompletionStream(response, limits?): Response;
 
 - Auth/routes: A/B revocation, v1 rejection, expiry, tampering, strict fields,
   and absence of the normalized code in the Token/error.
-- Config: production HTTPS plus explicit dev loopback coverage for OpenAI and
-  Tavily; reject credentials, query, fragment, private IP, and production flag
-  bypass.
+- Config: production HTTPS plus explicit dev loopback coverage for OpenAI,
+  Tavily, Exa, and Grok; reject credentials, query, fragment, private IP, and
+  production flag bypass.
 - Reader/provider: Content-Length and streamed overflow, invalid UTF-8, model
   count, every SSE dimension, observable Reader cancellation, normal terminal
   compatibility, and highly fragmented line input with bounded encode calls.
