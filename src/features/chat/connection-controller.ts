@@ -1,4 +1,9 @@
-import type { ChatApiType, ConnectionBundle } from "@/runtime/chat/types";
+import {
+  WEB_SEARCH_PROVIDER_IDS,
+  type ChatApiType,
+  type ConnectionBundle,
+  type WebSearchProviderId,
+} from "@/runtime/chat/types";
 import { ChatTransportError } from "@/runtime/transport/chat-errors";
 import { normalizeApiBaseUrl } from "@/runtime/transport/chat-transport-factory";
 import {
@@ -11,6 +16,7 @@ export interface PublicConfig {
   byokEnabled: boolean;
   hostedEnabled: boolean;
   hostedWebSearchEnabled: boolean;
+  hostedWebSearchProvider?: WebSearchProviderId | null;
   models: string[];
   defaultModel: string | null;
   titleModel: string | null;
@@ -170,6 +176,13 @@ export function parsePublicConfig(value: unknown): PublicConfig {
   ) {
     throw new Error("Invalid server config");
   }
+  const hostedWebSearchProvider = isWebSearchProviderId(
+    record.hostedWebSearchProvider,
+  )
+    ? record.hostedWebSearchProvider
+    : record.hostedWebSearchEnabled
+      ? "tavily"
+      : null;
   const requestTimeouts =
     record.requestTimeouts === undefined
       ? DEFAULT_REQUEST_TIMEOUT_POLICY
@@ -181,6 +194,7 @@ export function parsePublicConfig(value: unknown): PublicConfig {
     byokEnabled: record.byokEnabled,
     hostedEnabled: record.hostedEnabled,
     hostedWebSearchEnabled: record.hostedWebSearchEnabled,
+    hostedWebSearchProvider,
     authenticated: record.authenticated,
     models: record.models.filter(
       (model): model is string => typeof model === "string",
@@ -191,6 +205,13 @@ export function parsePublicConfig(value: unknown): PublicConfig {
       typeof record.titleModel === "string" ? record.titleModel : null,
     requestTimeouts: { ...requestTimeouts },
   };
+}
+
+function isWebSearchProviderId(value: unknown): value is WebSearchProviderId {
+  return (
+    typeof value === "string" &&
+    (WEB_SEARCH_PROVIDER_IDS as readonly string[]).includes(value)
+  );
 }
 
 function bundleToDraft(bundle: ConnectionBundle): ConnectionDraft {

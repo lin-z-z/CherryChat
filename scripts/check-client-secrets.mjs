@@ -7,6 +7,12 @@ const requiredCanaryNames = [
   "ACCESS_CODE",
   "AUTH_SECRET",
   "TAVILY_API_KEY",
+  "TAVILY_BASE_URL",
+  "EXA_API_KEY",
+  "EXA_BASE_URL",
+  "GROK_API_KEY",
+  "GROK_RESPONSES_URL",
+  "GROK_MODEL",
 ];
 
 function readCanaries(environment) {

@@ -123,8 +123,26 @@ function createController(
     webSearchConfig: {
       enabled: false,
       maxResults: 5,
-      apiKey: "",
-      baseUrl: "https://api.tavily.com",
+      provider: "tavily",
+      providers: {
+        tavily: {
+          apiKey: "",
+          baseUrl: "https://api.tavily.com",
+          hasApiKey: false,
+        },
+        exa: {
+          apiKey: "",
+          baseUrl: "https://api.exa.ai",
+          hasApiKey: false,
+        },
+        grok: {
+          apiKey: "",
+          responsesUrl: "https://api.x.ai/v1/responses",
+          model: "grok-4.5",
+          xSearch: false,
+          hasApiKey: false,
+        },
+      },
       hasApiKey: false,
     },
     webSearchSource: null,
@@ -681,7 +699,7 @@ describe("ChatShell", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("saves Tavily settings from the shared settings controls", async () => {
+  it("saves the selected Tavily settings from the shared controls", async () => {
     const user = userEvent.setup();
     const controller = createController();
     controller.settingsOpen = true;
@@ -719,8 +737,23 @@ describe("ChatShell", () => {
     expect(controller.saveWebSearchSettings).toHaveBeenCalledWith({
       enabled: true,
       maxResults: 20,
-      apiKey: "tvly-test-key",
-      baseUrl: "https://search.example/tavily",
+      provider: "tavily",
+      providers: {
+        tavily: {
+          apiKey: "tvly-test-key",
+          baseUrl: "https://search.example/tavily",
+        },
+        exa: {
+          apiKey: "",
+          baseUrl: "https://api.exa.ai",
+        },
+        grok: {
+          apiKey: "",
+          responsesUrl: "https://api.x.ai/v1/responses",
+          model: "grok-4.5",
+          xSearch: false,
+        },
+      },
     });
   });
 
@@ -736,8 +769,100 @@ describe("ChatShell", () => {
     await user.type(screen.getByLabelText("Tavily API 密钥"), "tvly-test-key");
     await user.click(screen.getByRole("button", { name: "测试连接" }));
 
-    expect(screen.getByText("Tavily 连接正常。")).toBeVisible();
+    expect(screen.getByText("搜索连接正常。")).toBeVisible();
     expect(screen.queryByText("网络搜索有未保存的更改。")).toBeNull();
+  });
+
+  it("switches to Grok and saves its model, URL, and X Search settings", async () => {
+    const user = userEvent.setup();
+    const controller = createController();
+    controller.settingsOpen = true;
+    controller.saveWebSearchSettings = vi.fn(async (input) => ({
+      ...input,
+      hasApiKey: true,
+      providers: {
+        tavily: {
+          ...input.providers.tavily,
+          hasApiKey: false,
+        },
+        exa: {
+          ...input.providers.exa,
+          hasApiKey: false,
+        },
+        grok: {
+          ...input.providers.grok,
+          hasApiKey: true,
+        },
+      },
+    }));
+    vi.mocked(useChatController).mockReturnValue(controller);
+    renderShell();
+
+    await user.click(screen.getByRole("tab", { name: "网络搜索" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "搜索 Provider" }));
+    fireEvent.click(screen.getByRole("option", { name: "Grok" }));
+    await user.type(screen.getByLabelText("搜索 API 密钥"), "xai-test-key");
+    await user.clear(screen.getByLabelText("Grok Responses 地址"));
+    await user.type(
+      screen.getByLabelText("Grok Responses 地址"),
+      "https://proxy.example/v1/responses",
+    );
+    await user.clear(screen.getByLabelText("Grok 模型"));
+    await user.type(screen.getByLabelText("Grok 模型"), "grok-4.5");
+    await user.click(screen.getByRole("switch", { name: "同时搜索 X" }));
+    await user.click(screen.getByRole("switch", { name: "允许网络搜索" }));
+    await user.click(screen.getByRole("button", { name: "保存网络搜索" }));
+
+    expect(controller.saveWebSearchSettings).toHaveBeenCalledWith({
+      enabled: true,
+      maxResults: 5,
+      provider: "grok",
+      providers: {
+        tavily: {
+          apiKey: "",
+          baseUrl: "https://api.tavily.com",
+        },
+        exa: {
+          apiKey: "",
+          baseUrl: "https://api.exa.ai",
+        },
+        grok: {
+          apiKey: "xai-test-key",
+          responsesUrl: "https://proxy.example/v1/responses",
+          model: "grok-4.5",
+          xSearch: true,
+        },
+      },
+    });
+  });
+
+  it("keeps Exa credentials while switching search providers", async () => {
+    const user = userEvent.setup();
+    const controller = createController();
+    controller.settingsOpen = true;
+    vi.mocked(useChatController).mockReturnValue(controller);
+    renderShell();
+
+    await user.click(screen.getByRole("tab", { name: "网络搜索" }));
+    const provider = screen.getByRole("combobox", { name: "搜索 Provider" });
+    fireEvent.click(provider);
+    fireEvent.click(screen.getByRole("option", { name: "Exa" }));
+    await user.type(screen.getByLabelText("搜索 API 密钥"), "exa-test-key");
+    await user.clear(screen.getByLabelText("Exa API 地址"));
+    await user.type(
+      screen.getByLabelText("Exa API 地址"),
+      "https://exa-proxy.example",
+    );
+
+    fireEvent.click(provider);
+    fireEvent.click(screen.getByRole("option", { name: "Grok" }));
+    fireEvent.click(provider);
+    fireEvent.click(screen.getByRole("option", { name: "Exa" }));
+
+    expect(screen.getByLabelText("搜索 API 密钥")).toHaveValue("exa-test-key");
+    expect(screen.getByLabelText("Exa API 地址")).toHaveValue(
+      "https://exa-proxy.example",
+    );
   });
 
   it("keeps unavailable search disabled and explains access-code requirements", async () => {
@@ -792,20 +917,71 @@ describe("ChatShell", () => {
       screen.getByLabelText("个人 Tavily API 密钥（可选）"),
     ).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "测试连接" }));
-    expect(controller.testWebSearch).toHaveBeenCalledWith({
-      apiKey: "",
-      baseUrl: "https://api.tavily.com",
-      maxResults: 5,
-    });
+    expect(controller.testWebSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enabled: false,
+        maxResults: 5,
+        provider: "tavily",
+        providers: expect.objectContaining({
+          tavily: expect.objectContaining({
+            apiKey: "",
+            baseUrl: "https://api.tavily.com",
+          }),
+        }),
+      }),
+    );
 
     await user.click(screen.getByRole("switch", { name: "允许网络搜索" }));
     await user.click(screen.getByRole("button", { name: "保存网络搜索" }));
     expect(controller.saveWebSearchSettings).toHaveBeenCalledWith({
       enabled: true,
       maxResults: 5,
-      apiKey: "",
-      baseUrl: "https://api.tavily.com",
+      provider: "tavily",
+      providers: {
+        tavily: {
+          apiKey: "",
+          baseUrl: "https://api.tavily.com",
+        },
+        exa: {
+          apiKey: "",
+          baseUrl: "https://api.exa.ai",
+        },
+        grok: {
+          apiKey: "",
+          responsesUrl: "https://api.x.ai/v1/responses",
+          model: "grok-4.5",
+          xSearch: false,
+        },
+      },
     });
+  });
+
+  it("locks the Hosted provider and Grok options to the server projection", async () => {
+    const user = userEvent.setup();
+    const controller = createController();
+    controller.settingsOpen = true;
+    controller.publicConfig = {
+      ...controller.publicConfig!,
+      hostedWebSearchEnabled: true,
+      hostedWebSearchProvider: "grok",
+      authenticated: true,
+    };
+    controller.connection = { ...controller.connection, mode: "hosted" };
+    controller.webSearchSource = "hosted";
+    vi.mocked(useChatController).mockReturnValue(controller);
+    renderShell();
+
+    await user.click(screen.getByRole("tab", { name: "网络搜索" }));
+    expect(
+      screen.getByRole("combobox", { name: "搜索 Provider" }),
+    ).toHaveTextContent("Grok");
+    expect(
+      screen.getByRole("combobox", { name: "搜索 Provider" }),
+    ).toBeDisabled();
+    expect(screen.getByLabelText("Grok Responses 地址")).toBeDisabled();
+    expect(screen.getByLabelText("Grok 模型")).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "同时搜索 X" })).toBeDisabled();
+    expect(screen.getByText("本站搜索")).toBeVisible();
   });
 
   it("renders persisted web search sources inside the assistant reply", async () => {

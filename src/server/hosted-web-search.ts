@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { FetchLike } from "@/runtime/transport/transport-http";
-import { createTavilyToolExecutor } from "@/runtime/tools/tavily-client";
+import { createWebSearchProviderExecutor } from "@/runtime/tools/web-search-provider";
 import { ToolExecutionError } from "@/runtime/tools/tool-registry";
 import { WEB_SEARCH_RESULT_COUNT } from "@/runtime/tools/web-search-settings";
 import type { ServerConfig } from "@/server/config";
@@ -46,7 +46,7 @@ export async function handleHostedWebSearch(
   try {
     assertSameOrigin(request);
     const hosted = requireHostedSession(request, config.hosted);
-    if (!hosted.tavilyApiKey || !hosted.tavilyBaseUrl) {
+    if (!hosted.webSearch) {
       throw new RequestSecurityError(
         404,
         "TOOL_NOT_AVAILABLE",
@@ -81,9 +81,9 @@ export async function handleHostedWebSearch(
       );
     }
 
-    const executor = createTavilyToolExecutor({
-      apiKey: hosted.tavilyApiKey,
-      baseUrl: hosted.tavilyBaseUrl,
+    const source = hostedWebSearchSource(hosted.webSearch);
+    const executor = createWebSearchProviderExecutor({
+      source,
       maxResults: parsed.data.maxResults,
       fetchImplementation,
       ...(timeoutMs === undefined ? {} : { timeoutMs }),
@@ -101,6 +101,39 @@ export async function handleHostedWebSearch(
     );
   } finally {
     lease?.release();
+  }
+}
+
+function hostedWebSearchSource(
+  config: NonNullable<ServerConfig["hosted"]>["webSearch"],
+) {
+  if (!config) {
+    throw new ToolExecutionError("TOOL_NOT_AVAILABLE");
+  }
+  switch (config.provider) {
+    case "tavily":
+      return {
+        kind: "browser" as const,
+        provider: "tavily" as const,
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+      };
+    case "exa":
+      return {
+        kind: "browser" as const,
+        provider: "exa" as const,
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+      };
+    case "grok":
+      return {
+        kind: "browser" as const,
+        provider: "grok" as const,
+        apiKey: config.apiKey,
+        responsesUrl: config.responsesUrl,
+        model: config.model,
+        xSearch: config.xSearch,
+      };
   }
 }
 

@@ -44,8 +44,8 @@ Each item should enter a new requirements and security review rather than being
 added as an untested switch in the current Chat Completions runtime.
 
 OpenAI Chat Completions, OpenAI Responses, native Anthropic and Gemini
-transports, and the bounded built-in Tavily web-search tool are current product
-capabilities rather than deferred roadmap items.
+transports, and the bounded built-in Tavily, Exa, and Grok web-search providers
+are current product capabilities rather than deferred roadmap items.
 
 ## Product boundary
 

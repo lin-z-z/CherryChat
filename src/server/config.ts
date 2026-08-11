@@ -10,6 +10,19 @@ import {
   DEFAULT_TAVILY_BASE_URL,
   normalizeTavilyBaseUrl,
 } from "@/runtime/tools/tavily-url";
+import {
+  DEFAULT_EXA_BASE_URL,
+  normalizeExaBaseUrl,
+} from "@/runtime/tools/exa-url";
+import {
+  DEFAULT_GROK_MODEL,
+  DEFAULT_GROK_RESPONSES_URL,
+  normalizeGrokResponsesUrl,
+} from "@/runtime/tools/grok-url";
+import {
+  WEB_SEARCH_PROVIDER_IDS,
+  type WebSearchProviderId,
+} from "@/runtime/chat/types";
 
 const booleanStringSchema = z
   .enum(["true", "false"])
@@ -24,8 +37,15 @@ const rawEnvironmentSchema = z.object({
   TITLE_MODEL: z.string().optional(),
   ACCESS_CODE: z.string().optional(),
   AUTH_SECRET: z.string().optional(),
+  WEB_SEARCH_PROVIDER: z.enum(WEB_SEARCH_PROVIDER_IDS).default("tavily"),
   TAVILY_API_KEY: z.string().optional(),
   TAVILY_BASE_URL: z.string().optional(),
+  EXA_API_KEY: z.string().optional(),
+  EXA_BASE_URL: z.string().optional(),
+  GROK_API_KEY: z.string().optional(),
+  GROK_RESPONSES_URL: z.string().optional(),
+  GROK_MODEL: z.string().optional(),
+  GROK_X_SEARCH: booleanStringSchema,
   DISABLE_BYOK: booleanStringSchema,
   ALLOW_INSECURE_LOCAL_UPSTREAM: booleanStringSchema,
   NODE_ENV: z.string().optional(),
@@ -35,12 +55,22 @@ const rawEnvironmentSchema = z.object({
   CHAT_TOTAL_TIMEOUT_SECONDS: z.string().optional(),
 });
 
+export type HostedWebSearchConfig =
+  | { provider: "tavily"; apiKey: string; baseUrl: string }
+  | { provider: "exa"; apiKey: string; baseUrl: string }
+  | {
+      provider: "grok";
+      apiKey: string;
+      responsesUrl: string;
+      model: string;
+      xSearch: boolean;
+    };
+
 export interface HostedServerConfig {
   apiKey: string;
   accessCodes: string[];
   authSecret: string;
-  tavilyApiKey: string | null;
-  tavilyBaseUrl: string | null;
+  webSearch: HostedWebSearchConfig | null;
 }
 
 export interface ServerConfig {
@@ -57,6 +87,7 @@ export interface PublicServerConfig {
   byokEnabled: boolean;
   hostedEnabled: boolean;
   hostedWebSearchEnabled: boolean;
+  hostedWebSearchProvider: WebSearchProviderId | null;
   models: string[];
   defaultModel: string | null;
   titleModel: string | null;
@@ -81,6 +112,11 @@ export function parseServerConfig(
   const authSecret = nonEmpty(raw.AUTH_SECRET);
   const tavilyApiKey = nonEmpty(raw.TAVILY_API_KEY?.trim());
   const rawTavilyBaseUrl = nonEmpty(raw.TAVILY_BASE_URL?.trim());
+  const exaApiKey = nonEmpty(raw.EXA_API_KEY?.trim());
+  const rawExaBaseUrl = nonEmpty(raw.EXA_BASE_URL?.trim());
+  const grokApiKey = nonEmpty(raw.GROK_API_KEY?.trim());
+  const rawGrokResponsesUrl = nonEmpty(raw.GROK_RESPONSES_URL?.trim());
+  const grokModel = nonEmpty(raw.GROK_MODEL?.trim()) ?? DEFAULT_GROK_MODEL;
   const requestTimeouts = {
     modelListMs: parseTimeoutMilliseconds(
       "MODEL_LIST_TIMEOUT_SECONDS",
@@ -150,22 +186,34 @@ export function parseServerConfig(
       "DISABLE_BYOK=true requires a complete hosted-mode configuration",
     );
   }
-  if (
-    tavilyApiKey &&
-    (tavilyApiKey.length < 8 || tavilyApiKey.length > 2_048)
-  ) {
-    throw new ServerConfigurationError(
-      "TAVILY_API_KEY must contain from 8 through 2048 characters",
-    );
-  }
-  if (tavilyApiKey && hostedFieldCount !== 3) {
-    throw new ServerConfigurationError(
-      "TAVILY_API_KEY requires a complete hosted-mode configuration",
-    );
+  validateSearchApiKey(tavilyApiKey, "TAVILY_API_KEY", hostedFieldCount);
+  validateSearchApiKey(exaApiKey, "EXA_API_KEY", hostedFieldCount);
+  validateSearchApiKey(grokApiKey, "GROK_API_KEY", hostedFieldCount);
+  if (grokModel.length > 512) {
+    throw new ServerConfigurationError("GROK_MODEL is too long");
   }
   const tavilyBaseUrl = tavilyApiKey
     ? normalizeServerTavilyBaseUrl(rawTavilyBaseUrl ?? DEFAULT_TAVILY_BASE_URL)
     : null;
+  const exaBaseUrl = exaApiKey
+    ? normalizeServerExaBaseUrl(rawExaBaseUrl ?? DEFAULT_EXA_BASE_URL)
+    : null;
+  const grokResponsesUrl = grokApiKey
+    ? normalizeServerGrokResponsesUrl(
+        rawGrokResponsesUrl ?? DEFAULT_GROK_RESPONSES_URL,
+      )
+    : null;
+  const webSearch = buildHostedWebSearchConfig({
+    provider: raw.WEB_SEARCH_PROVIDER,
+    tavilyApiKey,
+    tavilyBaseUrl,
+    exaApiKey,
+    exaBaseUrl,
+    grokApiKey,
+    grokResponsesUrl,
+    grokModel,
+    grokXSearch: raw.GROK_X_SEARCH,
+  });
   if (hostedFieldCount === 3) {
     assertHostedUpstreamSecurity(
       baseUrl,
@@ -177,6 +225,22 @@ export function parseServerConfig(
       assertHostedUpstreamSecurity(
         tavilyBaseUrl,
         "TAVILY_BASE_URL",
+        raw.NODE_ENV === "production",
+        raw.ALLOW_INSECURE_LOCAL_UPSTREAM,
+      );
+    }
+    if (exaBaseUrl) {
+      assertHostedUpstreamSecurity(
+        exaBaseUrl,
+        "EXA_BASE_URL",
+        raw.NODE_ENV === "production",
+        raw.ALLOW_INSECURE_LOCAL_UPSTREAM,
+      );
+    }
+    if (grokResponsesUrl) {
+      assertHostedUpstreamSecurity(
+        grokResponsesUrl,
+        "GROK_RESPONSES_URL",
         raw.NODE_ENV === "production",
         raw.ALLOW_INSECURE_LOCAL_UPSTREAM,
       );
@@ -195,8 +259,7 @@ export function parseServerConfig(
             apiKey,
             accessCodes,
             authSecret,
-            tavilyApiKey: tavilyApiKey ?? null,
-            tavilyBaseUrl,
+            webSearch,
           }
         : null,
     requestTimeouts,
@@ -211,9 +274,8 @@ export function toPublicServerConfig(config: ServerConfig): PublicServerConfig {
   return {
     byokEnabled: !config.disableByok,
     hostedEnabled: config.hosted !== null,
-    hostedWebSearchEnabled: Boolean(
-      config.hosted?.tavilyApiKey && config.hosted.tavilyBaseUrl,
-    ),
+    hostedWebSearchEnabled: Boolean(config.hosted?.webSearch),
+    hostedWebSearchProvider: config.hosted?.webSearch?.provider ?? null,
     models: config.hosted ? [...config.models] : [],
     defaultModel: config.hosted ? config.defaultModel : null,
     titleModel: config.hosted ? config.titleModel : null,
@@ -257,9 +319,29 @@ function normalizeServerTavilyBaseUrl(value: string): string {
   }
 }
 
+function normalizeServerExaBaseUrl(value: string): string {
+  try {
+    return normalizeExaBaseUrl(value);
+  } catch {
+    throw new ServerConfigurationError(
+      "EXA_BASE_URL must be an absolute HTTP or HTTPS URL without credentials, query parameters or fragments",
+    );
+  }
+}
+
+function normalizeServerGrokResponsesUrl(value: string): string {
+  try {
+    return normalizeGrokResponsesUrl(value);
+  } catch {
+    throw new ServerConfigurationError(
+      "GROK_RESPONSES_URL must be an absolute HTTP or HTTPS URL without credentials, query parameters or fragments",
+    );
+  }
+}
+
 function assertHostedUpstreamSecurity(
   value: string,
-  name: "BASE_URL" | "TAVILY_BASE_URL",
+  name: "BASE_URL" | "TAVILY_BASE_URL" | "EXA_BASE_URL" | "GROK_RESPONSES_URL",
   production: boolean,
   allowInsecureLocalUpstream: boolean,
 ): void {
@@ -278,6 +360,65 @@ function assertHostedUpstreamSecurity(
       ? `${name} must use HTTPS when Hosted mode is enabled in production`
       : `${name} may use HTTP only for loopback development when ALLOW_INSECURE_LOCAL_UPSTREAM=true`,
   );
+}
+
+function validateSearchApiKey(
+  value: string | undefined,
+  name: string,
+  hostedFieldCount: number,
+): void {
+  if (!value) return;
+  if (value.length < 8 || value.length > 2_048) {
+    throw new ServerConfigurationError(
+      `${name} must contain from 8 through 2048 characters`,
+    );
+  }
+  if (hostedFieldCount !== 3) {
+    throw new ServerConfigurationError(
+      `${name} requires a complete hosted-mode configuration`,
+    );
+  }
+}
+
+function buildHostedWebSearchConfig(input: {
+  provider: WebSearchProviderId;
+  tavilyApiKey: string | undefined;
+  tavilyBaseUrl: string | null;
+  exaApiKey: string | undefined;
+  exaBaseUrl: string | null;
+  grokApiKey: string | undefined;
+  grokResponsesUrl: string | null;
+  grokModel: string;
+  grokXSearch: boolean;
+}): HostedWebSearchConfig | null {
+  switch (input.provider) {
+    case "tavily":
+      return input.tavilyApiKey && input.tavilyBaseUrl
+        ? {
+            provider: "tavily",
+            apiKey: input.tavilyApiKey,
+            baseUrl: input.tavilyBaseUrl,
+          }
+        : null;
+    case "exa":
+      return input.exaApiKey && input.exaBaseUrl
+        ? {
+            provider: "exa",
+            apiKey: input.exaApiKey,
+            baseUrl: input.exaBaseUrl,
+          }
+        : null;
+    case "grok":
+      return input.grokApiKey && input.grokResponsesUrl
+        ? {
+            provider: "grok",
+            apiKey: input.grokApiKey,
+            responsesUrl: input.grokResponsesUrl,
+            model: input.grokModel,
+            xSearch: input.grokXSearch,
+          }
+        : null;
+  }
 }
 
 function isLoopbackHostname(value: string): boolean {

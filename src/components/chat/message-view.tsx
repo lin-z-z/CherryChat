@@ -27,7 +27,7 @@ import { cn } from "@/lib/cn";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { textFromMessage } from "@/runtime/chat/projections";
 import type { ToolCallPart } from "@/runtime/chat/types";
-import { WEB_SEARCH_TOOL_NAME } from "@/runtime/tools/tavily-client";
+import { WEB_SEARCH_TOOL_NAME } from "@/runtime/tools/web-search-client";
 import { projectWebSearchTool } from "@/runtime/tools/tool-projections";
 
 export function MessageView({
@@ -506,7 +506,10 @@ function ToolActivity({
           return (
             <div className="tool-activity-row is-complete" key={part.id}>
               <Globe2 aria-hidden="true" size={15} />
-              <span>{label}</span>
+              <div>
+                <span>{label}</span>
+                {search?.answer ? <p>{search.answer}</p> : null}
+              </div>
             </div>
           );
         }
@@ -521,6 +524,7 @@ function ToolActivity({
                 size={14}
               />
             </summary>
+            {search.answer ? <p>{search.answer}</p> : null}
             <ul className="tool-source-list">
               {search.results.map((result) => (
                 <li key={result.url}>

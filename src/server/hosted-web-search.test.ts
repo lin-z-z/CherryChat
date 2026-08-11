@@ -25,8 +25,11 @@ const config: ServerConfig = {
     apiKey: "deployment-model-secret",
     accessCodes: ["access-code"],
     authSecret: "h".repeat(32),
-    tavilyApiKey: "tvly-deployment-secret",
-    tavilyBaseUrl: "https://search.example/tavily",
+    webSearch: {
+      provider: "tavily",
+      apiKey: "tvly-deployment-secret",
+      baseUrl: "https://search.example/tavily",
+    },
   },
 };
 
@@ -101,7 +104,7 @@ describe("hosted web search", () => {
       ),
       {
         ...config,
-        hosted: config.hosted ? { ...config.hosted, tavilyApiKey: null } : null,
+        hosted: config.hosted ? { ...config.hosted, webSearch: null } : null,
       },
       fetchMock as unknown as typeof fetch,
     );
@@ -124,6 +127,74 @@ describe("hosted web search", () => {
       error: { code: "UNAUTHORIZED" },
     });
   });
+
+  it.each([
+    [
+      "exa",
+      {
+        provider: "exa" as const,
+        apiKey: "exa-deployment-secret",
+        baseUrl: "https://search.example/exa",
+      },
+      "https://search.example/exa/search",
+      {
+        query: "Exa query",
+        type: "auto",
+        numResults: 4,
+        contents: { highlights: true },
+      },
+    ],
+    [
+      "grok",
+      {
+        provider: "grok" as const,
+        apiKey: "xai-deployment-secret",
+        responsesUrl: "https://proxy.example/responses",
+        model: "grok-4.5",
+        xSearch: true,
+      },
+      "https://proxy.example/responses",
+      {
+        model: "grok-4.5",
+        input: "Grok query",
+        tools: [{ type: "web_search" }, { type: "x_search" }],
+        store: false,
+      },
+    ],
+  ])(
+    "dispatches the fixed Hosted %s provider without accepting browser target fields",
+    async (_provider, webSearch, expectedTarget, expectedBody) => {
+      const variant: ServerConfig = {
+        ...config,
+        hosted: config.hosted ? { ...config.hosted, webSearch } : null,
+      };
+      let target = "";
+      let body: unknown;
+      const response = await handleHostedWebSearch(
+        webSearchRequest(
+          {
+            query: webSearch.provider === "exa" ? "Exa query" : "Grok query",
+            maxResults: 4,
+          },
+          authenticatedHeaders(variant),
+        ),
+        variant,
+        (async (input, init) => {
+          target = String(input);
+          body = JSON.parse(String(init?.body));
+          return Response.json(
+            webSearch.provider === "grok"
+              ? { output_text: "Grok answer" }
+              : { results: [] },
+          );
+        }) as typeof fetch,
+      );
+
+      expect(response.status).toBe(200);
+      expect(target).toBe(expectedTarget);
+      expect(body).toEqual(expectedBody);
+    },
+  );
 
   it.each([
     [{ query: "", maxResults: 5 }],
@@ -286,17 +357,26 @@ describe("hosted web search", () => {
 });
 
 function authenticatedHeaders(
+  configOrExtra: ServerConfig | Record<string, string> = config,
   extra: Record<string, string> = {},
 ): Record<string, string> {
-  const hosted = config.hosted;
+  const configValue = isServerConfig(configOrExtra) ? configOrExtra : config;
+  const extraHeaders = isServerConfig(configOrExtra) ? extra : configOrExtra;
+  const hosted = configValue.hosted;
   if (!hosted) throw new Error("Hosted test configuration is missing");
   const codeId = authenticateAccessCode("access-code", hosted);
   if (!codeId) throw new Error("Hosted test access code is invalid");
   const token = createSessionToken(hosted.authSecret, codeId);
   return {
     Cookie: `${SESSION_COOKIE_NAME}=${token}`,
-    ...extra,
+    ...extraHeaders,
   };
+}
+
+function isServerConfig(
+  value: ServerConfig | Record<string, string>,
+): value is ServerConfig {
+  return "requestTimeouts" in value;
 }
 
 function webSearchRequest(

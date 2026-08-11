@@ -102,28 +102,35 @@ Open `http://127.0.0.1:3000`. No environment file is required for a BYOK-only
 local run.
 
 Copy `.env.example` to `.env.local` only when you need to test same-origin BYOK,
-Hosted access, or deployment-funded Tavily search. Keep real values out of Git,
+Hosted access, or deployment-funded web search. Keep real values out of Git,
 logs, screenshots, Issues, and browser test artifacts.
 
 ## Environment variables
 
-| Variable                          | Required      | Purpose                                                                 |
-| --------------------------------- | ------------- | ----------------------------------------------------------------------- |
-| `BASE_URL`                        | No            | Fixed OpenAI-compatible upstream; defaults to `https://api.openai.com`. |
-| `ALLOW_INSECURE_LOCAL_UPSTREAM`   | No            | Allows loopback HTTP outside production when exactly `true`.            |
-| `OPENAI_API_KEY`                  | Hosted access | Deployment-owned upstream key.                                          |
-| `MODELS`                          | Hosted access | Comma-separated hosted model allowlist.                                 |
-| `DEFAULT_MODEL`                   | No            | Hosted default; must be in `MODELS`.                                    |
-| `TITLE_MODEL`                     | No            | Deployment title model; must be in `MODELS`.                            |
-| `ACCESS_CODE`                     | Hosted access | Comma-separated visitor codes, each at most 256 UTF-8 bytes.            |
-| `AUTH_SECRET`                     | Hosted access | HMAC/session secret of at least 32 UTF-8 bytes.                         |
-| `TAVILY_API_KEY`                  | No            | Deployment-funded Tavily key for signed-in Hosted visitors.             |
-| `TAVILY_BASE_URL`                 | No            | Hosted Tavily-compatible base; defaults to `https://api.tavily.com`.    |
-| `DISABLE_BYOK`                    | No            | Exactly `true` exposes Hosted access only.                              |
-| `MODEL_LIST_TIMEOUT_SECONDS`      | No            | Model-list limit; default 30 seconds.                                   |
-| `CHAT_FIRST_BYTE_TIMEOUT_SECONDS` | No            | Wait for response headers; default 300 seconds.                         |
-| `CHAT_IDLE_TIMEOUT_SECONDS`       | No            | Maximum idle time between body chunks; default 300 seconds.             |
-| `CHAT_TOTAL_TIMEOUT_SECONDS`      | No            | Whole chat request limit; default 1800 seconds.                         |
+| Variable                          | Required      | Purpose                                                                  |
+| --------------------------------- | ------------- | ------------------------------------------------------------------------ |
+| `BASE_URL`                        | No            | Fixed OpenAI-compatible upstream; defaults to `https://api.openai.com`.  |
+| `ALLOW_INSECURE_LOCAL_UPSTREAM`   | No            | Allows loopback HTTP outside production when exactly `true`.             |
+| `OPENAI_API_KEY`                  | Hosted access | Deployment-owned upstream key.                                           |
+| `MODELS`                          | Hosted access | Comma-separated hosted model allowlist.                                  |
+| `DEFAULT_MODEL`                   | No            | Hosted default; must be in `MODELS`.                                     |
+| `TITLE_MODEL`                     | No            | Deployment title model; must be in `MODELS`.                             |
+| `ACCESS_CODE`                     | Hosted access | Comma-separated visitor codes, each at most 256 UTF-8 bytes.             |
+| `AUTH_SECRET`                     | Hosted access | HMAC/session secret of at least 32 UTF-8 bytes.                          |
+| `WEB_SEARCH_PROVIDER`             | No            | Fixed Hosted provider: `tavily`, `exa`, or `grok`; defaults to `tavily`. |
+| `TAVILY_API_KEY`                  | No            | Deployment-funded Tavily key when that provider is selected.             |
+| `TAVILY_BASE_URL`                 | No            | Hosted Tavily-compatible base; defaults to `https://api.tavily.com`.     |
+| `EXA_API_KEY`                     | No            | Deployment-funded Exa key when that provider is selected.                |
+| `EXA_BASE_URL`                    | No            | Hosted Exa-compatible base; defaults to `https://api.exa.ai`.            |
+| `GROK_API_KEY`                    | No            | Deployment-funded xAI-compatible key when Grok is selected.              |
+| `GROK_RESPONSES_URL`              | No            | Complete Grok Responses endpoint; defaults to xAI's official endpoint.   |
+| `GROK_MODEL`                      | No            | Hosted Grok model; defaults to `grok-4.5`.                               |
+| `GROK_X_SEARCH`                   | No            | Adds Grok's X Search tool when `true`; defaults to `false`.              |
+| `DISABLE_BYOK`                    | No            | Exactly `true` exposes Hosted access only.                               |
+| `MODEL_LIST_TIMEOUT_SECONDS`      | No            | Model-list limit; default 30 seconds.                                    |
+| `CHAT_FIRST_BYTE_TIMEOUT_SECONDS` | No            | Wait for response headers; default 300 seconds.                          |
+| `CHAT_IDLE_TIMEOUT_SECONDS`       | No            | Maximum idle time between body chunks; default 300 seconds.              |
+| `CHAT_TOTAL_TIMEOUT_SECONDS`      | No            | Whole chat request limit; default 1800 seconds.                          |
 
 `OPENAI_API_KEY`, `ACCESS_CODE`, and `AUTH_SECRET` must be configured together,
 and Hosted access also requires at least one `MODELS` entry. Partial Hosted
@@ -139,7 +146,7 @@ Timeout values are whole seconds from `0` through `86400`. `0` disables only
 that individual timer. The total timer does not reset while streaming; the idle
 timer resets after each body chunk.
 
-Production OpenAI and Tavily upstreams must use HTTPS. The insecure-local
+Production OpenAI, Tavily, Exa, and Grok upstreams must use HTTPS. The insecure-local
 exception is limited to loopback hosts outside production; it does not allow LAN
 or ordinary remote HTTP targets.
 
@@ -176,6 +183,8 @@ A BYOK-only demo must not set:
 - `ACCESS_CODE`
 - `AUTH_SECRET`
 - `TAVILY_API_KEY`
+- `EXA_API_KEY`
+- `GROK_API_KEY`
 
 This keeps the demo on user-funded BYOK paths and prevents anonymous visitors
 from consuming project-owner model or search credit. The current Demo URL was
@@ -210,7 +219,7 @@ guards. Treat them as defense in depth only.
 
 ### BYOK-only
 
-- No deployment-owned OpenAI, Hosted access, or Tavily credential is configured.
+- No deployment-owned OpenAI, Hosted access, or web-search credential is configured.
 - `/api/config` reports BYOK enabled and Hosted access disabled.
 - Direct provider requests go only to the user-selected absolute URL.
 - Same-origin BYOK can reach only the deployment-fixed `BASE_URL`.
@@ -223,6 +232,10 @@ guards. Treat them as defense in depth only.
 - The session cookie is HttpOnly, SameSite Strict, and Secure on HTTPS.
 - Vercel Firewall and upstream spending controls are published separately.
 - Hosted chat and search never accept browser-selected server targets.
+- `WEB_SEARCH_PROVIDER` fixes one of Tavily, Exa, or Grok; access-code users cannot
+  override its key, URL, model, or X Search setting.
+- Grok always supplies Web Search. X Search is separate, disabled by default, and
+  may add xAI model/tool charges when enabled.
 - Function logs and the client bundle contain no configured secret values.
 
 Local tests cannot prove these Vercel settings. Record local, Preview, and

@@ -19,6 +19,11 @@ import {
   DEFAULT_ASSISTANT_ID,
   DEFAULT_ASSISTANT_NAME,
 } from "@/runtime/chat/types";
+import {
+  LEGACY_WEB_SEARCH_SETTINGS_KEY,
+  WEB_SEARCH_RESULT_COUNT,
+  WEB_SEARCH_SETTINGS_KEY,
+} from "@/runtime/tools/web-search-settings";
 
 export const DATABASE_NAME = "cherrychat";
 
@@ -165,5 +170,34 @@ export class ChatDatabase extends Dexie {
             delete conversation.advancedSettings;
           });
       });
+    this.version(8)
+      .stores(CHAT_DATABASE_STORES)
+      .upgrade(async (transaction) => {
+        const settings = transaction.table<KeyValueRecord>("settings");
+        const legacy = await settings.get(LEGACY_WEB_SEARCH_SETTINGS_KEY);
+        const value = legacy?.value;
+        if (!isLegacyWebSearchSettings(value) || !legacy) return;
+        await settings.put({
+          key: WEB_SEARCH_SETTINGS_KEY,
+          value: { ...value, provider: "tavily" },
+          updatedAt: legacy.updatedAt,
+        });
+        await settings.delete(LEGACY_WEB_SEARCH_SETTINGS_KEY);
+      });
   }
+}
+
+function isLegacyWebSearchSettings(
+  value: JsonValue | undefined,
+): value is { enabled: boolean; maxResults: number } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const enabled = value.enabled;
+  const maxResults = value.maxResults;
+  return (
+    typeof enabled === "boolean" &&
+    typeof maxResults === "number" &&
+    Number.isInteger(maxResults) &&
+    maxResults >= WEB_SEARCH_RESULT_COUNT.min &&
+    maxResults <= WEB_SEARCH_RESULT_COUNT.max
+  );
 }

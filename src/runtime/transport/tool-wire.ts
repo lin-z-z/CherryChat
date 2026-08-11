@@ -51,7 +51,7 @@ function projectToolOutput(name: string, output: JsonValue | null): JsonValue {
   if (name !== "web_search" || !isJsonObject(output)) return output;
   const results = output.results;
   if (!Array.isArray(results)) return output;
-  return results.flatMap((result, index) => {
+  const projectedResults = results.flatMap((result, index) => {
     if (!isJsonObject(result)) return [];
     return [
       {
@@ -62,6 +62,12 @@ function projectToolOutput(name: string, output: JsonValue | null): JsonValue {
       },
     ];
   });
+  return {
+    ...(typeof output.answer === "string" && output.answer
+      ? { answer: output.answer }
+      : {}),
+    results: projectedResults,
+  };
 }
 
 function isJsonObject(

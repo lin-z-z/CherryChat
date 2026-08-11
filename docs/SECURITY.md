@@ -39,8 +39,9 @@ Primary trust boundaries are:
 
 ## Browser credentials and local data
 
-BYOK API keys, access-code input, and optional personal Tavily credentials are
-stored locally for convenience. They are not encrypted at rest by CherryChat.
+BYOK API keys, access-code input, and optional personal Tavily, Exa, or Grok
+credentials are stored locally for convenience. They are not encrypted at rest
+by CherryChat.
 A malicious extension, compromised dependency, injected same-origin script, or
 person with access to the browser profile may read them.
 
@@ -89,10 +90,11 @@ bodies, or target-host headers. Redirects are rejected. Hosted chat validates a
 strict bounded request shape and model allowlist. Same-origin BYOK preserves
 OpenAI-compatible extension fields but still cannot change the fixed target.
 
-Hosted Tavily search is a separate same-origin POST route. It requires a valid
+Hosted web search is a separate same-origin POST route. It requires a valid
 Hosted session, accepts only a bounded query and result count, and calls the
-validated deployment `TAVILY_BASE_URL` with the deployment key. The browser
-cannot supply a server target or credential for this route.
+validated deployment URL for the server-selected Tavily, Exa, or Grok provider
+with the deployment credential. The browser cannot supply a server target,
+provider, model, or credential for this route.
 
 Production Hosted upstreams require HTTPS. The explicit insecure-local option
 works only outside production and only for loopback hosts; it does not permit

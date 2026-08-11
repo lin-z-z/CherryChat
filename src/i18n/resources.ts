@@ -127,7 +127,7 @@ export const resources = {
       webSearchCompleted: "已找到 {{count}} 个来源",
       webSearchFailed: "网络搜索失败",
       webSearchAuthFailed:
-        "网络搜索授权已失效，请检查访问码或个人 Tavily 密钥。",
+        "网络搜索授权已失效，请检查访问码或当前 Provider 的个人密钥。",
       webSearchRateLimited: "搜索请求过于频繁，请稍后再试。",
       webSearchTimedOut: "等待搜索结果超时，请检查网络后重试。",
       webSearchUnavailable: "搜索服务暂时不可用，请稍后再试。",
@@ -192,7 +192,8 @@ export const resources = {
       modelServiceDescription: "管理连接方式、连接信息和可用模型。",
       modelManagementPageDescription:
         "选择默认模型和话题命名模型，并设置各模型的回答方式和兼容性。",
-      webSearchPageDescription: "配置 Tavily，让模型在需要时查询最新信息。",
+      webSearchPageDescription:
+        "选择 Tavily、Exa 或 Grok，让模型在需要时查询最新信息。",
       dataPageDescription: "管理备份、导出和本地数据。",
       connectionMethod: "连接方式",
       connectionMethodDescription: "选择使用访问码，或填写自己的 API 信息。",
@@ -264,10 +265,36 @@ export const resources = {
       modelSettingsSourceCustom: "模型能力使用自定义设置",
       webSearch: "网络搜索",
       webSearchDescription:
-        "使用 Tavily 查询实时信息。只有在对话输入区开启后，模型才会使用搜索。",
+        "选择 Tavily、Exa 或 Grok 查询实时信息。只有在对话输入区开启后，模型才会使用搜索。",
       webSearchEnable: "允许网络搜索",
       webSearchEnableDescription:
         "开启后，可以在单个对话中选择是否让模型搜索网络。",
+      webSearchProvider: "搜索 Provider",
+      webSearchProviderDescription:
+        "BYOK 模式使用你选择的 Provider；访问码模式由部署方固定。",
+      webSearchProviderTavily: "Tavily",
+      webSearchProviderExa: "Exa",
+      webSearchProviderGrok: "Grok",
+      webSearchApiKey: "搜索 API 密钥",
+      webSearchApiKeyDescription:
+        "密钥只保存在当前浏览器中，不会包含在备份里。",
+      personalWebSearchKey: "个人搜索 API 密钥",
+      personalWebSearchKeyInactiveDescription:
+        "访问码模式只使用部署方搜索；切换到自定义 API 后可编辑个人密钥。",
+      personalWebSearchUrlInactiveDescription:
+        "访问码模式不会使用个人搜索地址；切换到自定义 API 后可编辑。",
+      exaBaseUrl: "Exa API 地址",
+      exaBaseUrlDescription:
+        "填写 Exa 或兼容搜索服务的 Base 地址，默认使用官方服务。",
+      grokResponsesUrl: "Grok Responses 地址",
+      grokResponsesUrlDescription:
+        "填写完整的 Responses 端点，可使用兼容协议的第三方地址。",
+      grokModel: "Grok 模型",
+      grokModelDescription:
+        "默认使用 grok-4.5；模型调用和搜索工具可能产生费用。",
+      grokXSearch: "同时搜索 X",
+      grokXSearchDescription:
+        "开启后会额外提供 X Search 工具，默认关闭并按 xAI 规则计费。",
       tavilyApiKey: "Tavily API 密钥",
       tavilyApiKeyDescription: "密钥只保存在当前浏览器中，不会包含在备份里。",
       personalTavilyApiKey: "个人 Tavily API 密钥（可选）",
@@ -290,11 +317,13 @@ export const resources = {
         personalRequired: "需要个人配置",
       },
       webSearchServiceDescription: {
-        personal: "自定义 API 模式正在使用你的 Tavily 密钥，不会消耗本站额度。",
+        personal:
+          "自定义 API 模式正在使用你选择的个人 Provider，不会消耗本站额度。",
         hosted: "访问码模式正在使用本站搜索。",
         login: "本站提供网络搜索，请先在“模型服务”中保存访问码。",
         hostedUnavailable: "当前部署没有为访问码模式提供网络搜索。",
-        personalRequired: "自定义 API 模式需要填写个人 Tavily API 密钥和地址。",
+        personalRequired:
+          "自定义 API 模式需要填写当前 Provider 的个人密钥和地址。",
       },
       webSearchResultCount: "每次返回的来源",
       webSearchResultCountDescription: "可选择 1 到 50 个来源，默认返回 5 个。",
@@ -303,7 +332,7 @@ export const resources = {
       testWebSearch: "测试连接",
       saveWebSearch: "保存网络搜索",
       webSearchSaved: "网络搜索设置已保存。",
-      webSearchTestSucceeded: "Tavily 连接正常。",
+      webSearchTestSucceeded: "搜索连接正常。",
       webSearchSaveError: "无法保存网络搜索设置，请检查密钥和 API 地址。",
       webSearchTestError:
         "无法连接网络搜索，请检查访问码、个人密钥、API 地址和网络。",
@@ -646,7 +675,7 @@ export const resources = {
       webSearchCompleted: "Sources found: {{count}}",
       webSearchFailed: "Web search failed",
       webSearchAuthFailed:
-        "Web search authorization expired. Check the access code or personal Tavily key.",
+        "Web search authorization expired. Check the access code or the personal key for the selected provider.",
       webSearchRateLimited: "Too many search requests. Try again shortly.",
       webSearchTimedOut:
         "The search timed out. Check your connection and try again.",
@@ -717,7 +746,7 @@ export const resources = {
       modelManagementPageDescription:
         "Choose default and title models, then configure responses and compatibility for each model.",
       webSearchPageDescription:
-        "Configure Tavily so models can look up current information when needed.",
+        "Choose Tavily, Exa, or Grok so models can look up current information when needed.",
       dataPageDescription: "Manage backups, exports, and local data.",
       connectionMethod: "Connection method",
       connectionMethodDescription:
@@ -802,10 +831,36 @@ export const resources = {
       modelSettingsSourceCustom: "Model capabilities use custom settings",
       webSearch: "Web search",
       webSearchDescription:
-        "Use Tavily for current information. Search is available to the model only when enabled in the chat composer.",
+        "Choose Tavily, Exa, or Grok for current information. Search is available to the model only when enabled in the chat composer.",
       webSearchEnable: "Allow web search",
       webSearchEnableDescription:
         "When enabled, each chat can choose whether the model may search the web.",
+      webSearchProvider: "Search provider",
+      webSearchProviderDescription:
+        "BYOK uses your selected provider; access-code mode uses the deployment provider.",
+      webSearchProviderTavily: "Tavily",
+      webSearchProviderExa: "Exa",
+      webSearchProviderGrok: "Grok",
+      webSearchApiKey: "Search API key",
+      webSearchApiKeyDescription:
+        "The key stays in this browser and is not included in backups.",
+      personalWebSearchKey: "Personal search API key",
+      personalWebSearchKeyInactiveDescription:
+        "Access-code mode uses deployment search only. Switch to Custom API to edit your personal key.",
+      personalWebSearchUrlInactiveDescription:
+        "Access-code mode does not use a personal search URL. Switch to Custom API to edit it.",
+      exaBaseUrl: "Exa API URL",
+      exaBaseUrlDescription:
+        "Enter the Base URL for Exa or a compatible search service. The official service is used by default.",
+      grokResponsesUrl: "Grok Responses URL",
+      grokResponsesUrlDescription:
+        "Enter the complete Responses endpoint, including a compatible third-party URL if needed.",
+      grokModel: "Grok model",
+      grokModelDescription:
+        "The default is grok-4.5. Model tokens and search tools may incur charges.",
+      grokXSearch: "Also search X",
+      grokXSearchDescription:
+        "Adds the X Search tool when enabled. It is off by default and follows xAI billing.",
       tavilyApiKey: "Tavily API key",
       tavilyApiKeyDescription:
         "The key stays in this browser and is not included in backups.",
@@ -831,14 +886,14 @@ export const resources = {
       },
       webSearchServiceDescription: {
         personal:
-          "Custom API is using your Tavily key and does not consume the site's quota.",
+          "Custom API is using your selected personal provider and does not consume the site's quota.",
         hosted: "Access-code mode is using site search.",
         login:
           "This site provides web search. Save an access code under Model service to use it.",
         hostedUnavailable:
           "This deployment does not provide web search for access-code mode.",
         personalRequired:
-          "Custom API requires a personal Tavily API key and URL.",
+          "Custom API requires a personal key and URL for the selected provider.",
       },
       webSearchResultCount: "Sources per search",
       webSearchResultCountDescription:
@@ -848,7 +903,7 @@ export const resources = {
       testWebSearch: "Test connection",
       saveWebSearch: "Save web search",
       webSearchSaved: "Web search settings saved.",
-      webSearchTestSucceeded: "Tavily is connected.",
+      webSearchTestSucceeded: "Search is connected.",
       webSearchSaveError:
         "Web search settings could not be saved. Check the key and API URL.",
       webSearchTestError:

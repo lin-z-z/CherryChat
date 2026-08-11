@@ -39,6 +39,7 @@ describe("public config and hosted session routes", () => {
       byokEnabled: true,
       hostedEnabled: true,
       hostedWebSearchEnabled: true,
+      hostedWebSearchProvider: "tavily",
       models: ["model-a", "model-b"],
       defaultModel: "model-b",
       titleModel: "model-b",
