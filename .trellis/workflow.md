@@ -184,7 +184,7 @@ Complex task: ask the user if you can create a Trellis task and enter the planni
 - 1.1 Requirement exploration `[required · repeatable]` (`prd.md`; complex tasks also need `design.md` + `implement.md`)
 - 1.2 Research `[optional · repeatable]`
 - 1.3 Configure context `[required · once]` — Claude Code, Cursor, OpenCode, Codex, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, Oh My Pi, ZCode, Reasonix (sub-agent-dispatch platforms only; inline platforms skip)
-- 1.4 Activate task `[required · once]` (review gate, then `task.py start`; status → in_progress)
+- 1.4 Activate task `[required · once]` (review gate, confirm `task/<task-dir>` branch, then `task.py start`; status → in_progress)
 - 1.5 Completion criteria
 
 <!-- Per-turn breadcrumb: shown throughout Phase 1 (status='planning') -->
@@ -435,11 +435,19 @@ Skip this step. Context is loaded directly by the `trellis-before-dev` skill in 
 
 #### 1.4 Activate task `[required · once]`
 
-After artifact review, flip the task status to `in_progress`:
+Before `task.py start`, confirm the current Git branch follows the shared task
+branch convention. `start` does **not** inspect or create branches:
 
 ```bash
+git branch --show-current   # must equal task/<task-directory-name>
+python ./.trellis/scripts/task.py set-branch <task-dir> task/<task-directory-name>
+python ./.trellis/scripts/task.py set-base-branch <task-dir> main
 python ./.trellis/scripts/task.py start <task-dir>
 ```
+
+Never implement a task directly on `main`. If the task branch does not exist,
+create it before continuing. See the platform-neutral
+[Git Branching Guide](./spec/guides/git-branching-guide.md).
 
 For lightweight tasks, `prd.md` can be enough. For complex tasks, `prd.md`, `design.md`, and `implement.md` must exist and be reviewed before start. On sub-agent-dispatch platforms, `implement.jsonl` and `check.jsonl` must both have real curated entries before start. Runtime consumers tolerate missing or seed-only manifests for compatibility, but that tolerance is not a planning-ready state.
 
@@ -454,6 +462,8 @@ If `task.py start` errors with a session-identity message (no context key from h
 | `prd.md` exists | ✅ |
 | User confirms task should enter implementation | ✅ |
 | `task.py start` has been run (status = in_progress) | ✅ |
+| Current Git branch and task `branch` both equal `task/<task-directory-name>` | ✅ |
+| Task `base_branch` is `main` | ✅ |
 | `research/` has artifacts (complex tasks) | recommended |
 | `design.md` exists (complex tasks) | ✅ |
 | `implement.md` exists (complex tasks) | ✅ |
