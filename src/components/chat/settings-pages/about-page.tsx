@@ -1,14 +1,17 @@
 "use client";
 
-import { Cable, Database, Info, ShieldCheck, Tags } from "lucide-react";
+import { Cable, Database, Github, Info, ShieldCheck, Tags } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
+import packageJson from "../../../../package.json";
 
 import { BrandIcon } from "@/components/chat/brand-icon";
 import { SettingsSection } from "@/components/chat/settings-layout";
 import type { ChatController } from "@/features/chat/use-chat-controller";
 
-const APP_VERSION = "0.1.0";
+const APP_VERSION = packageJson.version;
 const APP_LICENSE = "MIT";
+const APP_REPOSITORY_URL = "https://github.com/lin-z-z/CherryChat";
 
 export function AboutPage({
   publicConfig,
@@ -88,6 +91,22 @@ export function AboutPage({
               </span>
             </dt>
             <dd>{t("currentBrowser")}</dd>
+          </div>
+          <div className="settings-about-repository">
+            <dt>
+              <span className="settings-about-detail-icon">
+                <Github aria-hidden="true" size={17} />
+              </span>
+              <span>
+                <strong>{t("repository")}</strong>
+                <small>{t("repositoryDescription")}</small>
+              </span>
+            </dt>
+            <dd>
+              <a href={APP_REPOSITORY_URL} rel="noreferrer" target="_blank">
+                {t("openRepository")}
+              </a>
+            </dd>
           </div>
         </dl>
       </div>

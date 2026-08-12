@@ -1771,6 +1771,7 @@ button {
   border-radius: 50%;
   background: var(--cherry-soft);
   color: var(--cherry);
+  margin-top: 0.45rem;
 }
 
 .message-body {
@@ -1804,13 +1805,16 @@ button {
 .message-user .message-bubble {
   width: fit-content;
   border-radius: 1.25rem 1.25rem 0.4rem 1.25rem;
-  background: var(--secondary);
+  background: var(--cherry-soft);
   padding: 0.7rem 0.9rem;
 }
 
 .message-user .message-bubble-editing {
   width: 100%;
-  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--cherry) 32%, var(--border));
+  background: var(--card);
+  padding: 0.85rem 1rem;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--cherry) 8%, transparent);
 }
 
 .message-inline-editor {
@@ -1820,10 +1824,20 @@ button {
 }
 
 .message-inline-editor-input {
-  min-height: 8rem;
+  min-height: 7.5rem;
   max-height: min(50dvh, 24rem);
+  border: 0;
+  background: transparent;
+  padding: 0.15rem 0;
   resize: vertical;
   line-height: 1.55;
+}
+
+.message-inline-editor-input:focus,
+.message-inline-editor-input:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+  outline: none;
 }
 
 .message-inline-editor-error {
@@ -4044,8 +4058,13 @@ button {
   border-right: 1px solid var(--border);
 }
 
-.settings-about-list > div:nth-last-child(-n + 2) {
+.settings-about-list > div:last-child {
   border-bottom: 0;
+}
+
+.settings-about-list > .settings-about-repository {
+  grid-column: 1 / -1;
+  border-right: 0;
 }
 
 .settings-about-list dt {
@@ -4097,6 +4116,16 @@ button {
   line-height: 1.4;
   text-align: right;
   overflow-wrap: anywhere;
+}
+
+.settings-about-list dd a {
+  color: var(--cherry);
+  text-decoration: none;
+}
+
+.settings-about-list dd a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.15rem;
 }
 
 .dialog-backdrop {
