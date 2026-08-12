@@ -830,7 +830,7 @@ lineBytes = encoder.encode(accumulatedLine).byteLength;
 trackLineBytes(chunk);
 ```
 
-## Scenario: Manual GitHub Beta Release Workflow
+## Scenario: Manual GitHub Stable Release Workflow
 
 ### 1. Scope / Trigger
 
@@ -876,7 +876,7 @@ command-line overrides and reads only GitHub Actions context variables.
   `persist-credentials: false`.
 - `package.json`, root `package-lock.json`, and its `packages[""].version`
   must contain the same stable three-part SemVer. The release Tag is
-  `v${version}` and the title is `CherryChat v${version} (Beta)`.
+  `v${version}` and the title is `CherryChat v${version}`.
 - The current English and Chinese Changelog sections must exist and contain
   structured `###` notes. The body includes the English section, target SHA,
   same-tag Chinese Changelog link, and GitHub-generated notes.
@@ -904,9 +904,9 @@ command-line overrides and reads only GitHub Actions context variables.
 
 ### 5. Good / Base / Bad Cases
 
-- **Good:** an approved `main` workflow reads matching `0.1.0` metadata,
-  reuses successful CI for the exact SHA, creates one ordinary Latest Release,
-  and verifies the Tag and public URL.
+- **Good:** an approved `main` workflow reads matching `1.0.0` metadata,
+  reuses successful CI for the exact SHA, creates one ordinary non-prerelease
+  Latest Release, and verifies the Tag and public URL.
 - **Base:** a local `node scripts/release.mjs` invocation is rejected safely;
   local tests exercise pure logic and mocked API state without remote writes.
 - **Bad:** accept arbitrary SHA input, publish from a feature branch, rerun

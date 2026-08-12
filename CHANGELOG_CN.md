@@ -5,36 +5,41 @@
 本文记录 CherryChat 的可追溯发布版本。英文版本是 Release notes 的基准；简体中文
 版本必须保持相同的能力与限制边界。
 
-## [0.1.0] - 2026-08-10
+## [1.0.0] - 2026-08-12
 
 ### 摘要
 
-`v0.1.0` 是 CherryChat 首个可追溯的 Beta（预览版）版本。CherryChat 是轻量、
-隐私优先、可自托管的 Web AI 对话客户端。Beta 表示文档内工作流已经可用并受到
-自动化质量门保护；它不代表 Stable 或企业级支持。
+`v1.0.0` 是 CherryChat 首个正式稳定版本。CherryChat 是轻量、隐私优先、可自托管
+的 Web AI 对话客户端。本版本稳定了文档内的浏览器本地数据、BYOK、Hosted access、
+搜索、备份和部署契约，同时保留下列限制。
 
 ### 主要能力
 
 - 浏览器本地对话、分支、附件、助手、本地搜索、打印和导入导出工作流。
 - 支持 OpenAI Chat Completions、OpenAI Responses、原生 Anthropic、原生 Gemini、
   New API Endpoint Metadata 和通用 OpenAI-compatible Chat Endpoint 的 BYOK 连接。
-- 模型感知推理控制、流式答案与推理展示、图片输入和有界 Tavily 网络搜索。
+- 模型感知推理控制、流式答案与推理展示，以及图片输入。
+- Tavily、Exa 和 Grok 网络搜索。Grok 默认使用 `grok-4.5`，并支持由部署者配置兼容
+  URL、模型和可选的 X Search。
 - 可选的部署方 Hosted access，通过固定上游、访问码、签名 HttpOnly Session、模型
-  白名单和有界服务端路由提供能力。
+  与搜索 Provider 白名单和有界服务端路由提供能力。Hosted 用户可以在已配置的搜索
+  Provider 中选择，但不会收到 Provider 凭据或服务端专属选项。
 - Backup v2、经过校验的导入，以及不含凭据的导出。
 - 格式、文档、Lint、严格 TypeScript、覆盖率、脚本、生产构建、依赖审计、客户端
   Secret 扫描，以及 Chromium 桌面端和移动端浏览器质量门。
 
 ### 已知限制
 
-- 不提供账号、云同步、组织角色、集中审计、全局用量账本或计费控制。
+- 不提供账号、云同步、组织角色、集中审计、全局用量账本、计费控制或企业支持承诺。
 - 浏览器保存的 BYOK 凭据只是便利存储，并非加密密码库；对话和设置保留在当前
   浏览器中。
-- Hosted access 只支持部署固定的 OpenAI-compatible Chat Completions 路径。原生
+- Hosted 模型访问只支持部署固定的 OpenAI-compatible Chat Completions 路径。原生
   Provider、OpenAI Responses 和 New API Endpoint Routing 仍属于 BYOK 能力。
+- Hosted 搜索 Provider、凭据、URL、Grok 模型和 X Search 行为由部署者配置；浏览器
+  只能选择服务端白名单中的 Provider。
 - 仓库 CI 通过不能证明某个 Vercel 域名、环境变量、Firewall 规则、消费限额或上游
   Provider 已正确配置。
-- 不提供安全响应 SLA、漏洞奖励或旧版本维护分支。
+- 不提供安全响应 SLA、漏洞奖励、长期支持分支或旧版本维护时间保证。
 
 ### 升级与备份
 
@@ -47,8 +52,8 @@
 ### 部署与安全
 
 BYOK-only 部署不需要在 Vercel 中配置 Provider 凭据。Hosted access 必须使用完整
-服务端配置，并由部署者设置 Firewall 与消费控制。Vercel Production Alias 不会
-改变产品的 Beta 状态。
+服务端配置，并由部署者设置 Firewall 与消费控制。Vercel Production Alias 不代表
+项目承诺托管服务可用性、安全响应时限或企业支持。
 
 发布实例或版本前，请阅读[部署指南](./docs/DEPLOYMENT_CN.md)、
 [安全策略](./docs/SECURITY_CN.md)和[发布政策](./docs/RELEASES_CN.md)。

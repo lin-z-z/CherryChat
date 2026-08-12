@@ -7,13 +7,13 @@
   <p>
     <a href="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml"><img src="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml/badge.svg" alt="CI 状态" /></a>
     <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT 许可证" /></a>
-    <img src="https://img.shields.io/badge/status-Beta-2563eb.svg" alt="Beta 状态" />
+    <img src="https://img.shields.io/badge/version-1.0.0-16a34a.svg" alt="CherryChat v1.0.0" />
   </p>
 </div>
 
 > [!IMPORTANT]
-> CherryChat 目前是持续验证中的 Beta（预览版）。项目尚未提供账号、云同步、
-> 组织权限、集中审计或计费控制。将 Hosted Key 实例分享给他人前，请先阅读
+> CherryChat v1.0.0 是首个正式稳定版本。项目不提供账号、云同步、组织权限、
+> 集中审计或计费控制。将 Hosted Key 实例分享给他人前，请先阅读
 > [安全说明](./docs/SECURITY_CN.md)和[部署边界](./docs/DEPLOYMENT_CN.md)。
 
 <p align="center">
@@ -29,7 +29,7 @@
 可直接体验经过验证的 [公开 BYOK-only Demo](https://cherrychat-xi.vercel.app)。
 当前地址使用稳定的 Vercel Production 别名，但没有配置项目所有者的模型、Hosted
 access 或部署端搜索凭据；访客需要在浏览器中使用自己的服务凭据。Vercel 部署目标为
-Production 不代表产品已经成熟，CherryChat 仍处于 Beta 阶段。
+Production 不会扩大 CherryChat 文档承诺的支持或部署保证。
 
 ![CherryChat 桌面对话界面](./docs/images/cherrychat-desktop.png)
 

@@ -6,8 +6,8 @@
 [Contributing](../CONTRIBUTING.md) · [License](../LICENSE)
 
 CherryChat is a lightweight, privacy-first, self-hostable web AI client for
-individuals and small teams. The project is currently a Beta release under
-active verification. This directory contains the technical sources of truth
+individuals and small teams. Version `v1.0.0` is the first stable release. This
+directory contains the technical sources of truth
 that would make the main README too dense.
 
 ## Start here
@@ -24,7 +24,7 @@ that would make the main README too dense.
   import validation, and single-chat export.
 - [Roadmap and deferred boundaries](./ROADMAP.md) — intentionally deferred
   product and security work.
-- [Release and version policy](./RELEASES.md) — Beta compatibility, quality
+- [Release and version policy](./RELEASES.md) — stable-version compatibility, quality
   gates, manual release automation, and immutable public tags.
 - [Changelog](../CHANGELOG.md) — tracked releases, capabilities, limitations,
   backup guidance, and deployment boundaries.
@@ -33,9 +33,9 @@ that would make the main README too dense.
 
 ## Project maturity
 
-Beta means the documented workflows are usable and protected by repository
-quality gates. It does not mean Stable, long-term support, or an enterprise
-service commitment.
+Version `v1.0.0` stabilizes the documented product contracts and is protected
+by repository quality gates. It does not promise long-term support, hosted
+service uptime, or an enterprise service commitment.
 
 The current repository has automated formatting, lint, strict TypeScript,
 coverage, script regression, production build, dependency audit, client-bundle

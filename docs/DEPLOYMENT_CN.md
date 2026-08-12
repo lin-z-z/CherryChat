@@ -155,7 +155,7 @@ Timer 在 Streaming 期间不会重置；Idle Timer 会在收到每个 Body Chun
 
 已验证的公开 Demo 为
 [https://cherrychat-xi.vercel.app](https://cherrychat-xi.vercel.app)。虽然
-CherryChat 仍是 Beta 阶段产品，该地址使用稳定的 Vercel Production Alias。
+该地址运行 CherryChat `v1.0.0`，并使用稳定的 Vercel Production Alias。
 验证时项目没有任何环境变量，`/api/config` 报告 BYOK 已启用、托管访问已禁用、
 托管网络搜索已禁用，并且没有部署模型。
 

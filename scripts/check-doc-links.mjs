@@ -50,12 +50,16 @@ const FORBIDDEN_PRODUCT_TERMS = [
     label: "obsolete product maturity term MVP",
     pattern: /\bMVP\b/iu,
   },
+  {
+    label: "obsolete product maturity term Beta",
+    pattern: /\bBeta\b/iu,
+  },
 ];
 
 const REQUIRED_FILE_TOKENS = {
   "README.md": [
     "./README_CN.md",
-    "Beta",
+    "1.0.0",
     "Bring Your Own Key (BYOK)",
     "Hosted access",
     "Self-hosting",
@@ -70,7 +74,7 @@ const REQUIRED_FILE_TOKENS = {
   ],
   "README_CN.md": [
     "./README.md",
-    "Beta",
+    "1.0.0",
     "自带 API Key（BYOK",
     "托管访问（Hosted access）",
     "自托管（Self-hosting）",
@@ -97,10 +101,10 @@ const REQUIRED_FILE_TOKENS = {
     "谁提供 Provider Key",
     "谁承担 Provider 费用",
   ],
-  "docs/README.md": ["Beta", "./RELEASES.md", "../CHANGELOG.md"],
-  "docs/README_CN.md": ["Beta", "./RELEASES_CN.md", "../CHANGELOG_CN.md"],
+  "docs/README.md": ["v1.0.0", "./RELEASES.md", "../CHANGELOG.md"],
+  "docs/README_CN.md": ["v1.0.0", "./RELEASES_CN.md", "../CHANGELOG_CN.md"],
   "CHANGELOG.md": [
-    "## [0.1.0]",
+    "## [1.0.0]",
     "### Known limitations",
     "Backup v2",
     "./docs/DEPLOYMENT.md",
@@ -108,7 +112,7 @@ const REQUIRED_FILE_TOKENS = {
     "./docs/RELEASES.md",
   ],
   "CHANGELOG_CN.md": [
-    "## [0.1.0]",
+    "## [1.0.0]",
     "### 已知限制",
     "Backup v2",
     "./docs/DEPLOYMENT_CN.md",
@@ -116,14 +120,14 @@ const REQUIRED_FILE_TOKENS = {
     "./docs/RELEASES_CN.md",
   ],
   "docs/RELEASES.md": [
-    "v0.MINOR.PATCH",
+    "vMAJOR.MINOR.PATCH",
     "workflow_dispatch",
     "actions: read",
     "contents: write",
     "Public tags are immutable",
   ],
   "docs/RELEASES_CN.md": [
-    "v0.MINOR.PATCH",
+    "vMAJOR.MINOR.PATCH",
     "workflow_dispatch",
     "actions: read",
     "contents: write",
