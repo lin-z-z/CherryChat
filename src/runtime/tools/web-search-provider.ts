@@ -37,6 +37,7 @@ export interface WebSearchSourceContext {
   webSearch: WebSearchConfiguration;
   hostedWebSearchEnabled: boolean;
   hostedWebSearchProvider: WebSearchProviderId | null;
+  hostedWebSearchProviders: readonly WebSearchProviderId[];
   authenticated: boolean;
 }
 
@@ -44,12 +45,15 @@ export function resolveWebSearchExecutionSource(
   context: WebSearchSourceContext,
 ): WebSearchExecutionSource | null {
   if (context.connectionMode === "hosted") {
-    return context.hostedWebSearchEnabled &&
-      context.authenticated &&
-      context.hostedWebSearchProvider
+    const provider = resolveHostedWebSearchProvider({
+      preferredProvider: context.webSearch.hostedProvider,
+      defaultProvider: context.hostedWebSearchProvider,
+      allowedProviders: context.hostedWebSearchProviders,
+    });
+    return context.hostedWebSearchEnabled && context.authenticated && provider
       ? {
           kind: "hosted",
-          provider: context.hostedWebSearchProvider,
+          provider,
         }
       : null;
   }
@@ -76,6 +80,23 @@ export function resolveWebSearchExecutionSource(
   };
 }
 
+export function resolveHostedWebSearchProvider({
+  preferredProvider,
+  defaultProvider,
+  allowedProviders,
+}: {
+  preferredProvider: WebSearchProviderId | null;
+  defaultProvider: WebSearchProviderId | null;
+  allowedProviders: readonly WebSearchProviderId[];
+}): WebSearchProviderId | null {
+  if (preferredProvider && allowedProviders.includes(preferredProvider)) {
+    return preferredProvider;
+  }
+  return defaultProvider && allowedProviders.includes(defaultProvider)
+    ? defaultProvider
+    : null;
+}
+
 export function createWebSearchProviderExecutor(options: {
   source: WebSearchExecutionSource;
   maxResults: number;
@@ -86,6 +107,7 @@ export function createWebSearchProviderExecutor(options: {
   if (options.source.kind === "hosted") {
     return createHostedWebSearchToolExecutor({
       maxResults: options.maxResults,
+      provider: options.source.provider,
       ...(options.fetchImplementation
         ? { fetchImplementation: options.fetchImplementation }
         : {}),

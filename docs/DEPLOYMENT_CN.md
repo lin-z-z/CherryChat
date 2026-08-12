@@ -105,7 +105,8 @@ npm run dev
 | `TITLE_MODEL`                     | 否       | 部署端标题模型；必须存在于 `MODELS` 中。                           |
 | `ACCESS_CODE`                     | 托管访问 | 逗号分隔的访客访问码，每个最多 256 UTF-8 Byte。                    |
 | `AUTH_SECRET`                     | 托管访问 | 至少 32 UTF-8 Byte 的 HMAC/Session Secret。                        |
-| `WEB_SEARCH_PROVIDER`             | 否       | 固定 Hosted Provider：`tavily`、`exa` 或 `grok`，默认为 `tavily`。 |
+| `WEB_SEARCH_PROVIDER`             | 否       | 默认 Hosted Provider：`tavily`、`exa` 或 `grok`，默认为 `tavily`。 |
+| `WEB_SEARCH_ALLOWED_PROVIDERS`    | 否       | 访问码用户可选的有序列表；未配置时只允许默认 Provider。            |
 | `TAVILY_API_KEY`                  | 否       | 选择 Tavily 时使用的部署方 Key。                                   |
 | `TAVILY_BASE_URL`                 | 否       | 托管 Tavily-compatible Base；默认为 `https://api.tavily.com`。     |
 | `EXA_API_KEY`                     | 否       | 选择 Exa 时使用的部署方 Key。                                      |
@@ -204,8 +205,12 @@ BYOK-only Demo 不得设置：
 - Session Cookie 在 HTTPS 下使用 HttpOnly、SameSite Strict 和 Secure。
 - Vercel Firewall 与上游消费控制分别发布。
 - 托管聊天和搜索从不接受浏览器选择的服务端目标。
-- `WEB_SEARCH_PROVIDER` 固定 Tavily、Exa 或 Grok 之一；访问码用户不能覆盖
-  Provider、Key、URL、Grok 模型或 X Search 设置。
+- `WEB_SEARCH_PROVIDER` 决定默认的 Tavily、Exa 或 Grok；未配置
+  `WEB_SEARCH_ALLOWED_PROVIDERS` 时仍锁定该 Provider。
+- 显式允许列表必须非空、包含默认 Provider，且每一项都具有完整的部署方配置；
+  列表顺序只控制设置页顺序，不改变默认值。列表外已配置的 Key 不会开放使用。
+- 访问码用户只能在设置页选择允许的 Provider ID，不能覆盖 Key、URL、Grok
+  模型或 X Search 设置。
 - Grok 始终提供 Web Search；X Search 是独立开关，默认关闭，开启后可能增加
   xAI 模型和搜索工具费用。
 - Function 日志和客户端 Bundle 不包含任何已配置 Secret 值。

@@ -101,6 +101,8 @@ function createController(
       byokEnabled: true,
       hostedEnabled: true,
       hostedWebSearchEnabled: false,
+      hostedWebSearchProvider: null,
+      hostedWebSearchProviders: [],
       models: ["gpt-4.1-mini"],
       defaultModel: "gpt-4.1-mini",
       titleModel: "gpt-4.1-mini",
@@ -124,6 +126,7 @@ function createController(
       enabled: false,
       maxResults: 5,
       provider: "tavily",
+      hostedProvider: null,
       providers: {
         tavily: {
           apiKey: "",
@@ -738,6 +741,7 @@ describe("ChatShell", () => {
       enabled: true,
       maxResults: 20,
       provider: "tavily",
+      hostedProvider: null,
       providers: {
         tavily: {
           apiKey: "tvly-test-key",
@@ -817,6 +821,7 @@ describe("ChatShell", () => {
       enabled: true,
       maxResults: 5,
       provider: "grok",
+      hostedProvider: null,
       providers: {
         tavily: {
           apiKey: "",
@@ -873,6 +878,8 @@ describe("ChatShell", () => {
     controller.publicConfig = {
       ...controller.publicConfig,
       hostedWebSearchEnabled: true,
+      hostedWebSearchProvider: "tavily",
+      hostedWebSearchProviders: ["tavily"],
       authenticated: false,
     };
     controller.connection = { ...controller.connection, mode: "hosted" };
@@ -896,6 +903,8 @@ describe("ChatShell", () => {
     controller.publicConfig = {
       ...controller.publicConfig,
       hostedWebSearchEnabled: true,
+      hostedWebSearchProvider: "tavily",
+      hostedWebSearchProviders: ["tavily"],
       authenticated: true,
     };
     controller.connection = { ...controller.connection, mode: "hosted" };
@@ -937,6 +946,7 @@ describe("ChatShell", () => {
       enabled: true,
       maxResults: 5,
       provider: "tavily",
+      hostedProvider: null,
       providers: {
         tavily: {
           apiKey: "",
@@ -964,6 +974,7 @@ describe("ChatShell", () => {
       ...controller.publicConfig!,
       hostedWebSearchEnabled: true,
       hostedWebSearchProvider: "grok",
+      hostedWebSearchProviders: ["grok"],
       authenticated: true,
     };
     controller.connection = { ...controller.connection, mode: "hosted" };
@@ -982,6 +993,48 @@ describe("ChatShell", () => {
     expect(screen.getByLabelText("Grok 模型")).toBeDisabled();
     expect(screen.getByRole("switch", { name: "同时搜索 X" })).toBeDisabled();
     expect(screen.getByText("本站搜索")).toBeVisible();
+  });
+
+  it("switches among allowed Hosted providers without changing BYOK selection", async () => {
+    const user = userEvent.setup();
+    const controller = createController();
+    controller.settingsOpen = true;
+    controller.publicConfig = {
+      ...controller.publicConfig!,
+      hostedWebSearchEnabled: true,
+      hostedWebSearchProvider: "tavily",
+      hostedWebSearchProviders: ["grok", "tavily"],
+      authenticated: true,
+    };
+    controller.connection = { ...controller.connection, mode: "hosted" };
+    controller.webSearchSource = "hosted";
+    controller.saveWebSearchSettings = vi.fn(async (input) => ({
+      ...input,
+      providers: {
+        tavily: { ...input.providers.tavily, hasApiKey: false },
+        exa: { ...input.providers.exa, hasApiKey: false },
+        grok: { ...input.providers.grok, hasApiKey: false },
+      },
+      hasApiKey: false,
+    }));
+    vi.mocked(useChatController).mockReturnValue(controller);
+    renderShell();
+
+    await user.click(screen.getByRole("tab", { name: "网络搜索" }));
+    const provider = screen.getByRole("combobox", { name: "搜索 Provider" });
+    expect(provider).toBeEnabled();
+    expect(provider).toHaveTextContent("Tavily");
+    fireEvent.click(provider);
+    expect(screen.queryByRole("option", { name: "Exa" })).toBeNull();
+    fireEvent.click(screen.getByRole("option", { name: "Grok" }));
+    await user.click(screen.getByRole("button", { name: "保存网络搜索" }));
+
+    expect(controller.saveWebSearchSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "tavily",
+        hostedProvider: "grok",
+      }),
+    );
   });
 
   it("renders persisted web search sources inside the assistant reply", async () => {
@@ -1050,6 +1103,8 @@ describe("ChatShell", () => {
       byokEnabled: true,
       hostedEnabled: false,
       hostedWebSearchEnabled: false,
+      hostedWebSearchProvider: null,
+      hostedWebSearchProviders: [],
       models: [],
       defaultModel: null,
       titleModel: null,
@@ -1259,6 +1314,8 @@ describe("ChatShell", () => {
       byokEnabled: true,
       hostedEnabled: false,
       hostedWebSearchEnabled: false,
+      hostedWebSearchProvider: null,
+      hostedWebSearchProviders: [],
       models: [],
       defaultModel: null,
       titleModel: null,

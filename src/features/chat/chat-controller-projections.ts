@@ -153,6 +153,7 @@ export function resolveWebSearchSource(
     webSearch,
     hostedWebSearchEnabled: publicConfig?.hostedWebSearchEnabled ?? false,
     hostedWebSearchProvider: publicConfig?.hostedWebSearchProvider ?? null,
+    hostedWebSearchProviders: publicConfig?.hostedWebSearchProviders ?? [],
     authenticated: publicConfig?.authenticated ?? false,
   });
 }

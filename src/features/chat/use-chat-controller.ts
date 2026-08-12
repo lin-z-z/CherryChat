@@ -190,6 +190,7 @@ export function useChatController() {
       enabled: false,
       maxResults: 5,
       provider: "tavily",
+      hostedProvider: null,
       providers: {
         tavily: {
           apiKey: "",
@@ -2131,6 +2132,7 @@ function webSearchConfigurationFromSaveInput(
     enabled: input.enabled,
     maxResults: input.maxResults,
     provider: input.provider,
+    hostedProvider: input.hostedProvider,
     providers: {
       tavily: {
         ...input.providers.tavily,

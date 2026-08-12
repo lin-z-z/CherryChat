@@ -1,10 +1,14 @@
 import { z } from "zod";
 
+import { WEB_SEARCH_PROVIDER_IDS } from "@/runtime/chat/types";
 import type { FetchLike } from "@/runtime/transport/transport-http";
 import { createWebSearchProviderExecutor } from "@/runtime/tools/web-search-provider";
 import { ToolExecutionError } from "@/runtime/tools/tool-registry";
 import { WEB_SEARCH_RESULT_COUNT } from "@/runtime/tools/web-search-settings";
-import type { ServerConfig } from "@/server/config";
+import type {
+  HostedWebSearchProviderConfig,
+  ServerConfig,
+} from "@/server/config";
 import {
   hostedRateLimitResponse,
   hostedRequestGuard,
@@ -32,6 +36,7 @@ const requestSchema = z
       .int()
       .min(WEB_SEARCH_RESULT_COUNT.min)
       .max(WEB_SEARCH_RESULT_COUNT.max),
+    provider: z.enum(WEB_SEARCH_PROVIDER_IDS),
   })
   .strict();
 
@@ -53,14 +58,6 @@ export async function handleHostedWebSearch(
         "Hosted web search is unavailable",
       );
     }
-    lease = requestGuard.tryAcquire("web-search");
-    if (!lease) {
-      return hostedRateLimitResponse(
-        "HOSTED_CONCURRENCY_LIMIT",
-        "Hosted web search capacity is temporarily unavailable",
-      );
-    }
-
     const bodyText = await readRequestText(request, WEB_SEARCH_BODY_LIMIT);
     let value: unknown;
     try {
@@ -81,7 +78,25 @@ export async function handleHostedWebSearch(
       );
     }
 
-    const source = hostedWebSearchSource(hosted.webSearch);
+    const providerConfig = hosted.webSearch.providers.find(
+      ({ provider }) => provider === parsed.data.provider,
+    );
+    if (!providerConfig) {
+      return errorResponse(
+        400,
+        "INVALID_REQUEST",
+        "Requested web search provider is unavailable",
+      );
+    }
+    lease = requestGuard.tryAcquire("web-search");
+    if (!lease) {
+      return hostedRateLimitResponse(
+        "HOSTED_CONCURRENCY_LIMIT",
+        "Hosted web search capacity is temporarily unavailable",
+      );
+    }
+
+    const source = hostedWebSearchSource(providerConfig);
     const executor = createWebSearchProviderExecutor({
       source,
       maxResults: parsed.data.maxResults,
@@ -104,12 +119,7 @@ export async function handleHostedWebSearch(
   }
 }
 
-function hostedWebSearchSource(
-  config: NonNullable<ServerConfig["hosted"]>["webSearch"],
-) {
-  if (!config) {
-    throw new ToolExecutionError("TOOL_NOT_AVAILABLE");
-  }
+function hostedWebSearchSource(config: HostedWebSearchProviderConfig) {
   switch (config.provider) {
     case "tavily":
       return {

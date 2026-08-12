@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import type { JsonValue, WebSearchToolOutput } from "@/runtime/chat/types";
+import type {
+  JsonValue,
+  WebSearchProviderId,
+  WebSearchToolOutput,
+} from "@/runtime/chat/types";
 import { readLimitedResponseJson } from "@/runtime/transport/response-reader";
 import type { FetchLike } from "@/runtime/transport/transport-http";
 import {
@@ -92,6 +96,7 @@ export function createWebSearchToolExecutor(
 
 export function createHostedWebSearchToolExecutor(options: {
   maxResults: number;
+  provider: WebSearchProviderId;
   fetchImplementation?: FetchLike;
   timeoutMs?: number;
   onUnauthorized?: () => void;
@@ -104,7 +109,11 @@ export function createHostedWebSearchToolExecutor(options: {
           ? { onUnauthorized: options.onUnauthorized }
           : {}),
       },
-      body: { query, maxResults: options.maxResults },
+      body: {
+        query,
+        maxResults: options.maxResults,
+        provider: options.provider,
+      },
       fetchImplementation: options.fetchImplementation ?? fetch,
       signal,
       timeoutMs: options.timeoutMs ?? WEB_SEARCH_DEFAULT_TIMEOUT_MS,

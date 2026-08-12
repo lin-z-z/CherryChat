@@ -107,30 +107,31 @@ logs, screenshots, Issues, and browser test artifacts.
 
 ## Environment variables
 
-| Variable                          | Required      | Purpose                                                                  |
-| --------------------------------- | ------------- | ------------------------------------------------------------------------ |
-| `BASE_URL`                        | No            | Fixed OpenAI-compatible upstream; defaults to `https://api.openai.com`.  |
-| `ALLOW_INSECURE_LOCAL_UPSTREAM`   | No            | Allows loopback HTTP outside production when exactly `true`.             |
-| `OPENAI_API_KEY`                  | Hosted access | Deployment-owned upstream key.                                           |
-| `MODELS`                          | Hosted access | Comma-separated hosted model allowlist.                                  |
-| `DEFAULT_MODEL`                   | No            | Hosted default; must be in `MODELS`.                                     |
-| `TITLE_MODEL`                     | No            | Deployment title model; must be in `MODELS`.                             |
-| `ACCESS_CODE`                     | Hosted access | Comma-separated visitor codes, each at most 256 UTF-8 bytes.             |
-| `AUTH_SECRET`                     | Hosted access | HMAC/session secret of at least 32 UTF-8 bytes.                          |
-| `WEB_SEARCH_PROVIDER`             | No            | Fixed Hosted provider: `tavily`, `exa`, or `grok`; defaults to `tavily`. |
-| `TAVILY_API_KEY`                  | No            | Deployment-funded Tavily key when that provider is selected.             |
-| `TAVILY_BASE_URL`                 | No            | Hosted Tavily-compatible base; defaults to `https://api.tavily.com`.     |
-| `EXA_API_KEY`                     | No            | Deployment-funded Exa key when that provider is selected.                |
-| `EXA_BASE_URL`                    | No            | Hosted Exa-compatible base; defaults to `https://api.exa.ai`.            |
-| `GROK_API_KEY`                    | No            | Deployment-funded xAI-compatible key when Grok is selected.              |
-| `GROK_RESPONSES_URL`              | No            | Complete Grok Responses endpoint; defaults to xAI's official endpoint.   |
-| `GROK_MODEL`                      | No            | Hosted Grok model; defaults to `grok-4.5`.                               |
-| `GROK_X_SEARCH`                   | No            | Adds Grok's X Search tool when `true`; defaults to `false`.              |
-| `DISABLE_BYOK`                    | No            | Exactly `true` exposes Hosted access only.                               |
-| `MODEL_LIST_TIMEOUT_SECONDS`      | No            | Model-list limit; default 30 seconds.                                    |
-| `CHAT_FIRST_BYTE_TIMEOUT_SECONDS` | No            | Wait for response headers; default 300 seconds.                          |
-| `CHAT_IDLE_TIMEOUT_SECONDS`       | No            | Maximum idle time between body chunks; default 300 seconds.              |
-| `CHAT_TOTAL_TIMEOUT_SECONDS`      | No            | Whole chat request limit; default 1800 seconds.                          |
+| Variable                          | Required      | Purpose                                                                     |
+| --------------------------------- | ------------- | --------------------------------------------------------------------------- |
+| `BASE_URL`                        | No            | Fixed OpenAI-compatible upstream; defaults to `https://api.openai.com`.     |
+| `ALLOW_INSECURE_LOCAL_UPSTREAM`   | No            | Allows loopback HTTP outside production when exactly `true`.                |
+| `OPENAI_API_KEY`                  | Hosted access | Deployment-owned upstream key.                                              |
+| `MODELS`                          | Hosted access | Comma-separated hosted model allowlist.                                     |
+| `DEFAULT_MODEL`                   | No            | Hosted default; must be in `MODELS`.                                        |
+| `TITLE_MODEL`                     | No            | Deployment title model; must be in `MODELS`.                                |
+| `ACCESS_CODE`                     | Hosted access | Comma-separated visitor codes, each at most 256 UTF-8 bytes.                |
+| `AUTH_SECRET`                     | Hosted access | HMAC/session secret of at least 32 UTF-8 bytes.                             |
+| `WEB_SEARCH_PROVIDER`             | No            | Default Hosted provider: `tavily`, `exa`, or `grok`; defaults to `tavily`.  |
+| `WEB_SEARCH_ALLOWED_PROVIDERS`    | No            | Ordered providers access-code users may select; omitted means default only. |
+| `TAVILY_API_KEY`                  | No            | Deployment-funded Tavily key when that provider is selected.                |
+| `TAVILY_BASE_URL`                 | No            | Hosted Tavily-compatible base; defaults to `https://api.tavily.com`.        |
+| `EXA_API_KEY`                     | No            | Deployment-funded Exa key when that provider is selected.                   |
+| `EXA_BASE_URL`                    | No            | Hosted Exa-compatible base; defaults to `https://api.exa.ai`.               |
+| `GROK_API_KEY`                    | No            | Deployment-funded xAI-compatible key when Grok is selected.                 |
+| `GROK_RESPONSES_URL`              | No            | Complete Grok Responses endpoint; defaults to xAI's official endpoint.      |
+| `GROK_MODEL`                      | No            | Hosted Grok model; defaults to `grok-4.5`.                                  |
+| `GROK_X_SEARCH`                   | No            | Adds Grok's X Search tool when `true`; defaults to `false`.                 |
+| `DISABLE_BYOK`                    | No            | Exactly `true` exposes Hosted access only.                                  |
+| `MODEL_LIST_TIMEOUT_SECONDS`      | No            | Model-list limit; default 30 seconds.                                       |
+| `CHAT_FIRST_BYTE_TIMEOUT_SECONDS` | No            | Wait for response headers; default 300 seconds.                             |
+| `CHAT_IDLE_TIMEOUT_SECONDS`       | No            | Maximum idle time between body chunks; default 300 seconds.                 |
+| `CHAT_TOTAL_TIMEOUT_SECONDS`      | No            | Whole chat request limit; default 1800 seconds.                             |
 
 `OPENAI_API_KEY`, `ACCESS_CODE`, and `AUTH_SECRET` must be configured together,
 and Hosted access also requires at least one `MODELS` entry. Partial Hosted
@@ -232,8 +233,14 @@ guards. Treat them as defense in depth only.
 - The session cookie is HttpOnly, SameSite Strict, and Secure on HTTPS.
 - Vercel Firewall and upstream spending controls are published separately.
 - Hosted chat and search never accept browser-selected server targets.
-- `WEB_SEARCH_PROVIDER` fixes one of Tavily, Exa, or Grok; access-code users cannot
-  override its key, URL, model, or X Search setting.
+- `WEB_SEARCH_PROVIDER` selects the default Tavily, Exa, or Grok provider. When
+  `WEB_SEARCH_ALLOWED_PROVIDERS` is omitted, that provider remains locked.
+- An explicit `WEB_SEARCH_ALLOWED_PROVIDERS` list must be non-empty, include the
+  default, and have a complete deployment-owned configuration for every entry.
+  Its order controls only the Settings list, never the default. Configured keys
+  outside the list remain unavailable.
+- Access-code users may select only an allowed Provider ID in Settings. Keys,
+  URLs, the Grok model, and X Search remain deployment-controlled.
 - Grok always supplies Web Search. X Search is separate, disabled by default, and
   may add xAI model/tool charges when enabled.
 - Function logs and the client bundle contain no configured secret values.

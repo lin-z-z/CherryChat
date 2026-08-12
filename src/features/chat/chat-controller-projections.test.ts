@@ -139,6 +139,7 @@ describe("chat controller projections", () => {
           enabled: true,
           maxResults: 5,
           provider: "tavily",
+          hostedProvider: "grok",
           providers: {
             tavily: {
               apiKey: "browser-key",
@@ -168,17 +169,19 @@ describe("chat controller projections", () => {
           models: ["gpt-5-mini"],
           hostedWebSearchEnabled: true,
           hostedWebSearchProvider: "tavily",
+          hostedWebSearchProviders: ["tavily", "grok"],
           authenticated: true,
           requestTimeouts: DEFAULT_REQUEST_TIMEOUT_POLICY,
         },
       ),
-    ).toEqual({ kind: "hosted", provider: "tavily" });
+    ).toEqual({ kind: "hosted", provider: "grok" });
     const browser = resolveWebSearchSource(
       "byok",
       {
         enabled: true,
         maxResults: 5,
         provider: "tavily",
+        hostedProvider: null,
         providers: {
           tavily: {
             apiKey: "browser-key",

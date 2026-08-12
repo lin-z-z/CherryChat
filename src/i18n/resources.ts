@@ -271,7 +271,7 @@ export const resources = {
         "开启后，可以在单个对话中选择是否让模型搜索网络。",
       webSearchProvider: "搜索 Provider",
       webSearchProviderDescription:
-        "BYOK 模式使用你选择的 Provider；访问码模式由部署方固定。",
+        "自定义 API 使用个人 Provider；访问码模式可在部署方允许的列表中全局选择。",
       webSearchProviderTavily: "Tavily",
       webSearchProviderExa: "Exa",
       webSearchProviderGrok: "Grok",
@@ -837,7 +837,7 @@ export const resources = {
         "When enabled, each chat can choose whether the model may search the web.",
       webSearchProvider: "Search provider",
       webSearchProviderDescription:
-        "BYOK uses your selected provider; access-code mode uses the deployment provider.",
+        "Custom API uses your personal provider. Access-code mode stores one global choice from the deployment allowlist.",
       webSearchProviderTavily: "Tavily",
       webSearchProviderExa: "Exa",
       webSearchProviderGrok: "Grok",

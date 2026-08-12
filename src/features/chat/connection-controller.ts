@@ -16,7 +16,8 @@ export interface PublicConfig {
   byokEnabled: boolean;
   hostedEnabled: boolean;
   hostedWebSearchEnabled: boolean;
-  hostedWebSearchProvider?: WebSearchProviderId | null;
+  hostedWebSearchProvider: WebSearchProviderId | null;
+  hostedWebSearchProviders: WebSearchProviderId[];
   models: string[];
   defaultModel: string | null;
   titleModel: string | null;
@@ -180,9 +181,29 @@ export function parsePublicConfig(value: unknown): PublicConfig {
     record.hostedWebSearchProvider,
   )
     ? record.hostedWebSearchProvider
-    : record.hostedWebSearchEnabled
-      ? "tavily"
-      : null;
+    : null;
+  if (
+    !Array.isArray(record.hostedWebSearchProviders) ||
+    !record.hostedWebSearchProviders.every(isWebSearchProviderId)
+  ) {
+    throw new Error("Invalid server config");
+  }
+  const hostedWebSearchProviders = [
+    ...new Set(record.hostedWebSearchProviders),
+  ];
+  if (
+    hostedWebSearchProviders.length !==
+      record.hostedWebSearchProviders.length ||
+    (record.hostedWebSearchEnabled &&
+      (!hostedWebSearchProvider ||
+        hostedWebSearchProviders.length === 0 ||
+        !hostedWebSearchProviders.includes(hostedWebSearchProvider))) ||
+    (!record.hostedWebSearchEnabled &&
+      (hostedWebSearchProvider !== null ||
+        hostedWebSearchProviders.length !== 0))
+  ) {
+    throw new Error("Invalid server config");
+  }
   const requestTimeouts =
     record.requestTimeouts === undefined
       ? DEFAULT_REQUEST_TIMEOUT_POLICY
@@ -195,6 +216,7 @@ export function parsePublicConfig(value: unknown): PublicConfig {
     hostedEnabled: record.hostedEnabled,
     hostedWebSearchEnabled: record.hostedWebSearchEnabled,
     hostedWebSearchProvider,
+    hostedWebSearchProviders,
     authenticated: record.authenticated,
     models: record.models.filter(
       (model): model is string => typeof model === "string",

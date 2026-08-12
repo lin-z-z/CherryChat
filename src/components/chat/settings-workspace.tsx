@@ -536,6 +536,7 @@ export function SettingsWorkspace({
         enabled: webSearchDraft.enabled,
         maxResults: webSearchDraft.maxResults,
         provider: webSearchDraft.provider,
+        hostedProvider: webSearchDraft.hostedProvider,
         providers: {
           tavily: {
             apiKey: webSearchDraft.providers.tavily.apiKey,
@@ -865,6 +866,9 @@ export function SettingsWorkspace({
               hostedEnabled={chat.publicConfig?.hostedWebSearchEnabled ?? false}
               hostedProvider={
                 chat.publicConfig?.hostedWebSearchProvider ?? null
+              }
+              hostedProviders={
+                chat.publicConfig?.hostedWebSearchProviders ?? []
               }
               onChange={(next) => {
                 setWebSearchDraft(next);

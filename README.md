@@ -131,7 +131,10 @@ upstream or Hosted access. Never commit real API keys, access codes, or
 A BYOK-only deployment needs no provider credential in Vercel. Hosted access
 requires the complete `OPENAI_API_KEY`, `MODELS`, `ACCESS_CODE`, and
 `AUTH_SECRET` configuration. Optional deployment-funded search uses the selected
-`WEB_SEARCH_PROVIDER` and its matching provider credentials.
+`WEB_SEARCH_PROVIDER` and its matching provider credentials. Deployments may
+optionally expose several configured providers with
+`WEB_SEARCH_ALLOWED_PROVIDERS`; the default still comes only from
+`WEB_SEARCH_PROVIDER`.
 
 Before sharing a Hosted deployment, configure an upstream spending limit and a
 Vercel Firewall rate-limit rule for `POST /api/auth`. CherryChat's process-local

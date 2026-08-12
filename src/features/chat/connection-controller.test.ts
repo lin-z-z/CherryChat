@@ -17,6 +17,7 @@ const publicConfig: PublicConfig = {
   hostedEnabled: true,
   hostedWebSearchEnabled: false,
   hostedWebSearchProvider: null,
+  hostedWebSearchProviders: [],
   models: ["hosted-default", "hosted-title"],
   defaultModel: "hosted-default",
   titleModel: "hosted-title",
@@ -49,6 +50,7 @@ describe("connection controller", () => {
       hostedEnabled: false,
       hostedWebSearchEnabled: false,
       hostedWebSearchProvider: null,
+      hostedWebSearchProviders: [],
       authenticated: false,
       models: ["model-a", 42, "model-b"],
       defaultModel: "model-a",
@@ -60,6 +62,7 @@ describe("connection controller", () => {
       hostedEnabled: false,
       hostedWebSearchEnabled: false,
       hostedWebSearchProvider: null,
+      hostedWebSearchProviders: [],
       authenticated: false,
       models: ["model-a", "model-b"],
       defaultModel: "model-a",
@@ -72,15 +75,17 @@ describe("connection controller", () => {
         ...publicConfig,
         hostedWebSearchEnabled: true,
         hostedWebSearchProvider: "exa",
+        hostedWebSearchProviders: ["exa", "grok"],
       }).hostedWebSearchProvider,
     ).toBe("exa");
-    expect(
+    expect(() =>
       parsePublicConfig({
         ...publicConfig,
         hostedWebSearchEnabled: true,
         hostedWebSearchProvider: undefined,
-      }).hostedWebSearchProvider,
-    ).toBe("tavily");
+        hostedWebSearchProviders: ["tavily"],
+      }),
+    ).toThrow("Invalid server config");
     expect(() =>
       parsePublicConfig({
         ...publicConfig,

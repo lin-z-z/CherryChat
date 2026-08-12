@@ -49,15 +49,21 @@ describe("server configuration", () => {
     expect(config.baseUrl).toBe("https://example.com/api");
     expect(config.hosted?.accessCodes).toEqual(["private-code", "second-code"]);
     expect(config.hosted?.webSearch).toEqual({
-      provider: "tavily",
-      apiKey: "tvly-deployment-secret",
-      baseUrl: "https://search.example/tavily",
+      defaultProvider: "tavily",
+      providers: [
+        {
+          provider: "tavily",
+          apiKey: "tvly-deployment-secret",
+          baseUrl: "https://search.example/tavily",
+        },
+      ],
     });
     expect(toPublicServerConfig(config)).toEqual({
       byokEnabled: false,
       hostedEnabled: true,
       hostedWebSearchEnabled: true,
       hostedWebSearchProvider: "tavily",
+      hostedWebSearchProviders: ["tavily"],
       models: ["model-a", "model-b"],
       defaultModel: "model-b",
       titleModel: "model-a",
@@ -97,9 +103,14 @@ describe("server configuration", () => {
       EXA_BASE_URL: "https://search.example/exa/search/",
     });
     expect(exa.hosted?.webSearch).toEqual({
-      provider: "exa",
-      apiKey: "exa-deployment-secret",
-      baseUrl: "https://search.example/exa",
+      defaultProvider: "exa",
+      providers: [
+        {
+          provider: "exa",
+          apiKey: "exa-deployment-secret",
+          baseUrl: "https://search.example/exa",
+        },
+      ],
     });
     expect(toPublicServerConfig(exa).hostedWebSearchProvider).toBe("exa");
 
@@ -111,13 +122,71 @@ describe("server configuration", () => {
       GROK_X_SEARCH: "true",
     });
     expect(grok.hosted?.webSearch).toEqual({
-      provider: "grok",
-      apiKey: "xai-deployment-secret",
-      responsesUrl: "https://proxy.example/v1/responses",
-      model: "grok-4.5",
-      xSearch: true,
+      defaultProvider: "grok",
+      providers: [
+        {
+          provider: "grok",
+          apiKey: "xai-deployment-secret",
+          responsesUrl: "https://proxy.example/v1/responses",
+          model: "grok-4.5",
+          xSearch: true,
+        },
+      ],
     });
   });
+
+  it("keeps the explicit allowlist order separate from the default provider", () => {
+    const config = parseServerConfig({
+      ...hostedEnvironment(),
+      WEB_SEARCH_PROVIDER: "tavily",
+      WEB_SEARCH_ALLOWED_PROVIDERS: " grok,tavily,grok ",
+      TAVILY_API_KEY: "tvly-deployment-secret",
+      GROK_API_KEY: "xai-deployment-secret",
+      EXA_API_KEY: "exa-unlisted-secret",
+    });
+
+    expect(config.hosted?.webSearch?.defaultProvider).toBe("tavily");
+    expect(
+      config.hosted?.webSearch?.providers.map(({ provider }) => provider),
+    ).toEqual(["grok", "tavily"]);
+    expect(toPublicServerConfig(config)).toMatchObject({
+      hostedWebSearchProvider: "tavily",
+      hostedWebSearchProviders: ["grok", "tavily"],
+    });
+    expect(JSON.stringify(toPublicServerConfig(config))).not.toContain(
+      "unlisted-secret",
+    );
+  });
+
+  it.each([
+    ["", {}, "at least one provider"],
+    [
+      "tavily,unknown",
+      { TAVILY_API_KEY: "tvly-deployment-secret" },
+      "unknown provider",
+    ],
+    [
+      "grok",
+      { GROK_API_KEY: "xai-deployment-secret" },
+      "must include WEB_SEARCH_PROVIDER",
+    ],
+    [
+      "tavily,grok",
+      { TAVILY_API_KEY: "tvly-deployment-secret" },
+      "complete provider configuration",
+    ],
+  ])(
+    "rejects invalid explicit Hosted search allowlist %j",
+    (allowedProviders, extra, expectedMessage) => {
+      expect(() =>
+        parseServerConfig({
+          ...hostedEnvironment(),
+          WEB_SEARCH_ALLOWED_PROVIDERS: allowedProviders,
+          ...extra,
+        }),
+      ).toThrow(expectedMessage);
+    },
+  );
 
   it("defaults the title model and rejects a configured title model outside MODELS", () => {
     expect(
@@ -214,9 +283,14 @@ describe("server configuration", () => {
       baseUrl: "http://127.25.1.2:11434",
       hosted: {
         webSearch: {
-          provider: "tavily",
-          apiKey: "tvly-deployment-secret",
-          baseUrl: "http://[::1]:8080",
+          defaultProvider: "tavily",
+          providers: [
+            {
+              provider: "tavily",
+              apiKey: "tvly-deployment-secret",
+              baseUrl: "http://[::1]:8080",
+            },
+          ],
         },
       },
     });

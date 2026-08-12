@@ -28,6 +28,7 @@ import {
   WEB_SEARCH_PROVIDER_IDS,
   type WebSearchProviderId,
 } from "@/runtime/chat/types";
+import { resolveHostedWebSearchProvider } from "@/runtime/tools/web-search-provider";
 import { WEB_SEARCH_RESULT_COUNT } from "@/runtime/tools/web-search-settings";
 
 export function WebSearchPage({
@@ -41,6 +42,7 @@ export function WebSearchPage({
   hostedAuthenticated,
   hostedEnabled,
   hostedProvider,
+  hostedProviders,
   status,
   onChange,
   onSave,
@@ -56,6 +58,7 @@ export function WebSearchPage({
   hostedAuthenticated: boolean;
   hostedEnabled: boolean;
   hostedProvider: WebSearchProviderId | null;
+  hostedProviders: readonly WebSearchProviderId[];
   status: string | null;
   onChange: (draft: ChatController["webSearchConfig"]) => void;
   onSave: () => void;
@@ -63,17 +66,28 @@ export function WebSearchPage({
 }) {
   const { t } = useTranslation();
   const busy = saving || testing;
+  const hosted = connectionMode === "hosted";
+  const effectiveHostedProvider = resolveHostedWebSearchProvider({
+    preferredProvider: draft.hostedProvider,
+    defaultProvider: hostedProvider,
+    allowedProviders: hostedProviders,
+  });
   const visibleProvider =
-    connectionMode === "hosted" && hostedProvider
-      ? hostedProvider
+    hosted && effectiveHostedProvider
+      ? effectiveHostedProvider
       : draft.provider;
+  const selectableProviders = hosted
+    ? hostedProviders.length > 0
+      ? hostedProviders
+      : [draft.provider]
+    : WEB_SEARCH_PROVIDER_IDS;
   const providerConfig = draft.providers[visibleProvider];
   const hasPersonalKey = providerConfig.hasApiKey;
   const hasPersonalSource = hasPersonalKey;
   const hostedReady = hostedEnabled && hostedAuthenticated;
   const activeSourceReady =
     connectionMode === "hosted" ? hostedReady : hasPersonalSource;
-  const personalFieldsDisabled = connectionMode === "hosted";
+  const personalFieldsDisabled = hosted;
   const serviceState =
     activeSource === "browser"
       ? "personal"
@@ -126,24 +140,36 @@ export function WebSearchPage({
           <small>{t("webSearchProviderDescription")}</small>
           <SelectControl
             aria-label={t("webSearchProvider")}
-            disabled={busy || personalFieldsDisabled}
+            disabled={busy || (hosted && hostedProviders.length <= 1)}
             id="settings-web-search-provider"
             onValueChange={(provider) => {
               const nextProvider = WEB_SEARCH_PROVIDER_IDS.find(
                 (candidate) => candidate === provider,
               );
               if (!nextProvider) return;
+              if (hosted) {
+                onChange({
+                  ...draft,
+                  hostedProvider: nextProvider,
+                });
+                return;
+              }
               onChange({
                 ...draft,
                 provider: nextProvider,
                 hasApiKey: draft.providers[nextProvider].hasApiKey,
               });
             }}
-            options={[
-              { value: "tavily", label: t("webSearchProviderTavily") },
-              { value: "exa", label: t("webSearchProviderExa") },
-              { value: "grok", label: t("webSearchProviderGrok") },
-            ]}
+            options={selectableProviders.map((provider) => ({
+              value: provider,
+              label: t(
+                provider === "tavily"
+                  ? "webSearchProviderTavily"
+                  : provider === "exa"
+                    ? "webSearchProviderExa"
+                    : "webSearchProviderGrok",
+              ),
+            }))}
             value={visibleProvider}
           />
         </div>

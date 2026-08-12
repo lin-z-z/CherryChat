@@ -16,6 +16,8 @@ async function mockConfig(page: Page) {
         byokEnabled: true,
         hostedEnabled: false,
         hostedWebSearchEnabled: false,
+        hostedWebSearchProvider: null,
+        hostedWebSearchProviders: [],
         models: [],
         defaultModel: null,
         authenticated: false,

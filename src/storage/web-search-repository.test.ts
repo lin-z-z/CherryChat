@@ -34,6 +34,7 @@ describe("WebSearchRepository", () => {
       enabled: false,
       maxResults: 5,
       provider: "tavily",
+      hostedProvider: null,
       providers: defaultProviders(),
       hasApiKey: false,
     });
@@ -43,6 +44,7 @@ describe("WebSearchRepository", () => {
         enabled: true,
         maxResults: 6,
         provider: "grok",
+        hostedProvider: "exa",
         providers: {
           tavily: {
             apiKey: "tvly-browser-secret",
@@ -66,6 +68,7 @@ describe("WebSearchRepository", () => {
       enabled: true,
       maxResults: 6,
       provider: "grok",
+      hostedProvider: "exa",
       providers: {
         tavily: {
           apiKey: "tvly-browser-secret",
@@ -153,20 +156,39 @@ describe("WebSearchRepository", () => {
     expect(serialized).not.toContain("grok-private");
     expect(prepared.manifest.settings).toContainEqual({
       key: WEB_SEARCH_SETTINGS_KEY,
-      value: { enabled: true, maxResults: 5, provider: "grok" },
+      value: {
+        enabled: true,
+        maxResults: 5,
+        provider: "grok",
+        hostedProvider: null,
+      },
       updatedAt: timestamp,
     });
   });
 
   it("allows hosted web search settings without storing browser credentials", async () => {
     await expect(
-      repository.save(searchInput({ enabled: true, provider: "exa" })),
+      repository.save(searchInput({ enabled: true, hostedProvider: "exa" })),
     ).resolves.toMatchObject({
       enabled: true,
-      provider: "exa",
+      provider: "tavily",
+      hostedProvider: "exa",
       hasApiKey: false,
     });
     await expect(database.webSearchCredentials.count()).resolves.toBe(0);
+  });
+
+  it("loads an older v2 record without a Hosted preference as null", async () => {
+    await database.settings.put({
+      key: WEB_SEARCH_SETTINGS_KEY,
+      value: { enabled: true, maxResults: 7, provider: "grok" },
+      updatedAt: timestamp,
+    });
+
+    await expect(repository.load()).resolves.toMatchObject({
+      provider: "grok",
+      hostedProvider: null,
+    });
   });
 
   it("accepts the reviewed result limit and rejects values outside it", async () => {
@@ -237,6 +259,7 @@ function searchInput(
     enabled: false,
     maxResults: 5,
     provider: "tavily",
+    hostedProvider: null,
     providers: defaultProviderInputs(),
     ...overrides,
   };

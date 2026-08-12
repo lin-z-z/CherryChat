@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { WebSearchConfiguration } from "@/runtime/chat/types";
 import {
   createWebSearchProviderExecutor,
+  resolveHostedWebSearchProvider,
   resolveWebSearchExecutionSource,
 } from "@/runtime/tools/web-search-provider";
 
@@ -10,6 +11,7 @@ const configuration: WebSearchConfiguration = {
   enabled: true,
   maxResults: 5,
   provider: "grok",
+  hostedProvider: "exa",
   providers: {
     tavily: {
       apiKey: "tvly-browser-secret",
@@ -33,6 +35,30 @@ const configuration: WebSearchConfiguration = {
 };
 
 describe("web search provider registry", () => {
+  it("uses an allowed Hosted preference and otherwise falls back to the server default", () => {
+    expect(
+      resolveHostedWebSearchProvider({
+        preferredProvider: "grok",
+        defaultProvider: "tavily",
+        allowedProviders: ["grok", "tavily"],
+      }),
+    ).toBe("grok");
+    expect(
+      resolveHostedWebSearchProvider({
+        preferredProvider: "grok",
+        defaultProvider: "tavily",
+        allowedProviders: ["exa", "tavily"],
+      }),
+    ).toBe("tavily");
+    expect(
+      resolveHostedWebSearchProvider({
+        preferredProvider: null,
+        defaultProvider: "tavily",
+        allowedProviders: ["grok", "tavily"],
+      }),
+    ).toBe("tavily");
+  });
+
   it("binds BYOK to the selected provider and Hosted to the public provider", () => {
     expect(
       resolveWebSearchExecutionSource({
@@ -40,6 +66,7 @@ describe("web search provider registry", () => {
         webSearch: configuration,
         hostedWebSearchEnabled: true,
         hostedWebSearchProvider: "exa",
+        hostedWebSearchProviders: ["exa", "tavily"],
         authenticated: true,
       }),
     ).toEqual({
@@ -57,6 +84,7 @@ describe("web search provider registry", () => {
         webSearch: configuration,
         hostedWebSearchEnabled: true,
         hostedWebSearchProvider: "exa",
+        hostedWebSearchProviders: ["exa", "tavily"],
         authenticated: true,
       }),
     ).toEqual({ kind: "hosted", provider: "exa" });
@@ -80,6 +108,7 @@ describe("web search provider registry", () => {
         },
         hostedWebSearchEnabled: true,
         hostedWebSearchProvider: "tavily",
+        hostedWebSearchProviders: ["tavily"],
         authenticated: true,
       }),
     ).toBeNull();
@@ -98,5 +127,10 @@ describe("web search provider registry", () => {
     await executor.execute({ query: "hosted" }, new AbortController().signal);
     expect(new Headers(request?.headers).has("authorization")).toBe(false);
     expect(request?.credentials).toBe("same-origin");
+    expect(JSON.parse(String(request?.body))).toEqual({
+      query: "hosted",
+      maxResults: 5,
+      provider: "exa",
+    });
   });
 });

@@ -575,6 +575,8 @@ test("uses hosted web search immediately after access-code sign-in", async ({
     byokEnabled: false,
     hostedEnabled: true,
     hostedWebSearchEnabled: true,
+    hostedWebSearchProvider: "tavily",
+    hostedWebSearchProviders: ["tavily"],
     models: ["gpt-4.1-mini"],
     defaultModel: "gpt-4.1-mini",
     authenticated: false,
@@ -591,6 +593,7 @@ test("uses hosted web search immediately after access-code sign-in", async ({
     expect(route.request().postDataJSON()).toEqual({
       query: "Web search connection test",
       maxResults: 6,
+      provider: "tavily",
     });
     await route.fulfill({
       status: expireHostedSession ? 401 : 200,

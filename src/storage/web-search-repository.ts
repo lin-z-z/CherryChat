@@ -9,6 +9,7 @@ import {
   type WebSearchProviderId,
   type WebSearchProviderConfigurations,
   type WebSearchSaveInput,
+  type WebSearchSettings,
 } from "@/runtime/chat/types";
 import {
   DEFAULT_EXA_BASE_URL,
@@ -42,6 +43,7 @@ const settingsSchema = z
       .min(WEB_SEARCH_RESULT_COUNT.min)
       .max(WEB_SEARCH_RESULT_COUNT.max),
     provider: providerSchema,
+    hostedProvider: providerSchema.nullable().optional(),
   })
   .strict();
 const apiKeySchema = z.string().trim().min(8).max(2_048);
@@ -75,11 +77,15 @@ export class WebSearchRepository {
         : "tavily";
       const providers = parseProviderConfigurations(credentials);
       const settings = parsedSettings.success
-        ? parsedSettings.data
+        ? {
+            ...parsedSettings.data,
+            hostedProvider: parsedSettings.data.hostedProvider ?? null,
+          }
         : {
             enabled: defaultEnabled || providers[provider].hasApiKey,
             maxResults: WEB_SEARCH_RESULT_COUNT.default,
             provider,
+            hostedProvider: null,
           };
       return {
         ...settings,
@@ -92,11 +98,16 @@ export class WebSearchRepository {
   }
 
   async save(input: WebSearchSaveInput): Promise<WebSearchConfiguration> {
-    const settings = settingsSchema.parse({
+    const parsedSettings = settingsSchema.parse({
       enabled: input.enabled,
       maxResults: input.maxResults,
       provider: input.provider,
+      hostedProvider: input.hostedProvider,
     });
+    const settings = {
+      ...parsedSettings,
+      hostedProvider: parsedSettings.hostedProvider ?? null,
+    } satisfies WebSearchSettings;
     const providers = parseSaveInput(input.providers);
     const updatedAt = this.now();
     const credentials = providerCredentials(providers, updatedAt);

@@ -4,7 +4,10 @@ import { I18nextProvider } from "react-i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useChatController } from "@/features/chat/use-chat-controller";
-import { connectionScope } from "@/features/chat/connection-controller";
+import {
+  connectionScope,
+  type PublicConfig,
+} from "@/features/chat/connection-controller";
 import { createI18n } from "@/i18n/create-i18n";
 import type { ConnectionBundle } from "@/runtime/chat/types";
 import { DEFAULT_REQUEST_TIMEOUT_POLICY } from "@/runtime/transport/request-timeout-policy";
@@ -12,10 +15,12 @@ import { ConnectionStore } from "@/storage/connection-store";
 import { ChatDatabase } from "@/storage/database";
 import { ModelListCacheRepository } from "@/storage/model-list-cache-repository";
 
-const hostedConfig = {
+const hostedConfig: PublicConfig = {
   byokEnabled: true,
   hostedEnabled: true,
   hostedWebSearchEnabled: false,
+  hostedWebSearchProvider: null,
+  hostedWebSearchProviders: [],
   models: ["hosted-default", "hosted-title"],
   defaultModel: "hosted-default",
   titleModel: "hosted-title",
@@ -144,6 +149,8 @@ describe("useChatController integration", () => {
       config: {
         ...hostedConfig,
         hostedWebSearchEnabled: true,
+        hostedWebSearchProvider: "tavily",
+        hostedWebSearchProviders: ["tavily"],
         models: ["gpt-5-mini"],
         defaultModel: "gpt-5-mini",
         titleModel: "gpt-5-mini",

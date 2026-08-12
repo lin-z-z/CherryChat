@@ -67,6 +67,7 @@ export function createTavilyToolExecutor(
   if (options.mode === "hosted") {
     return createHostedWebSearchToolExecutor({
       maxResults,
+      provider: "tavily",
       fetchImplementation,
       timeoutMs,
       ...(options.onUnauthorized

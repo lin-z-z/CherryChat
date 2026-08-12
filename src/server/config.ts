@@ -38,6 +38,7 @@ const rawEnvironmentSchema = z.object({
   ACCESS_CODE: z.string().optional(),
   AUTH_SECRET: z.string().optional(),
   WEB_SEARCH_PROVIDER: z.enum(WEB_SEARCH_PROVIDER_IDS).default("tavily"),
+  WEB_SEARCH_ALLOWED_PROVIDERS: z.string().optional(),
   TAVILY_API_KEY: z.string().optional(),
   TAVILY_BASE_URL: z.string().optional(),
   EXA_API_KEY: z.string().optional(),
@@ -55,7 +56,7 @@ const rawEnvironmentSchema = z.object({
   CHAT_TOTAL_TIMEOUT_SECONDS: z.string().optional(),
 });
 
-export type HostedWebSearchConfig =
+export type HostedWebSearchProviderConfig =
   | { provider: "tavily"; apiKey: string; baseUrl: string }
   | { provider: "exa"; apiKey: string; baseUrl: string }
   | {
@@ -65,6 +66,11 @@ export type HostedWebSearchConfig =
       model: string;
       xSearch: boolean;
     };
+
+export interface HostedWebSearchConfig {
+  defaultProvider: WebSearchProviderId;
+  providers: HostedWebSearchProviderConfig[];
+}
 
 export interface HostedServerConfig {
   apiKey: string;
@@ -88,6 +94,7 @@ export interface PublicServerConfig {
   hostedEnabled: boolean;
   hostedWebSearchEnabled: boolean;
   hostedWebSearchProvider: WebSearchProviderId | null;
+  hostedWebSearchProviders: WebSearchProviderId[];
   models: string[];
   defaultModel: string | null;
   titleModel: string | null;
@@ -204,7 +211,12 @@ export function parseServerConfig(
       )
     : null;
   const webSearch = buildHostedWebSearchConfig({
-    provider: raw.WEB_SEARCH_PROVIDER,
+    defaultProvider: raw.WEB_SEARCH_PROVIDER,
+    allowedProviders: parseAllowedWebSearchProviders(
+      raw.WEB_SEARCH_ALLOWED_PROVIDERS,
+      raw.WEB_SEARCH_PROVIDER,
+    ),
+    allowlistConfigured: raw.WEB_SEARCH_ALLOWED_PROVIDERS !== undefined,
     tavilyApiKey,
     tavilyBaseUrl,
     exaApiKey,
@@ -275,7 +287,9 @@ export function toPublicServerConfig(config: ServerConfig): PublicServerConfig {
     byokEnabled: !config.disableByok,
     hostedEnabled: config.hosted !== null,
     hostedWebSearchEnabled: Boolean(config.hosted?.webSearch),
-    hostedWebSearchProvider: config.hosted?.webSearch?.provider ?? null,
+    hostedWebSearchProvider: config.hosted?.webSearch?.defaultProvider ?? null,
+    hostedWebSearchProviders:
+      config.hosted?.webSearch?.providers.map(({ provider }) => provider) ?? [],
     models: config.hosted ? [...config.models] : [],
     defaultModel: config.hosted ? config.defaultModel : null,
     titleModel: config.hosted ? config.titleModel : null,
@@ -381,7 +395,9 @@ function validateSearchApiKey(
 }
 
 function buildHostedWebSearchConfig(input: {
-  provider: WebSearchProviderId;
+  defaultProvider: WebSearchProviderId;
+  allowedProviders: WebSearchProviderId[];
+  allowlistConfigured: boolean;
   tavilyApiKey: string | undefined;
   tavilyBaseUrl: string | null;
   exaApiKey: string | undefined;
@@ -391,7 +407,38 @@ function buildHostedWebSearchConfig(input: {
   grokModel: string;
   grokXSearch: boolean;
 }): HostedWebSearchConfig | null {
-  switch (input.provider) {
+  const providers = input.allowedProviders.map((provider) =>
+    buildHostedWebSearchProviderConfig(provider, input),
+  );
+  if (input.allowlistConfigured && providers.some((provider) => !provider)) {
+    throw new ServerConfigurationError(
+      "Every WEB_SEARCH_ALLOWED_PROVIDERS entry requires a complete provider configuration",
+    );
+  }
+  const configuredProviders = providers.filter(
+    (provider): provider is HostedWebSearchProviderConfig => provider !== null,
+  );
+  if (configuredProviders.length === 0) return null;
+  return {
+    defaultProvider: input.defaultProvider,
+    providers: configuredProviders,
+  };
+}
+
+function buildHostedWebSearchProviderConfig(
+  provider: WebSearchProviderId,
+  input: {
+    tavilyApiKey: string | undefined;
+    tavilyBaseUrl: string | null;
+    exaApiKey: string | undefined;
+    exaBaseUrl: string | null;
+    grokApiKey: string | undefined;
+    grokResponsesUrl: string | null;
+    grokModel: string;
+    grokXSearch: boolean;
+  },
+): HostedWebSearchProviderConfig | null {
+  switch (provider) {
     case "tavily":
       return input.tavilyApiKey && input.tavilyBaseUrl
         ? {
@@ -419,6 +466,42 @@ function buildHostedWebSearchConfig(input: {
           }
         : null;
   }
+}
+
+function parseAllowedWebSearchProviders(
+  value: string | undefined,
+  defaultProvider: WebSearchProviderId,
+): WebSearchProviderId[] {
+  if (value === undefined) return [defaultProvider];
+  const providers = [
+    ...new Set(
+      value
+        .split(",")
+        .map((provider) => provider.normalize("NFKC").trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (providers.length === 0) {
+    throw new ServerConfigurationError(
+      "WEB_SEARCH_ALLOWED_PROVIDERS must contain at least one provider",
+    );
+  }
+  if (providers.some((provider) => !isWebSearchProviderId(provider))) {
+    throw new ServerConfigurationError(
+      "WEB_SEARCH_ALLOWED_PROVIDERS contains an unknown provider",
+    );
+  }
+  const allowedProviders = providers as WebSearchProviderId[];
+  if (!allowedProviders.includes(defaultProvider)) {
+    throw new ServerConfigurationError(
+      "WEB_SEARCH_ALLOWED_PROVIDERS must include WEB_SEARCH_PROVIDER",
+    );
+  }
+  return allowedProviders;
+}
+
+function isWebSearchProviderId(value: string): value is WebSearchProviderId {
+  return (WEB_SEARCH_PROVIDER_IDS as readonly string[]).includes(value);
 }
 
 function isLoopbackHostname(value: string): boolean {

@@ -333,6 +333,7 @@ export interface WebSearchSettings {
   enabled: boolean;
   maxResults: number;
   provider: WebSearchProviderId;
+  hostedProvider: WebSearchProviderId | null;
 }
 
 export interface StandardWebSearchProviderConfiguration {
