@@ -478,7 +478,10 @@ test("supports the six settings destinations without horizontal overflow", async
     settings.getByRole("heading", { name: "Product information" }),
   ).toBeVisible();
   await expect(settings.locator(".settings-about-identity")).toBeVisible();
-  await expect(settings.locator(".settings-about-list > div")).toHaveCount(4);
+  await expect(settings.locator(".settings-about-list > div")).toHaveCount(5);
+  await expect(
+    settings.getByRole("link", { name: "Open repository" }),
+  ).toHaveAttribute("href", "https://github.com/lin-z-z/CherryChat");
   await expectNoHorizontalOverflow(settings);
   await page.screenshot({
     path: `test-results/settings-about-${test.info().project.name}-light.png`,
