@@ -91,7 +91,7 @@ export async function readReleaseMetadata({ root = defaultRoot } = {}) {
   return {
     version,
     tagName,
-    title: `CherryChat ${tagName} (Beta)`,
+    title: `CherryChat ${tagName}`,
     englishSection: extractChangelogSection(englishChangelog, version),
     chineseSection: extractChangelogSection(chineseChangelog, version),
   };

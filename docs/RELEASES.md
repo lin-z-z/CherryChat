@@ -7,20 +7,20 @@
 
 ## Product maturity
 
-CherryChat is currently Beta. Beta releases are usable and validated against
-the repository quality gates, but may still change before `v1.0.0`. Beta does
-not promise Stable compatibility, long-term support, hosted-service uptime, a
-security response SLA, or enterprise support.
+CherryChat `v1.0.0` is the first stable release. Stability applies to the
+documented product, data, configuration, and release contracts. It does not
+promise long-term support, hosted-service uptime, a security response SLA, or
+enterprise support.
 
 ## Version numbers
 
-Tracked releases use `v0.MINOR.PATCH` tags while the product remains Beta:
+Tracked releases use `vMAJOR.MINOR.PATCH` tags:
 
-- `MINOR` introduces a meaningful compatible capability or deliberately
-  revises an early product contract with migration and documentation.
-- `PATCH` delivers compatible fixes, security hardening, or documentation and
-  release corrections.
-- `v1.0.0` is reserved for a separately reviewed Stable compatibility contract.
+- `MAJOR` identifies an incompatible documented contract change and requires
+  explicit migration and release notes.
+- `MINOR` adds backward-compatible capabilities.
+- `PATCH` delivers backward-compatible fixes, security hardening, or
+  documentation and release corrections.
 
 `package.json`, the root `package-lock.json` version, the current Changelog
 section, Git tag, and GitHub Release must agree. Public tags are immutable.
@@ -72,6 +72,9 @@ The workflow alone receives `actions: read` and `contents: write`. Normal CI
 keeps `contents: read`. The flow uses the repository `GITHUB_TOKEN`, not a PAT,
 deployment credential, or third-party publishing Action.
 
+The created GitHub Release is ordinary rather than a prerelease, is published
+immediately rather than saved as a draft, and is marked Latest.
+
 ## Failure and recovery
 
 Any validation failure, missing/failed/cancelled CI run, timeout, conflict, or
@@ -88,7 +91,7 @@ objects:
 Automation never deletes a public Release or moves/deletes a public Tag. After
 publication, documentation errors may be corrected in the Release body and
 repository, while product defects receive a new patch version such as
-`v0.1.1`.
+`v1.0.1`.
 
 ## Operator boundary
 

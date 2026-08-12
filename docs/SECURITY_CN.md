@@ -16,7 +16,7 @@
 证据。只使用测试凭据，并从截图或日志中移除 Token、Cookie、私有域名、Prompt
 内容和用户数据。
 
-CherryChat 目前是 Beta 阶段项目，不提供安全响应 SLA 或漏洞奖励。安全修复以
+CherryChat v1.0.0 是首个正式稳定版本，但项目不提供安全响应 SLA 或漏洞奖励。安全修复以
 最新 `main` 状态为目标，目前不维护旧 Release Branch。如果 GitHub Private
 Vulnerability Reporting 暂不可用，请等待仓库所有者启用私密渠道，不要公开细节。
 

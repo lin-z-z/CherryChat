@@ -35,28 +35,28 @@ afterEach(async () => {
 test("validates stable and matching package versions", () => {
   assert.deepEqual(
     validatePackageVersions({
-      packageVersion: "0.1.0",
-      lockVersion: "0.1.0",
-      lockRootVersion: "0.1.0",
+      packageVersion: "1.0.0",
+      lockVersion: "1.0.0",
+      lockRootVersion: "1.0.0",
     }),
-    { version: "0.1.0", tagName: "v0.1.0" },
+    { version: "1.0.0", tagName: "v1.0.0" },
   );
 
   assert.throws(
     () =>
       validatePackageVersions({
-        packageVersion: "0.1.0-beta.1",
-        lockVersion: "0.1.0-beta.1",
-        lockRootVersion: "0.1.0-beta.1",
+        packageVersion: "1.0.0-beta.1",
+        lockVersion: "1.0.0-beta.1",
+        lockRootVersion: "1.0.0-beta.1",
       }),
     /stable three-part SemVer/u,
   );
   assert.throws(
     () =>
       validatePackageVersions({
-        packageVersion: "0.1.0",
+        packageVersion: "1.0.0",
         lockVersion: "0.1.1",
-        lockRootVersion: "0.1.0",
+        lockRootVersion: "1.0.0",
       }),
     /must match exactly/u,
   );
@@ -72,7 +72,7 @@ test("extracts only the requested structured changelog section", () => {
     "",
     "Next.",
     "",
-    "## [0.1.0] - 2026-08-10",
+    "## [1.0.0] - 2026-08-12",
     "",
     "### Summary",
     "",
@@ -81,9 +81,9 @@ test("extracts only the requested structured changelog section", () => {
     "## [0.0.1] - 2026-08-01",
   ].join("\n");
 
-  const section = extractChangelogSection(content, "0.1.0");
+  const section = extractChangelogSection(content, "1.0.0");
 
-  assert.match(section, /^## \[0\.1\.0\]/u);
+  assert.match(section, /^## \[1\.0\.0\]/u);
   assert.match(section, /First\./u);
   assert.doesNotMatch(section, /0\.0\.1/u);
   assert.throws(
@@ -94,36 +94,36 @@ test("extracts only the requested structured changelog section", () => {
 
 test("reads matching package and bilingual changelog metadata", async () => {
   temporaryDirectory = await mkdtemp(join(tmpdir(), "cherrychat-release-"));
-  await writeJson("package.json", { version: "0.1.0" });
+  await writeJson("package.json", { version: "1.0.0" });
   await writeJson("package-lock.json", {
-    version: "0.1.0",
-    packages: { "": { version: "0.1.0" } },
+    version: "1.0.0",
+    packages: { "": { version: "1.0.0" } },
   });
   const changelog =
-    "# Changelog\n\n## [0.1.0] - 2026-08-10\n\n### Summary\n\nBeta.\n";
+    "# Changelog\n\n## [1.0.0] - 2026-08-12\n\n### Summary\n\nStable.\n";
   await writeFixture("CHANGELOG.md", changelog);
   await writeFixture("CHANGELOG_CN.md", changelog);
 
   const metadata = await readReleaseMetadata({ root: temporaryDirectory });
 
-  assert.equal(metadata.version, "0.1.0");
-  assert.equal(metadata.tagName, "v0.1.0");
-  assert.equal(metadata.title, "CherryChat v0.1.0 (Beta)");
+  assert.equal(metadata.version, "1.0.0");
+  assert.equal(metadata.tagName, "v1.0.0");
+  assert.equal(metadata.title, "CherryChat v1.0.0");
   assert.match(metadata.chineseSection, /### Summary/u);
 });
 
 test("composes curated, target, Chinese, and generated release notes", () => {
   const body = composeReleaseBody({
-    englishSection: "## [0.1.0]\n\n### Summary\n\nBeta.",
+    englishSection: "## [1.0.0]\n\n### Summary\n\nStable.",
     repository: "lin-z-z/CherryChat",
-    tagName: "v0.1.0",
+    tagName: "v1.0.0",
     sha: SHA,
     generatedNotes: "## What's Changed\n\n- Pull request",
   });
 
-  assert.match(body, /## \[0\.1\.0\]/u);
+  assert.match(body, /## \[1\.0\.0\]/u);
   assert.match(body, new RegExp(`commit/${SHA}`, "u"));
-  assert.match(body, /blob\/v0\.1\.0\/CHANGELOG_CN\.md/u);
+  assert.match(body, /blob\/v1\.0\.0\/CHANGELOG_CN\.md/u);
   assert.match(body, /## What's Changed/u);
   assert.ok(body.indexOf("### Summary") < body.indexOf("## 简体中文"));
 });
@@ -230,12 +230,12 @@ test("classifies absent, successful, and inconsistent remote state", () => {
 
 test("rejects pre-existing remote Tags or Releases", () => {
   assert.throws(
-    () => ensureRemoteTargetsAbsent({ tagSha: SHA, release: null }, "v0.1.0"),
+    () => ensureRemoteTargetsAbsent({ tagSha: SHA, release: null }, "v1.0.0"),
     /already exists/u,
   );
   assert.throws(
     () =>
-      ensureRemoteTargetsAbsent({ tagSha: null, release: { id: 1 } }, "v0.1.0"),
+      ensureRemoteTargetsAbsent({ tagSha: null, release: { id: 1 } }, "v1.0.0"),
     /already exists/u,
   );
 });
@@ -295,15 +295,15 @@ test("requires manual review for partial or mismatched remote state", async () =
 test("builds one ordinary Latest Release payload", () => {
   assert.deepEqual(
     buildReleasePayload({
-      tagName: "v0.1.0",
+      tagName: "v1.0.0",
       sha: SHA,
-      title: "CherryChat v0.1.0 (Beta)",
+      title: "CherryChat v1.0.0",
       body: "Release body",
     }),
     {
-      tag_name: "v0.1.0",
+      tag_name: "v1.0.0",
       target_commitish: SHA,
-      name: "CherryChat v0.1.0 (Beta)",
+      name: "CherryChat v1.0.0",
       body: "Release body",
       draft: false,
       prerelease: false,

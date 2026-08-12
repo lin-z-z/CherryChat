@@ -37,8 +37,8 @@ Do not extend the existing fixed-target route with a client URL parameter or an
 - Multiple named BYOK connection profiles and cross-device credential handling.
 - A custom production domain and any deployment-funded Hosted configuration,
   including verified Firewall, spending-limit, and operating notes.
-- Long-term support branches or compatibility guarantees for older Beta
-  releases beyond the current [release policy](./RELEASES.md).
+- Long-term support branches or compatibility guarantees beyond the current
+  [release policy](./RELEASES.md).
 
 Each item should enter a new requirements and security review rather than being
 added as an untested switch in the current Chat Completions runtime.

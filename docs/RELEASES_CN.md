@@ -7,17 +7,16 @@
 
 ## 产品成熟度
 
-CherryChat 当前处于 Beta（预览版）。Beta 版本已经可用并通过仓库质量门验证，但在
-`v1.0.0` 前仍可能调整。Beta 不承诺 Stable 兼容性、长期支持、托管服务可用性、
-安全响应 SLA 或企业级支持。
+CherryChat `v1.0.0` 是首个正式稳定版本。稳定性适用于文档内的产品、数据、配置和
+发布契约，但不承诺长期支持、托管服务可用性、安全响应 SLA 或企业支持。
 
 ## 版本号
 
-产品处于 Beta 阶段时，可追溯发布使用 `v0.MINOR.PATCH` Tag：
+可追溯发布使用 `vMAJOR.MINOR.PATCH` Tag：
 
-- `MINOR` 引入有意义且兼容的新能力，或在提供迁移和文档的前提下调整早期产品契约。
-- `PATCH` 提供兼容性修复、安全加固、文档或发布修正。
-- `v1.0.0` 留给经过单独评审的 Stable 兼容性契约。
+- `MAJOR` 表示不兼容的文档契约变更，必须提供明确的迁移与发布说明。
+- `MINOR` 增加向后兼容的能力。
+- `PATCH` 提供向后兼容的修复、安全加固、文档或发布修正。
 
 `package.json`、`package-lock.json` 根版本、当前 Changelog 段落、Git Tag 和 GitHub
 Release 必须一致。公开 Tag 不可移动。
@@ -61,6 +60,9 @@ Push Workflow 必须成功完成，其中包括：
 `contents: read`。流程使用仓库 `GITHUB_TOKEN`，不使用 PAT、部署凭据或第三方发布
 Action。
 
+创建的 GitHub Release 是普通正式版而非 prerelease，会直接发布而非保存为 Draft，
+并标记为 Latest。
+
 ## 失败与恢复
 
 任何校验失败、CI 缺失/失败/取消、等待超时、冲突或 Notes 生成失败，都会在 Create
@@ -73,7 +75,7 @@ Release 请求前停止，并且不留下远端 Tag 或 Release。
 - 仅存在一个对象，或 Tag 指向其他 SHA，需要人工复核。
 
 自动化不会删除公开 Release，也不会移动或删除公开 Tag。发布后如有文档错误，可
-修正 Release 正文和仓库文档；产品缺陷则发布新的 Patch 版本，例如 `v0.1.1`。
+修正 Release 正文和仓库文档；产品缺陷则发布新的 Patch 版本，例如 `v1.0.1`。
 
 ## 操作边界
 

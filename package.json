@@ -1,6 +1,6 @@
 {
   "name": "cherrychat",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A lightweight, privacy-first, self-hostable web client for AI conversations.",
   "license": "MIT",
   "private": true,

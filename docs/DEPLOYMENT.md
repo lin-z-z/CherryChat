@@ -173,7 +173,7 @@ build output, reports, caches, and logs while retaining `.env.example`.
 
 The verified public demo is
 [https://cherrychat-xi.vercel.app](https://cherrychat-xi.vercel.app). It uses a
-stable Vercel Production alias while CherryChat remains a Beta product.
+stable Vercel Production alias for the CherryChat `v1.0.0` application.
 At the time of verification, the project had no environment variables and
 `/api/config` reported BYOK enabled, Hosted access disabled, Hosted web search
 disabled, and no deployment models.
