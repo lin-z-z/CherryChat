@@ -13,7 +13,7 @@
     "url": "https://github.com/lin-z-z/CherryChat/issues"
   },
   "scripts": {
-    "dev": "next dev --turbo",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
