@@ -64,6 +64,7 @@ resolveWebSearchExecutionSource(context: {
   webSearch: WebSearchConfiguration;
   hostedWebSearchEnabled: boolean;
   hostedWebSearchProvider: WebSearchProviderId | null;
+  hostedWebSearchProviders: readonly WebSearchProviderId[];
   authenticated: boolean;
 }): WebSearchExecutionSource | null;
 
@@ -167,18 +168,21 @@ per user send.
   false, persist a visible `WEB_SEARCH_UNAVAILABLE` Assistant error instead of
   silently sending a tool-free request.
 - Source selection is a strict resource bundle. Hosted mode resolves only an
-  authenticated deployment source; BYOK mode resolves only the selected
-  Provider's non-empty browser Key and its URL/model/options. Select once before
-  execution; failure never falls back to the other connection mode or billing
-  source.
+  authenticated deployment source whose Provider is the allowed saved
+  `hostedProvider` preference or the public default; BYOK mode resolves only the
+  selected Provider's non-empty browser Key and its URL/model/options. Select
+  once before execution; failure never falls back to another Provider,
+  connection mode, or billing source.
 - Keep inactive Provider credentials persisted but do not execute them:
   access-code mode disables personal search editing, while Custom API ignores
   an otherwise valid Hosted Session.
 - Browser credentials and their Provider-specific URL/model/options come from
   `webSearchCredentials`.
   Hosted execution calls fixed `/api/web-search` with `credentials: same-origin`,
-  no Authorization, Provider, Key, URL, model, or X Search fields. No credential
-  bundle enters backup/export, logs, parts, or errors.
+  no Authorization, and exactly `{ query, maxResults, provider }`. `provider` is
+  only an allowed public ID; Key, URL, model, X Search, and every other bundle
+  field remain absent. No credential bundle enters backup/export, logs, parts,
+  or errors.
 - A personal URL is browser-direct and must support CORS. The deployment URL
   comes only from the selected Provider's server env; a browser value never
   changes the Hosted route target.
@@ -224,6 +228,9 @@ per user send.
 | Canonical OpenAI tool result contains `name` | Strip `name` at the OpenAI Chat transport boundary |
 | Hosted mode has personal Key but no authenticated Hosted source | Search unavailable; do not use the personal Key |
 | BYOK mode has a valid Hosted Session but no selected-Provider Key | Search unavailable; do not use deployment search |
+| Saved Hosted preference is still allowed | Send that Provider ID to `/api/web-search` |
+| Saved Hosted preference is absent or no longer allowed | Send the public default Provider ID |
+| Hosted request omits Provider or adds bundle fields | Proxy rejects before upstream fetch |
 | Exa returns no highlights but valid text | Use bounded text as content fallback |
 | Grok X Search is off | Request contains exactly `web_search`, never `x_search` |
 | Grok X Search is on | Request contains both `web_search` and `x_search` |
@@ -262,7 +269,8 @@ per user send.
 - Good: switching to Custom API immediately requires the personal Provider
   selected by that user; the still-valid Hosted Session cannot fund the search.
 - Good: Hosted Grok uses only env-selected Key, complete Responses URL, model,
-  and X Search switch while the browser sends only `{ query, maxResults }`.
+  and X Search switch while the browser sends only
+  `{ query, maxResults, provider: "grok" }`.
 - Base: search is configured globally but disabled in a conversation; the
   normal single-stream chat path sends no tool fields.
 - Good: global search is disabled after a conversation enabled it; the composer
@@ -302,8 +310,9 @@ per user send.
   no auxiliary `ChatTransport` generation call, and no `console.error` for a
   failed model step.
 - AI SDK provider boundary: assert exact direct BYOK and fixed Hosted URLs,
-  credentials, secret absence, `maxRetries: 0`, and that `tool_choice` appears
-  only when the canonical request explicitly opted in.
+  credentials, strict Hosted Provider-ID request body, secret absence,
+  `maxRetries: 0`, and that `tool_choice` appears only when the canonical
+  request explicitly opted in.
 - Runtime Factory: Hosted, direct API types, New API endpoint identities, and
   missing New API metadata select exactly one of compatible, Responses, Google,
   and Anthropic. The resolver has no configuration argument or legacy value.

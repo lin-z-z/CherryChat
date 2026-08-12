@@ -257,10 +257,12 @@ saveConnectionChange(
   unsaved global search permission; repository persistence remains authoritative
   after the user explicitly enables or disables it. The per-conversation search
   toggle still initializes off and never incurs search cost by itself.
-- Public config also carries only `hostedWebSearchProvider`. Hosted UI uses it
-  as a locked display/projection and never substitutes the locally selected
-  Provider. Provider Key, URL, Grok model, and X Search remain absent from the
-  public response and controller input.
+- Public config carries `hostedWebSearchProvider` as the deployment default and
+  ordered `hostedWebSearchProviders` as the allowed selection set. The
+  controller uses a persisted `webSearch.hostedProvider` only while it remains
+  allowed; otherwise it resolves the server default without rewriting BYOK
+  `webSearch.provider`. Provider Key, URL, Grok model, and X Search remain absent
+  from the public response and controller input.
 - `availableModels` is the discovered projection. In BYOK, `models` is the
   user-enabled projection consumed by selectors; refreshing discovery never
   replaces that enabled list. In Hosted, the server's available list is the
@@ -299,8 +301,9 @@ saveConnectionChange(
   `unknown` remains user-configurable for custom APIs.
 - Network search is available only when global settings, the active
   connection's mode-bound source, and effective `tools=true` agree. Hosted mode
-  resolves only authenticated site search for the public Hosted Provider; BYOK
-  resolves only the locally selected Provider's personal Key/URL/model/options.
+  resolves only authenticated site search for the allowed local preference or
+  public default; BYOK resolves only the locally selected Provider's personal
+  Key/URL/model/options.
   A conversation
   whose saved flag is on must still be able to turn it off after authorization,
   key, model support, or global settings are removed; sending while intent is on
@@ -333,7 +336,10 @@ saveConnectionChange(
 | No saved search preference and Hosted search is available | Initialize global search permission on without persisting it |
 | Saved search preference is off and any Provider is available | Restore off; source availability must not override user intent |
 | Hosted mode has only saved personal Provider credentials | Keep them, but report site search unavailable until authenticated |
-| Hosted Provider is Grok while local selection is Exa | Display locked Hosted Grok; do not rewrite or execute local Exa settings |
+| Hosted allowlist contains one Provider | Display it in a locked selector |
+| Hosted allowlist contains several Providers | Allow one global Settings selection; do not add conversation-level Provider state |
+| Saved Hosted preference is no longer allowed | Resolve the public default without rewriting BYOK Provider or credentials |
+| Hosted Provider is Grok while BYOK selection is Exa | Display Hosted Grok; do not rewrite or execute local Exa settings |
 | Custom API has only a valid Hosted Session | Report personal setup required; do not call `/api/web-search` |
 | Model discovery fails for the current scope | Keep its last-known-good list; reject to the settings action |
 | Hosted cache/backup enables only a subset | Project every current server model; keep the stale subset stored but inactive |
@@ -370,6 +376,8 @@ saveConnectionChange(
 - Good: switching from access-code mode to Custom API keeps every personal
   Provider draft but requires the currently selected source; it never spends
   the deployment key.
+- Good: an allowlist ordered `grok,tavily` still starts from the public Tavily
+  default, then restores a saved Hosted Grok choice after reload.
 - Good: the user saves Custom API and turns global search off; reload restores
   both choices even though Hosted model and search services remain available.
 - Bad: treat "supports Temperature" as the value setting, or retain a hidden
@@ -413,9 +421,12 @@ saveConnectionChange(
 - Repository/Playwright: source-aware defaults apply only without records;
   explicit Custom API, selected Provider, inactive Provider configurations, and
   search opt-out choices survive reload on a Hosted deployment.
-- Component/feature: switching Tavily/Exa/Grok preserves inactive fields; Hosted
-  Grok locks Provider, Key, URL, model, and X Search while BYOK exposes only the
-  selected Provider's controls.
+- Component/feature: switching Tavily/Exa/Grok preserves inactive fields;
+  Hosted uses only the ordered allowlist, locks a one-item list, persists a
+  multi-item selection separately, and always locks Key, URL, model, and
+  X Search while BYOK exposes only the selected Provider's controls.
+- Repository/Playwright: an allowed Hosted preference survives reload; removing
+  it from public config falls back to the server default without changing BYOK.
 - Playwright: an unenabled model is absent from chat/default/title selectors,
   and the actual title request body uses the saved title model.
 - Server/Playwright: `TITLE_MODEL` must be allowed, appears in public config,

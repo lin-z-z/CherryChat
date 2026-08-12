@@ -56,9 +56,10 @@ session cookies, public configuration, or same-origin model/chat/search routes.
 - `GET /api/config` returns public deployment metadata plus authentication state.
 - `POST /api/auth` accepts `{ accessCode: string }`; `DELETE /api/auth` signs out.
 - `GET /api/models` and `POST /api/chat` use `x-cherrychat-mode: byok | hosted`.
-- `POST /api/web-search` accepts `{ query, maxResults }` and uses only the
-  deployment-selected Tavily, Exa, or Grok configuration after same-origin and
-  signed-session validation.
+- `POST /api/web-search` accepts the strict
+  `{ query, maxResults, provider }` shape after same-origin and signed-session
+  validation. `provider` is only an allowed Provider ID; the server selects the
+  complete Tavily, Exa, or Grok configuration from its validated env mapping.
 - `parseServerConfig(process.env)` is the only environment-to-domain adapter.
 - `TITLE_MODEL?: string` is the deployment default for automatic chat titles.
 
@@ -71,8 +72,9 @@ plus at least one comma-separated `MODELS` entry. `BASE_URL` defaults to
 `MODELS`. `DISABLE_BYOK` is exactly `true` or `false`.
 
 The public response contains only `byokEnabled`, `hostedEnabled`,
-`hostedWebSearchEnabled`, `hostedWebSearchProvider`, `models`, `defaultModel`,
-`titleModel`, `authenticated`, and the
+`hostedWebSearchEnabled`, `hostedWebSearchProvider`,
+`hostedWebSearchProviders`, `models`, `defaultModel`, `titleModel`,
+`authenticated`, and the
 validated millisecond `requestTimeouts` policy. Server Keys, access codes,
 secrets, raw environment strings, fixed upstream URLs, and signed tokens never
 enter that response or client bundles.
@@ -82,11 +84,17 @@ Hosted sign-in preserves the HTTP failure class at the browser boundary. A
 The controller must not report every non-2xx `/api/auth` response as an invalid
 code.
 
-`WEB_SEARCH_PROVIDER` is exactly `tavily | exa | grok` and defaults to Tavily.
-Each Provider Key is optional, trimmed, validated as 8 through 2048 characters,
-and accepted only with the complete Hosted trio. Search is available only when
-the selected Provider has a valid Key; an unselected configured Key does not
-enable or replace it.
+`WEB_SEARCH_PROVIDER` is exactly `tavily | exa | grok`, defaults to Tavily, and
+is the only source of the Hosted default. An omitted
+`WEB_SEARCH_ALLOWED_PROVIDERS` locks Hosted search to that default. An explicit
+allowlist is comma-separated, normalized, de-duplicated in first-seen order,
+non-empty, contains the default, and requires a complete configuration for
+every entry. List order controls only Settings display order; configured Keys
+outside the list remain unavailable. Each Provider Key is optional, trimmed,
+validated as 8 through 2048 characters, and accepted only with the complete
+Hosted trio. Without an explicit allowlist, a missing default-Provider Key
+disables only Hosted search; with an explicit allowlist, any incomplete entry
+is a configuration error.
 
 `TAVILY_BASE_URL` defaults to `https://api.tavily.com` and `EXA_BASE_URL`
 defaults to `https://api.exa.ai`; either accepts a base or trailing `/search`
@@ -96,10 +104,13 @@ URL. `GROK_RESPONSES_URL` is a complete endpoint and defaults to
 without query/fragment and use HTTPS in production; only explicit loopback
 development may use HTTP.
 
-The search route never accepts a Provider, target, Authorization header, Key,
-model, or X Search override from the browser. A malformed Cookie is an invalid
-session, not a configuration failure. Tavily, Exa, and Grok adapters own their
-exact upstream bodies; only their normalized `WebSearchToolOutput` is returned.
+The search route accepts only the requested Provider ID from the browser. It
+never accepts a target, Authorization header, Key, URL, model, X Search value,
+or another extra body field. The route rejects a missing, unknown, or disallowed
+Provider before acquiring a concurrency lease or fetching upstream. A malformed
+Cookie is an invalid session, not a configuration failure. Tavily, Exa, and
+Grok adapters own their exact upstream bodies; only their normalized
+`WebSearchToolOutput` is returned.
 
 ### 4. Validation & Error Matrix
 
@@ -118,11 +129,14 @@ exact upstream bodies; only their normalized `WebSearchToolOutput` is returned.
 | Hosted model outside the allowlist | `403 MODEL_NOT_ALLOWED` |
 | Any search Provider Key without complete Hosted config | `CONFIGURATION_ERROR` |
 | `WEB_SEARCH_PROVIDER` is not Tavily, Exa, or Grok | `CONFIGURATION_ERROR` |
-| Selected Provider has no Key | Hosted search disabled; Hosted chat remains available |
+| Allowlist omitted and default Provider has no Key | Hosted search disabled; Hosted chat remains available |
+| Explicit allowlist is empty, unknown, or omits the default | `CONFIGURATION_ERROR` |
+| Explicit allowlist contains an incomplete Provider | `CONFIGURATION_ERROR` |
 | Any configured Provider URL is unsafe or malformed | `CONFIGURATION_ERROR` |
 | Empty/overlong Grok model | `CONFIGURATION_ERROR` |
 | Search route without valid same-origin Session | `401 UNAUTHORIZED` before Provider fetch |
-| Browser adds Provider/Key/URL/model/X Search field | `400 INVALID_REQUEST`; no Provider fetch |
+| Provider is missing, unknown, or not in the allowlist | `400 INVALID_REQUEST`; no lease or Provider fetch |
+| Browser adds Key/URL/model/X Search or another extra field | `400 INVALID_REQUEST`; no Provider fetch |
 | Deployment Provider Key rejected upstream | `502 TOOL_AUTH_FAILED`, never `401` |
 | Provider 429 / timeout / 5xx | `429 TOOL_RATE_LIMITED` / `504 TOOL_REQUEST_TIMEOUT` / `503 TOOL_SERVICE_UNAVAILABLE` |
 
@@ -141,24 +155,29 @@ exact upstream bodies; only their normalized `WebSearchToolOutput` is returned.
   source. Failures never change mode or billing source.
 - **Good:** Hosted Grok uses env-selected `grok-4.5` with Web Search always on;
   X Search appears upstream only when `GROK_X_SEARCH=true`.
+- **Good:** default Tavily plus allowlist `grok,tavily` displays Grok first but
+  still resolves Tavily until the browser saves an allowed Grok preference.
+- **Base:** omit the allowlist to preserve the legacy single-Provider locked UI
+  and request path with no migration.
 - **Bad:** expose a search proxy with no Session because the client tool runner
   already limits calls. Client limits are not deployment-wide abuse controls.
 
 ### 6. Tests Required
 
 - `src/server/config.test.ts`: Hosted trio combinations, search Provider
-  selection, every Key/URL/default, Grok model/X Search validation,
-  default/title allowlist validation, normalization, and secret-free public
-  projection.
+  default, absent/empty/unknown/de-duplicated allowlists, every Key/URL,
+  Grok model/X Search validation, default/title allowlist validation,
+  normalization, ordered public Provider IDs, and secret-free projection.
 - `src/server/auth.test.ts`: normalization, HMAC comparison, expiry, and tampering.
 - `src/server/routes.test.ts`: public fields, wrong/correct code, Cookie,
   logout, and a browser Host that differs from the normalized request URL.
 - `src/server/security.test.ts`: request-URL match, Host-authority match,
   missing/malformed Origin, malformed Host, and cross-origin rejection.
 - `src/server/upstream-proxy.test.ts`: fixed target, allowlist, redaction, abort.
-- `src/server/hosted-web-search.test.ts`: origin/session, strict body,
-  environment-selected target for all three Providers, client Provider/Key/URL/
-  model/X Search rejection, 401/403/429/5xx, timeout, abort, response bound,
+- `src/server/hosted-web-search.test.ts`: origin/session, strict required
+  Provider body, unknown/disallowed Provider rejection before lease/fetch,
+  environment-selected target for all three Providers, client Key/URL/model/
+  X Search rejection, 401/403/429/5xx, timeout, abort, response bound,
   redaction, and each exact upstream body.
 - `tests/e2e/chat-core.spec.ts`: BYOK-disabled UI and connection-method state.
 - `tests/e2e/chat-data-tools.spec.ts`: `403` remains a rejected-connection message and
@@ -183,10 +202,10 @@ fetch("/api/chat", {
   headers: { "x-cherrychat-mode": "hosted" },
 });
 
-// Correct: hosted search sends no credential or target from the browser.
+// Correct: hosted search sends only the allowed Provider ID, never its bundle.
 fetch("/api/web-search", {
   method: "POST",
-  body: JSON.stringify({ query, maxResults }),
+  body: JSON.stringify({ query, maxResults, provider }),
 });
 
 // Wrong: expose an unchecked deployment title model to the browser.

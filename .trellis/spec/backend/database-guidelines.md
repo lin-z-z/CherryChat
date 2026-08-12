@@ -59,6 +59,7 @@ interface WebSearchSettings {
   enabled: boolean;
   maxResults: number;
   provider: WebSearchProviderId;
+  hostedProvider: WebSearchProviderId | null;
 }
 
 interface WebSearchLoadOptions {
@@ -72,6 +73,7 @@ WebSearchRepository.save(input: {
   enabled: boolean;
   maxResults: number;
   provider: WebSearchProviderId;
+  hostedProvider: WebSearchProviderId | null;
   providers: {
     tavily: { apiKey: string; baseUrl: string };
     exa: { apiKey: string; baseUrl: string };
@@ -90,8 +92,12 @@ ConversationRepository.recoverInterruptedMessages(): Promise<number>;
 ### 3. Contracts
 
 - Non-secret settings use `settings["webSearch.v2"]` and store `enabled`,
-  `maxResults`, and the selected Provider. Personal configurations use the
-  dedicated `webSearchCredentials` records `tavily`, `exa`, and `grok`.
+  `maxResults`, the BYOK `provider`, and nullable Hosted `hostedProvider`.
+  Personal configurations use the dedicated `webSearchCredentials` records
+  `tavily`, `exa`, and `grok`. The two Provider preferences are independent.
+- Existing `webSearch.v2` records without `hostedProvider` parse as `null`; this
+  optional-field evolution requires no Dexie schema upgrade. Backup/export may
+  carry the non-sensitive Provider ID but never a deployment or personal bundle.
 - Database v8 migrates a valid `webSearch.v1` value to `webSearch.v2` with
   `provider: "tavily"`, preserves the existing Tavily credential, then deletes
   only the legacy settings key. The Dexie upgrade transaction rolls back the
@@ -125,6 +131,8 @@ ConversationRepository.recoverInterruptedMessages(): Promise<number>;
 | Grok model is empty or over 512 characters | Reject the transaction before writing |
 | Selected Provider has no valid credential | Keep the setting; expose `hasApiKey=false` |
 | Switching from Tavily to Exa or Grok | Preserve valid inactive Provider records |
+| Existing v2 record omits `hostedProvider` | Load `hostedProvider: null` without rewriting the record |
+| Hosted preference changes | Preserve BYOK `provider` and all personal credentials |
 | No settings record and `defaultEnabled=true` | Return enabled defaults without writing a preference |
 | No settings record and a valid selected-Provider credential exists | Return enabled defaults and all Provider configurations |
 | Saved `enabled=false` with any available source | Preserve the explicit disabled preference |
@@ -139,6 +147,8 @@ ConversationRepository.recoverInterruptedMessages(): Promise<number>;
 
 - Good: one browser configures Tavily, Exa, and Grok, switches among them, and
   each valid configuration remains available after reload.
+- Good: the browser saves Hosted Grok while BYOK remains Tavily; switching modes
+  and reloading preserves both choices without copying credentials.
 - Good: export includes `webSearch.v2` preferences but no Key, Provider URL,
   Grok model, or X Search value from the credential table.
 - Base: a browser with no Hosted source, personal credential, or saved setting
@@ -152,9 +162,10 @@ ConversationRepository.recoverInterruptedMessages(): Promise<number>;
 ### 6. Tests Required
 
 - Repository: three-Provider round trip, switching without credential loss,
-  source-aware unsaved defaults, persisted opt-out priority, selected-credential
-  defaults, transactional save/load/delete, range/model/URL validation, and
-  normalized storage errors.
+  Hosted/BYOK preference isolation, legacy v2 missing-field parsing,
+  source-aware unsaved defaults, persisted opt-out priority,
+  selected-credential defaults, transactional save/load/delete,
+  range/model/URL validation, and normalized storage errors.
 - Migration: v5 to v6 adds the credential table and conversation toggles; v7 to
   v8 converts `webSearch.v1` to `webSearch.v2`, selects Tavily, preserves its
   credential, and removes only the legacy setting after the new write.
@@ -179,7 +190,7 @@ await database.settings.put({
 // every Provider-specific credential bundle.
 await database.settings.put({
   key: "webSearch.v2",
-  value: { enabled, maxResults, provider },
+  value: { enabled, maxResults, provider, hostedProvider },
   updatedAt,
 });
 await database.webSearchCredentials.put({
