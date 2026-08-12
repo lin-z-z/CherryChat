@@ -147,6 +147,7 @@ describe("Tavily tool", () => {
     expect(JSON.parse(String(request?.body))).toEqual({
       query: "hosted",
       maxResults: 3,
+      provider: "tavily",
     });
   });
 

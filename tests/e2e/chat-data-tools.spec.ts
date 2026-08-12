@@ -575,6 +575,8 @@ test("uses hosted web search immediately after access-code sign-in", async ({
     byokEnabled: false,
     hostedEnabled: true,
     hostedWebSearchEnabled: true,
+    hostedWebSearchProvider: "tavily",
+    hostedWebSearchProviders: ["tavily"],
     models: ["gpt-4.1-mini"],
     defaultModel: "gpt-4.1-mini",
     authenticated: false,
@@ -589,8 +591,9 @@ test("uses hosted web search immediately after access-code sign-in", async ({
     hostedSearchPosts += 1;
     expect(route.request().headers().authorization).toBeUndefined();
     expect(route.request().postDataJSON()).toEqual({
-      query: "Tavily web search connection test",
+      query: "Web search connection test",
       maxResults: 6,
+      provider: "tavily",
     });
     await route.fulfill({
       status: expireHostedSession ? 401 : 200,
@@ -599,7 +602,7 @@ test("uses hosted web search immediately after access-code sign-in", async ({
         expireHostedSession
           ? { error: { code: "UNAUTHORIZED", message: "expired" } }
           : {
-              query: "Tavily web search connection test",
+              query: "Web search connection test",
               results: [],
             },
       ),
@@ -643,7 +646,7 @@ test("uses hosted web search immediately after access-code sign-in", async ({
   await settings.getByRole("button", { name: "Test connection" }).click();
 
   await expect.poll(() => hostedSearchPosts).toBe(1);
-  await expect(settings.getByText("Tavily is connected.")).toBeVisible();
+  await expect(settings.getByText("Search is connected.")).toBeVisible();
 
   const personalKey = settings.getByLabel("Personal Tavily API key (optional)");
   await expect(personalKey).toBeDisabled();

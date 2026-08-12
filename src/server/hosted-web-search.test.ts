@@ -25,8 +25,16 @@ const config: ServerConfig = {
     apiKey: "deployment-model-secret",
     accessCodes: ["access-code"],
     authSecret: "h".repeat(32),
-    tavilyApiKey: "tvly-deployment-secret",
-    tavilyBaseUrl: "https://search.example/tavily",
+    webSearch: {
+      defaultProvider: "tavily",
+      providers: [
+        {
+          provider: "tavily",
+          apiKey: "tvly-deployment-secret",
+          baseUrl: "https://search.example/tavily",
+        },
+      ],
+    },
   },
 };
 
@@ -37,7 +45,7 @@ describe("hosted web search", () => {
     const calls: Array<{ target: RequestInfo | URL; init?: RequestInit }> = [];
     const response = await handleHostedWebSearch(
       webSearchRequest(
-        { query: "CherryChat", maxResults: 50 },
+        { query: "CherryChat", maxResults: 50, provider: "tavily" },
         authenticatedHeaders({
           Authorization: "Bearer attacker-key",
           "X-Base-Url": "https://evil.example",
@@ -78,7 +86,7 @@ describe("hosted web search", () => {
   it("rejects missing sessions, cross-origin requests and unavailable hosted search before fetch", async () => {
     const fetchMock = vi.fn();
     const unauthenticated = await handleHostedWebSearch(
-      webSearchRequest({ query: "test", maxResults: 5 }),
+      webSearchRequest({ query: "test", maxResults: 5, provider: "tavily" }),
       config,
       fetchMock as unknown as typeof fetch,
     );
@@ -86,7 +94,7 @@ describe("hosted web search", () => {
 
     const crossOrigin = await handleHostedWebSearch(
       webSearchRequest(
-        { query: "test", maxResults: 5 },
+        { query: "test", maxResults: 5, provider: "tavily" },
         authenticatedHeaders({ Origin: "https://evil.example" }),
       ),
       config,
@@ -96,12 +104,12 @@ describe("hosted web search", () => {
 
     const unavailable = await handleHostedWebSearch(
       webSearchRequest(
-        { query: "test", maxResults: 5 },
+        { query: "test", maxResults: 5, provider: "tavily" },
         authenticatedHeaders(),
       ),
       {
         ...config,
-        hosted: config.hosted ? { ...config.hosted, tavilyApiKey: null } : null,
+        hosted: config.hosted ? { ...config.hosted, webSearch: null } : null,
       },
       fetchMock as unknown as typeof fetch,
     );
@@ -112,7 +120,7 @@ describe("hosted web search", () => {
   it("treats a malformed session cookie as unauthorized", async () => {
     const response = await handleHostedWebSearch(
       webSearchRequest(
-        { query: "test", maxResults: 5 },
+        { query: "test", maxResults: 5, provider: "tavily" },
         { Cookie: `${SESSION_COOKIE_NAME}=%` },
       ),
       config,
@@ -126,10 +134,97 @@ describe("hosted web search", () => {
   });
 
   it.each([
-    [{ query: "", maxResults: 5 }],
-    [{ query: "test", maxResults: 0 }],
-    [{ query: "test", maxResults: 51 }],
-    [{ query: "test", maxResults: 5, target: "https://evil.example" }],
+    [
+      "exa",
+      {
+        provider: "exa" as const,
+        apiKey: "exa-deployment-secret",
+        baseUrl: "https://search.example/exa",
+      },
+      "https://search.example/exa/search",
+      {
+        query: "Exa query",
+        type: "auto",
+        numResults: 4,
+        contents: { highlights: true },
+      },
+    ],
+    [
+      "grok",
+      {
+        provider: "grok" as const,
+        apiKey: "xai-deployment-secret",
+        responsesUrl: "https://proxy.example/responses",
+        model: "grok-4.5",
+        xSearch: true,
+      },
+      "https://proxy.example/responses",
+      {
+        model: "grok-4.5",
+        input: "Grok query",
+        tools: [{ type: "web_search" }, { type: "x_search" }],
+        store: false,
+      },
+    ],
+  ])(
+    "dispatches the fixed Hosted %s provider without accepting browser target fields",
+    async (_provider, webSearch, expectedTarget, expectedBody) => {
+      const variant: ServerConfig = {
+        ...config,
+        hosted: config.hosted
+          ? {
+              ...config.hosted,
+              webSearch: {
+                defaultProvider: webSearch.provider,
+                providers: [webSearch],
+              },
+            }
+          : null,
+      };
+      let target = "";
+      let body: unknown;
+      const response = await handleHostedWebSearch(
+        webSearchRequest(
+          {
+            query: webSearch.provider === "exa" ? "Exa query" : "Grok query",
+            maxResults: 4,
+            provider: webSearch.provider,
+          },
+          authenticatedHeaders(variant),
+        ),
+        variant,
+        (async (input, init) => {
+          target = String(input);
+          body = JSON.parse(String(init?.body));
+          return Response.json(
+            webSearch.provider === "grok"
+              ? { output_text: "Grok answer" }
+              : { results: [] },
+          );
+        }) as typeof fetch,
+      );
+
+      expect(response.status).toBe(200);
+      expect(target).toBe(expectedTarget);
+      expect(body).toEqual(expectedBody);
+    },
+  );
+
+  it.each([
+    [{ query: "", maxResults: 5, provider: "tavily" }],
+    [{ query: "test", maxResults: 0, provider: "tavily" }],
+    [{ query: "test", maxResults: 51, provider: "tavily" }],
+    [{ query: "test", maxResults: 5 }],
+    [{ query: "test", maxResults: 5, provider: "unknown" }],
+    [{ query: "test", maxResults: 5, provider: "exa" }],
+    [
+      {
+        query: "test",
+        maxResults: 5,
+        provider: "tavily",
+        target: "https://evil.example",
+      },
+    ],
   ])("rejects an invalid or extended request body", async (body) => {
     const fetchMock = vi.fn();
     const response = await handleHostedWebSearch(
@@ -152,7 +247,7 @@ describe("hosted web search", () => {
     async (upstream, status, code) => {
       const response = await handleHostedWebSearch(
         webSearchRequest(
-          { query: "errors", maxResults: 5 },
+          { query: "errors", maxResults: 5, provider: "tavily" },
           authenticatedHeaders(),
         ),
         config,
@@ -174,7 +269,7 @@ describe("hosted web search", () => {
     const guard = new HostedRequestGuard({ webSearchConcurrencyLimit: 1 });
     const timeout = handleHostedWebSearch(
       webSearchRequest(
-        { query: "timeout", maxResults: 5 },
+        { query: "timeout", maxResults: 5, provider: "tavily" },
         authenticatedHeaders(),
       ),
       config,
@@ -194,7 +289,7 @@ describe("hosted web search", () => {
     const guard = new HostedRequestGuard({ webSearchConcurrencyLimit: 1 });
     const controller = new AbortController();
     const firstRequest = webSearchRequest(
-      { query: "first", maxResults: 5 },
+      { query: "first", maxResults: 5, provider: "tavily" },
       authenticatedHeaders(),
     );
     Object.defineProperty(firstRequest, "signal", {
@@ -213,7 +308,7 @@ describe("hosted web search", () => {
 
     const limited = await handleHostedWebSearch(
       webSearchRequest(
-        { query: "second", maxResults: 5 },
+        { query: "second", maxResults: 5, provider: "tavily" },
         authenticatedHeaders(),
       ),
       config,
@@ -232,7 +327,7 @@ describe("hosted web search", () => {
 
     const resumed = await handleHostedWebSearch(
       webSearchRequest(
-        { query: "third", maxResults: 5 },
+        { query: "third", maxResults: 5, provider: "tavily" },
         authenticatedHeaders(),
       ),
       config,
@@ -248,7 +343,7 @@ describe("hosted web search", () => {
     const guard = new HostedRequestGuard({ webSearchConcurrencyLimit: 1 });
     const response = await handleHostedWebSearch(
       webSearchRequest(
-        { query: "failure", maxResults: 5 },
+        { query: "failure", maxResults: 5, provider: "tavily" },
         authenticatedHeaders(),
       ),
       config,
@@ -265,7 +360,7 @@ describe("hosted web search", () => {
   it("keeps caller cancellation distinct from a timeout", async () => {
     const controller = new AbortController();
     const cancelledRequest = webSearchRequest(
-      { query: "cancel", maxResults: 5 },
+      { query: "cancel", maxResults: 5, provider: "tavily" },
       authenticatedHeaders(),
     );
     Object.defineProperty(cancelledRequest, "signal", {
@@ -286,17 +381,26 @@ describe("hosted web search", () => {
 });
 
 function authenticatedHeaders(
+  configOrExtra: ServerConfig | Record<string, string> = config,
   extra: Record<string, string> = {},
 ): Record<string, string> {
-  const hosted = config.hosted;
+  const configValue = isServerConfig(configOrExtra) ? configOrExtra : config;
+  const extraHeaders = isServerConfig(configOrExtra) ? extra : configOrExtra;
+  const hosted = configValue.hosted;
   if (!hosted) throw new Error("Hosted test configuration is missing");
   const codeId = authenticateAccessCode("access-code", hosted);
   if (!codeId) throw new Error("Hosted test access code is invalid");
   const token = createSessionToken(hosted.authSecret, codeId);
   return {
     Cookie: `${SESSION_COOKIE_NAME}=${token}`,
-    ...extra,
+    ...extraHeaders,
   };
+}
+
+function isServerConfig(
+  value: ServerConfig | Record<string, string>,
+): value is ServerConfig {
+  return "requestTimeouts" in value;
 }
 
 function webSearchRequest(

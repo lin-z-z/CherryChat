@@ -1174,6 +1174,8 @@ test("uses source-aware first-use defaults and preserves saved choices", async (
     byokEnabled: true,
     hostedEnabled: true,
     hostedWebSearchEnabled: true,
+    hostedWebSearchProvider: "tavily",
+    hostedWebSearchProviders: ["tavily"],
     models: ["gpt-4.1-mini"],
     defaultModel: "gpt-4.1-mini",
   });
@@ -1251,6 +1253,49 @@ test("uses source-aware first-use defaults and preserves saved choices", async (
   await expect(
     restoredSettings.getByRole("button", { name: "Test connection" }),
   ).toBeDisabled();
+});
+
+test("persists an allowed Hosted search provider independently from list order", async ({
+  page,
+}) => {
+  test.skip(
+    test.info().project.name !== "chromium",
+    "desktop hosted search flow",
+  );
+  await mockConfig(page, {
+    byokEnabled: true,
+    hostedEnabled: true,
+    hostedWebSearchEnabled: true,
+    hostedWebSearchProvider: "tavily",
+    hostedWebSearchProviders: ["grok", "tavily"],
+    models: ["gpt-4.1-mini"],
+    defaultModel: "gpt-4.1-mini",
+    authenticated: true,
+  });
+  await mockModels(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+  const settings = page.getByRole("main", { name: "Settings" });
+  await selectSettingsPage(page, settings, "Web search");
+
+  const provider = settings.getByRole("combobox", {
+    name: "Search provider",
+  });
+  await expect(provider).toBeEnabled();
+  await expect(provider).toContainText("Tavily");
+  await provider.click();
+  await expect(page.getByRole("option", { name: "Exa" })).toHaveCount(0);
+  await page.getByRole("option", { name: "Grok" }).click();
+  await settings.getByRole("button", { name: "Save web search" }).click();
+  await expect(settings.getByText("Web search settings saved.")).toBeVisible();
+
+  await page.reload();
+  await page.getByRole("button", { name: "Settings" }).click();
+  const restoredSettings = page.getByRole("main", { name: "Settings" });
+  await selectSettingsPage(page, restoredSettings, "Web search");
+  await expect(
+    restoredSettings.getByRole("combobox", { name: "Search provider" }),
+  ).toContainText("Grok");
 });
 
 test("uses the deployment title model until the browser saves another choice", async ({

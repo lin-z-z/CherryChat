@@ -18,11 +18,17 @@ import {
 import {
   PasswordField,
   RangeControl,
+  SelectControl,
   SettingsButton,
   SwitchControl,
   TextField,
 } from "@/components/settings/settings-controls";
 import type { ChatController } from "@/features/chat/use-chat-controller";
+import {
+  WEB_SEARCH_PROVIDER_IDS,
+  type WebSearchProviderId,
+} from "@/runtime/chat/types";
+import { resolveHostedWebSearchProvider } from "@/runtime/tools/web-search-provider";
 import { WEB_SEARCH_RESULT_COUNT } from "@/runtime/tools/web-search-settings";
 
 export function WebSearchPage({
@@ -35,6 +41,8 @@ export function WebSearchPage({
   error,
   hostedAuthenticated,
   hostedEnabled,
+  hostedProvider,
+  hostedProviders,
   status,
   onChange,
   onSave,
@@ -49,6 +57,8 @@ export function WebSearchPage({
   error: string | null;
   hostedAuthenticated: boolean;
   hostedEnabled: boolean;
+  hostedProvider: WebSearchProviderId | null;
+  hostedProviders: readonly WebSearchProviderId[];
   status: string | null;
   onChange: (draft: ChatController["webSearchConfig"]) => void;
   onSave: () => void;
@@ -56,12 +66,28 @@ export function WebSearchPage({
 }) {
   const { t } = useTranslation();
   const busy = saving || testing;
-  const hasPersonalKey = Boolean(draft.apiKey.trim());
-  const hasPersonalSource = hasPersonalKey && Boolean(draft.baseUrl.trim());
+  const hosted = connectionMode === "hosted";
+  const effectiveHostedProvider = resolveHostedWebSearchProvider({
+    preferredProvider: draft.hostedProvider,
+    defaultProvider: hostedProvider,
+    allowedProviders: hostedProviders,
+  });
+  const visibleProvider =
+    hosted && effectiveHostedProvider
+      ? effectiveHostedProvider
+      : draft.provider;
+  const selectableProviders = hosted
+    ? hostedProviders.length > 0
+      ? hostedProviders
+      : [draft.provider]
+    : WEB_SEARCH_PROVIDER_IDS;
+  const providerConfig = draft.providers[visibleProvider];
+  const hasPersonalKey = providerConfig.hasApiKey;
+  const hasPersonalSource = hasPersonalKey;
   const hostedReady = hostedEnabled && hostedAuthenticated;
   const activeSourceReady =
     connectionMode === "hosted" ? hostedReady : hasPersonalSource;
-  const personalFieldsDisabled = connectionMode === "hosted";
+  const personalFieldsDisabled = hosted;
   const serviceState =
     activeSource === "browser"
       ? "personal"
@@ -107,53 +133,208 @@ export function WebSearchPage({
             onCheckedChange={(enabled) => onChange({ ...draft, enabled })}
           />
         </SettingsRow>
+        <div className="settings-form-block">
+          <label htmlFor="settings-web-search-provider">
+            {t("webSearchProvider")}
+          </label>
+          <small>{t("webSearchProviderDescription")}</small>
+          <SelectControl
+            aria-label={t("webSearchProvider")}
+            disabled={busy || (hosted && hostedProviders.length <= 1)}
+            id="settings-web-search-provider"
+            onValueChange={(provider) => {
+              const nextProvider = WEB_SEARCH_PROVIDER_IDS.find(
+                (candidate) => candidate === provider,
+              );
+              if (!nextProvider) return;
+              if (hosted) {
+                onChange({
+                  ...draft,
+                  hostedProvider: nextProvider,
+                });
+                return;
+              }
+              onChange({
+                ...draft,
+                provider: nextProvider,
+                hasApiKey: draft.providers[nextProvider].hasApiKey,
+              });
+            }}
+            options={selectableProviders.map((provider) => ({
+              value: provider,
+              label: t(
+                provider === "tavily"
+                  ? "webSearchProviderTavily"
+                  : provider === "exa"
+                    ? "webSearchProviderExa"
+                    : "webSearchProviderGrok",
+              ),
+            }))}
+            value={visibleProvider}
+          />
+        </div>
         <div className="settings-form-block settings-web-search-key">
           <PasswordField
             autoComplete="off"
             description={
               personalFieldsDisabled
-                ? t("personalTavilyApiKeyInactiveDescription")
-                : t("tavilyApiKeyDescription")
+                ? visibleProvider === "tavily"
+                  ? t("personalTavilyApiKeyInactiveDescription")
+                  : t("personalWebSearchKeyInactiveDescription")
+                : visibleProvider === "tavily"
+                  ? t("tavilyApiKeyDescription")
+                  : t("webSearchApiKeyDescription")
             }
             disabled={busy || personalFieldsDisabled}
             hidePasswordLabel={t("hidePassword")}
-            id="settings-tavily-api-key"
+            id={`settings-${visibleProvider}-api-key`}
             label={
               personalFieldsDisabled
-                ? t("personalTavilyApiKey")
-                : t("tavilyApiKey")
+                ? visibleProvider === "tavily"
+                  ? t("personalTavilyApiKey")
+                  : t("personalWebSearchKey")
+                : visibleProvider === "tavily"
+                  ? t("tavilyApiKey")
+                  : t("webSearchApiKey")
             }
             onChange={(event) =>
               onChange({
                 ...draft,
-                apiKey: event.target.value,
+                providers: {
+                  ...draft.providers,
+                  [visibleProvider]: {
+                    ...providerConfig,
+                    apiKey: event.target.value,
+                    hasApiKey: Boolean(event.target.value.trim()),
+                  },
+                },
                 hasApiKey: Boolean(event.target.value.trim()),
               })
             }
-            placeholder="tvly-..."
+            placeholder={visibleProvider === "grok" ? "xai-..." : "..."}
             showPasswordLabel={t("showPassword")}
-            value={draft.apiKey}
+            value={providerConfig.apiKey}
           />
         </div>
-        <div className="settings-form-block">
-          <TextField
-            autoComplete="url"
-            description={
-              personalFieldsDisabled
-                ? t("personalTavilyApiUrlInactiveDescription")
-                : t("tavilyApiUrlDescription")
-            }
-            disabled={busy || personalFieldsDisabled}
-            id="settings-tavily-api-url"
-            label={t("tavilyApiUrl")}
-            onChange={(event) =>
-              onChange({ ...draft, baseUrl: event.target.value })
-            }
-            placeholder="https://api.tavily.com"
-            type="url"
-            value={draft.baseUrl}
-          />
-        </div>
+        {visibleProvider === "grok" ? (
+          <>
+            <div className="settings-form-block">
+              <TextField
+                autoComplete="url"
+                description={
+                  personalFieldsDisabled
+                    ? t("personalWebSearchUrlInactiveDescription")
+                    : t("grokResponsesUrlDescription")
+                }
+                disabled={busy || personalFieldsDisabled}
+                id="settings-grok-responses-url"
+                label={t("grokResponsesUrl")}
+                onChange={(event) =>
+                  onChange({
+                    ...draft,
+                    providers: {
+                      ...draft.providers,
+                      grok: {
+                        ...draft.providers.grok,
+                        responsesUrl: event.target.value,
+                      },
+                    },
+                  })
+                }
+                placeholder="https://api.x.ai/v1/responses"
+                type="url"
+                value={draft.providers.grok.responsesUrl}
+              />
+            </div>
+            <div className="settings-form-block">
+              <TextField
+                autoComplete="off"
+                description={t("grokModelDescription")}
+                disabled={busy || personalFieldsDisabled}
+                id="settings-grok-model"
+                label={t("grokModel")}
+                onChange={(event) =>
+                  onChange({
+                    ...draft,
+                    providers: {
+                      ...draft.providers,
+                      grok: {
+                        ...draft.providers.grok,
+                        model: event.target.value,
+                      },
+                    },
+                  })
+                }
+                value={draft.providers.grok.model}
+              />
+            </div>
+            <SettingsRow
+              className="settings-web-search-control-row"
+              description={t("grokXSearchDescription")}
+              icon={Globe2}
+              title={t("grokXSearch")}
+            >
+              <SwitchControl
+                checked={draft.providers.grok.xSearch}
+                disabled={busy || personalFieldsDisabled}
+                id="settings-grok-x-search"
+                label={t("grokXSearch")}
+                onCheckedChange={(xSearch) =>
+                  onChange({
+                    ...draft,
+                    providers: {
+                      ...draft.providers,
+                      grok: { ...draft.providers.grok, xSearch },
+                    },
+                  })
+                }
+              />
+            </SettingsRow>
+          </>
+        ) : (
+          <div className="settings-form-block">
+            <TextField
+              autoComplete="url"
+              description={
+                personalFieldsDisabled
+                  ? t("personalWebSearchUrlInactiveDescription")
+                  : t(
+                      visibleProvider === "exa"
+                        ? "exaBaseUrlDescription"
+                        : "tavilyApiUrlDescription",
+                    )
+              }
+              disabled={busy || personalFieldsDisabled}
+              id={`settings-${visibleProvider}-api-url`}
+              label={
+                visibleProvider === "exa" ? t("exaBaseUrl") : t("tavilyApiUrl")
+              }
+              onChange={(event) =>
+                onChange({
+                  ...draft,
+                  providers: {
+                    ...draft.providers,
+                    [visibleProvider]: {
+                      ...providerConfig,
+                      baseUrl: event.target.value,
+                    },
+                  },
+                })
+              }
+              placeholder={
+                visibleProvider === "exa"
+                  ? "https://api.exa.ai"
+                  : "https://api.tavily.com"
+              }
+              type="url"
+              value={
+                visibleProvider === "exa"
+                  ? draft.providers.exa.baseUrl
+                  : draft.providers.tavily.baseUrl
+              }
+            />
+          </div>
+        )}
         <SettingsRow
           className="settings-web-search-result-row"
           description={t("webSearchResultCountDescription")}

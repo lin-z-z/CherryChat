@@ -62,7 +62,8 @@ gateway's responsibility.
 The current adapters and tests cover:
 
 - Streaming text and usage projection.
-- Model-visible tools used by the bounded Tavily web-search workflow.
+- The model-visible `web_search` tool used by the bounded Tavily, Exa, and Grok
+  web-search workflows.
 - Image input when the resolved model and endpoint support it.
 - Reasoning display and provider-specific continuation context.
 - Per-model streaming, Temperature, Top P, context-window, vision, tool, and

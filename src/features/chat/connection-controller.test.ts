@@ -16,6 +16,8 @@ const publicConfig: PublicConfig = {
   byokEnabled: true,
   hostedEnabled: true,
   hostedWebSearchEnabled: false,
+  hostedWebSearchProvider: null,
+  hostedWebSearchProviders: [],
   models: ["hosted-default", "hosted-title"],
   defaultModel: "hosted-default",
   titleModel: "hosted-title",
@@ -47,6 +49,8 @@ describe("connection controller", () => {
       byokEnabled: true,
       hostedEnabled: false,
       hostedWebSearchEnabled: false,
+      hostedWebSearchProvider: null,
+      hostedWebSearchProviders: [],
       authenticated: false,
       models: ["model-a", 42, "model-b"],
       defaultModel: "model-a",
@@ -57,6 +61,8 @@ describe("connection controller", () => {
       byokEnabled: true,
       hostedEnabled: false,
       hostedWebSearchEnabled: false,
+      hostedWebSearchProvider: null,
+      hostedWebSearchProviders: [],
       authenticated: false,
       models: ["model-a", "model-b"],
       defaultModel: "model-a",
@@ -64,6 +70,22 @@ describe("connection controller", () => {
       requestTimeouts: DEFAULT_REQUEST_TIMEOUT_POLICY,
     });
     expect(parsed.requestTimeouts).not.toBe(DEFAULT_REQUEST_TIMEOUT_POLICY);
+    expect(
+      parsePublicConfig({
+        ...publicConfig,
+        hostedWebSearchEnabled: true,
+        hostedWebSearchProvider: "exa",
+        hostedWebSearchProviders: ["exa", "grok"],
+      }).hostedWebSearchProvider,
+    ).toBe("exa");
+    expect(() =>
+      parsePublicConfig({
+        ...publicConfig,
+        hostedWebSearchEnabled: true,
+        hostedWebSearchProvider: undefined,
+        hostedWebSearchProviders: ["tavily"],
+      }),
+    ).toThrow("Invalid server config");
     expect(() =>
       parsePublicConfig({
         ...publicConfig,

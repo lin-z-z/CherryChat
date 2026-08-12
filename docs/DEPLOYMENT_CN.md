@@ -89,29 +89,37 @@ npm run dev
 
 打开 `http://127.0.0.1:3000`。本地 BYOK-only 运行不需要环境变量文件。
 
-只有在测试同源 BYOK、托管访问或由部署方付费的 Tavily 搜索时，才把
+只有在测试同源 BYOK、托管访问或由部署方付费的网络搜索时，才把
 `.env.example` 复制为 `.env.local`。不要把真实值写入 Git、日志、截图、Issue 或
 浏览器测试产物。
 
 ## 环境变量
 
-| 变量                              | 是否必需 | 用途                                                           |
-| --------------------------------- | -------- | -------------------------------------------------------------- |
-| `BASE_URL`                        | 否       | 固定 OpenAI-compatible 上游；默认为 `https://api.openai.com`。 |
-| `ALLOW_INSECURE_LOCAL_UPSTREAM`   | 否       | 精确设为 `true` 时，允许非生产环境使用 Loopback HTTP。         |
-| `OPENAI_API_KEY`                  | 托管访问 | 部署方持有的上游 Key。                                         |
-| `MODELS`                          | 托管访问 | 逗号分隔的托管模型白名单。                                     |
-| `DEFAULT_MODEL`                   | 否       | 托管默认模型；必须存在于 `MODELS` 中。                         |
-| `TITLE_MODEL`                     | 否       | 部署端标题模型；必须存在于 `MODELS` 中。                       |
-| `ACCESS_CODE`                     | 托管访问 | 逗号分隔的访客访问码，每个最多 256 UTF-8 Byte。                |
-| `AUTH_SECRET`                     | 托管访问 | 至少 32 UTF-8 Byte 的 HMAC/Session Secret。                    |
-| `TAVILY_API_KEY`                  | 否       | 为已登录托管访客提供搜索额度的部署方 Tavily Key。              |
-| `TAVILY_BASE_URL`                 | 否       | 托管 Tavily-compatible Base；默认为 `https://api.tavily.com`。 |
-| `DISABLE_BYOK`                    | 否       | 精确设为 `true` 时只开放托管访问。                             |
-| `MODEL_LIST_TIMEOUT_SECONDS`      | 否       | 模型列表时限；默认 30 秒。                                     |
-| `CHAT_FIRST_BYTE_TIMEOUT_SECONDS` | 否       | 等待 Response Header 的时限；默认 300 秒。                     |
-| `CHAT_IDLE_TIMEOUT_SECONDS`       | 否       | Body Chunk 之间的最大空闲时间；默认 300 秒。                   |
-| `CHAT_TOTAL_TIMEOUT_SECONDS`      | 否       | 整个聊天请求时限；默认 1800 秒。                               |
+| 变量                              | 是否必需 | 用途                                                               |
+| --------------------------------- | -------- | ------------------------------------------------------------------ |
+| `BASE_URL`                        | 否       | 固定 OpenAI-compatible 上游；默认为 `https://api.openai.com`。     |
+| `ALLOW_INSECURE_LOCAL_UPSTREAM`   | 否       | 精确设为 `true` 时，允许非生产环境使用 Loopback HTTP。             |
+| `OPENAI_API_KEY`                  | 托管访问 | 部署方持有的上游 Key。                                             |
+| `MODELS`                          | 托管访问 | 逗号分隔的托管模型白名单。                                         |
+| `DEFAULT_MODEL`                   | 否       | 托管默认模型；必须存在于 `MODELS` 中。                             |
+| `TITLE_MODEL`                     | 否       | 部署端标题模型；必须存在于 `MODELS` 中。                           |
+| `ACCESS_CODE`                     | 托管访问 | 逗号分隔的访客访问码，每个最多 256 UTF-8 Byte。                    |
+| `AUTH_SECRET`                     | 托管访问 | 至少 32 UTF-8 Byte 的 HMAC/Session Secret。                        |
+| `WEB_SEARCH_PROVIDER`             | 否       | 默认 Hosted Provider：`tavily`、`exa` 或 `grok`，默认为 `tavily`。 |
+| `WEB_SEARCH_ALLOWED_PROVIDERS`    | 否       | 访问码用户可选的有序列表；未配置时只允许默认 Provider。            |
+| `TAVILY_API_KEY`                  | 否       | 选择 Tavily 时使用的部署方 Key。                                   |
+| `TAVILY_BASE_URL`                 | 否       | 托管 Tavily-compatible Base；默认为 `https://api.tavily.com`。     |
+| `EXA_API_KEY`                     | 否       | 选择 Exa 时使用的部署方 Key。                                      |
+| `EXA_BASE_URL`                    | 否       | 托管 Exa-compatible Base；默认为 `https://api.exa.ai`。            |
+| `GROK_API_KEY`                    | 否       | 选择 Grok 时使用的部署方 xAI-compatible Key。                      |
+| `GROK_RESPONSES_URL`              | 否       | 完整 Grok Responses 地址，默认使用 xAI 官方地址。                  |
+| `GROK_MODEL`                      | 否       | Hosted Grok 模型，默认为 `grok-4.5`。                              |
+| `GROK_X_SEARCH`                   | 否       | 精确为 `true` 时额外启用 X Search，默认为 `false`。                |
+| `DISABLE_BYOK`                    | 否       | 精确设为 `true` 时只开放托管访问。                                 |
+| `MODEL_LIST_TIMEOUT_SECONDS`      | 否       | 模型列表时限；默认 30 秒。                                         |
+| `CHAT_FIRST_BYTE_TIMEOUT_SECONDS` | 否       | 等待 Response Header 的时限；默认 300 秒。                         |
+| `CHAT_IDLE_TIMEOUT_SECONDS`       | 否       | Body Chunk 之间的最大空闲时间；默认 300 秒。                       |
+| `CHAT_TOTAL_TIMEOUT_SECONDS`      | 否       | 整个聊天请求时限；默认 1800 秒。                                   |
 
 `OPENAI_API_KEY`、`ACCESS_CODE` 和 `AUTH_SECRET` 必须同时配置，托管访问还要求
 至少一个 `MODELS` 条目。托管配置不完整时会 Fail Closed。
@@ -123,7 +131,7 @@ npm run dev
 Timeout 值必须是 `0` 到 `86400` 的整数秒。`0` 只会关闭对应的单个 Timer。Total
 Timer 在 Streaming 期间不会重置；Idle Timer 会在收到每个 Body Chunk 后重置。
 
-生产环境 OpenAI 和 Tavily 上游必须使用 HTTPS。Insecure-local 例外只允许非生产
+生产环境 OpenAI、Tavily、Exa 和 Grok 上游必须使用 HTTPS。Insecure-local 例外只允许非生产
 环境的 Loopback Host，不允许 LAN 或普通远程 HTTP 目标。
 
 ## 部署到 Vercel
@@ -157,6 +165,8 @@ BYOK-only Demo 不得设置：
 - `ACCESS_CODE`
 - `AUTH_SECRET`
 - `TAVILY_API_KEY`
+- `EXA_API_KEY`
+- `GROK_API_KEY`
 
 这会让 Demo 始终使用由用户付费的 BYOK 路径，防止匿名访客消耗项目所有者的模型
 或搜索额度。当前 Demo URL 只有在部署源文件列表、环境变量名称、`/api/config`、
@@ -182,7 +192,7 @@ BYOK-only Demo 不得设置：
 
 ### BYOK-only
 
-- 未配置部署方持有的 OpenAI、托管访问或 Tavily 凭据。
+- 未配置部署方持有的 OpenAI、托管访问或网络搜索凭据。
 - `/api/config` 报告 BYOK 已启用且托管访问已禁用。
 - Provider 直连请求只发送到用户选择的绝对 URL。
 - 同源 BYOK 只能访问部署固定的 `BASE_URL`。
@@ -195,6 +205,14 @@ BYOK-only Demo 不得设置：
 - Session Cookie 在 HTTPS 下使用 HttpOnly、SameSite Strict 和 Secure。
 - Vercel Firewall 与上游消费控制分别发布。
 - 托管聊天和搜索从不接受浏览器选择的服务端目标。
+- `WEB_SEARCH_PROVIDER` 决定默认的 Tavily、Exa 或 Grok；未配置
+  `WEB_SEARCH_ALLOWED_PROVIDERS` 时仍锁定该 Provider。
+- 显式允许列表必须非空、包含默认 Provider，且每一项都具有完整的部署方配置；
+  列表顺序只控制设置页顺序，不改变默认值。列表外已配置的 Key 不会开放使用。
+- 访问码用户只能在设置页选择允许的 Provider ID，不能覆盖 Key、URL、Grok
+  模型或 X Search 设置。
+- Grok 始终提供 Web Search；X Search 是独立开关，默认关闭，开启后可能增加
+  xAI 模型和搜索工具费用。
 - Function 日志和客户端 Bundle 不包含任何已配置 Secret 值。
 
 本地测试不能证明这些 Vercel 设置正确。请分别记录本地、Preview 和 Production

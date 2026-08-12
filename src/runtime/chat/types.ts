@@ -28,6 +28,9 @@ export type SupportState = "supported" | "unsupported" | "unknown";
 export type TitleSource = "local" | "ai" | "user";
 export type AssistantKind = "default" | "custom";
 
+export const WEB_SEARCH_PROVIDER_IDS = ["tavily", "exa", "grok"] as const;
+export type WebSearchProviderId = (typeof WEB_SEARCH_PROVIDER_IDS)[number];
+
 export const ASSISTANT_ICONS = [
   "sparkles",
   "bot",
@@ -329,15 +332,73 @@ export interface ConversationRecord {
 export interface WebSearchSettings {
   enabled: boolean;
   maxResults: number;
+  provider: WebSearchProviderId;
+  hostedProvider: WebSearchProviderId | null;
 }
 
-export interface WebSearchCredentialRecord {
-  id: "tavily";
+export interface StandardWebSearchProviderConfiguration {
   apiKey: string;
   baseUrl: string;
+  hasApiKey: boolean;
+}
+
+export interface GrokWebSearchProviderConfiguration {
+  apiKey: string;
+  responsesUrl: string;
+  model: string;
+  xSearch: boolean;
+  hasApiKey: boolean;
+}
+
+export interface WebSearchProviderConfigurations {
+  tavily: StandardWebSearchProviderConfiguration;
+  exa: StandardWebSearchProviderConfiguration;
+  grok: GrokWebSearchProviderConfiguration;
+}
+
+export interface WebSearchConfiguration extends WebSearchSettings {
+  providers: WebSearchProviderConfigurations;
+  hasApiKey: boolean;
+}
+
+export interface WebSearchSaveInput extends WebSearchSettings {
+  providers: {
+    tavily: Omit<StandardWebSearchProviderConfiguration, "hasApiKey">;
+    exa: Omit<StandardWebSearchProviderConfiguration, "hasApiKey">;
+    grok: Omit<GrokWebSearchProviderConfiguration, "hasApiKey">;
+  };
+}
+
+export interface WebSearchResult {
+  title: string;
+  url: string;
+  content: string;
+}
+
+export interface WebSearchToolOutput {
+  query: string;
+  answer?: string;
+  results: WebSearchResult[];
+}
+
+interface WebSearchCredentialRecordBase {
+  id: WebSearchProviderId;
+  apiKey: string;
   encrypted: false;
   updatedAt: string;
 }
+
+export type WebSearchCredentialRecord =
+  | (WebSearchCredentialRecordBase & {
+      id: "tavily" | "exa";
+      baseUrl: string;
+    })
+  | (WebSearchCredentialRecordBase & {
+      id: "grok";
+      responsesUrl: string;
+      model: string;
+      xSearch: boolean;
+    });
 
 export interface BranchSelectionRecord {
   conversationId: string;

@@ -25,8 +25,7 @@ const hostedConfig: ServerConfig = {
     apiKey: "deployment-super-secret",
     accessCodes: ["access-code"],
     authSecret: "h".repeat(32),
-    tavilyApiKey: null,
-    tavilyBaseUrl: null,
+    webSearch: null,
   },
 };
 

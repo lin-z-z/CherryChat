@@ -5,6 +5,7 @@ import type {
   ConversationRecord,
   MessageAttachmentRecord,
   MessageNode,
+  WebSearchCredentialRecord,
 } from "@/runtime/chat/types";
 import {
   createDefaultAssistantSnapshot,
@@ -15,6 +16,10 @@ import {
   ChatDatabase,
   LEGACY_CHAT_DATABASE_STORES,
 } from "@/storage/database";
+import {
+  LEGACY_WEB_SEARCH_SETTINGS_KEY,
+  WEB_SEARCH_SETTINGS_KEY,
+} from "@/runtime/tools/web-search-settings";
 
 type LegacyConversationRecord = Pick<
   ConversationRecord,
@@ -220,6 +225,51 @@ describe("ChatDatabase migrations", () => {
       await expect(
         upgraded.conversations.get(conversation.id),
       ).resolves.toEqual(currentConversation);
+    } finally {
+      await upgraded.delete();
+    }
+  });
+
+  it("upgrades v7 Tavily settings to webSearch.v2 without losing the credential", async () => {
+    const name = `migration-v7-search-${crypto.randomUUID()}`;
+    const legacy = new Dexie(name);
+    legacy.version(7).stores(CHAT_DATABASE_STORES);
+    await legacy.open();
+
+    const timestamp = "2026-08-10T00:00:00.000Z";
+    await legacy.table("settings").put({
+      key: LEGACY_WEB_SEARCH_SETTINGS_KEY,
+      value: { enabled: true, maxResults: 9 },
+      updatedAt: timestamp,
+    });
+    const credential: WebSearchCredentialRecord = {
+      id: "tavily",
+      apiKey: "tvly-migration-secret",
+      baseUrl: "https://search.example/tavily",
+      encrypted: false,
+      updatedAt: timestamp,
+    };
+    await legacy
+      .table<WebSearchCredentialRecord>("webSearchCredentials")
+      .put(credential);
+    legacy.close();
+
+    const upgraded = new ChatDatabase(name);
+    try {
+      await upgraded.open();
+      await expect(
+        upgraded.settings.get(WEB_SEARCH_SETTINGS_KEY),
+      ).resolves.toEqual({
+        key: WEB_SEARCH_SETTINGS_KEY,
+        value: { enabled: true, maxResults: 9, provider: "tavily" },
+        updatedAt: timestamp,
+      });
+      await expect(
+        upgraded.settings.get(LEGACY_WEB_SEARCH_SETTINGS_KEY),
+      ).resolves.toBeUndefined();
+      await expect(
+        upgraded.webSearchCredentials.get("tavily"),
+      ).resolves.toEqual(credential);
     } finally {
       await upgraded.delete();
     }

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { ToolCallPart } from "@/runtime/chat/types";
-import { WEB_SEARCH_TOOL_NAME } from "@/runtime/tools/tavily-client";
+import { WEB_SEARCH_TOOL_NAME } from "@/runtime/tools/web-search-client";
 
 const httpUrlSchema = z
   .string()
@@ -20,6 +20,7 @@ const webSearchSourceSchema = z
 const webSearchOutputSchema = z
   .object({
     query: z.string(),
+    answer: z.string().optional(),
     results: z.array(z.unknown()),
   })
   .strict();
@@ -32,6 +33,7 @@ export interface WebSearchResultProjection {
 
 export interface WebSearchToolProjection {
   query: string;
+  answer?: string;
   results: WebSearchResultProjection[];
 }
 
@@ -49,6 +51,7 @@ export function projectWebSearchTool(
   if (!parsed.success) return null;
   return {
     query: parsed.data.query,
+    ...(parsed.data.answer === undefined ? {} : { answer: parsed.data.answer }),
     results: parsed.data.results.flatMap((result) => {
       const source = webSearchSourceSchema.safeParse(result);
       return source.success ? [source.data] : [];

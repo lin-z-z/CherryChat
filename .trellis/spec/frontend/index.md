@@ -16,7 +16,7 @@ not belong in React components.
 | [Quality Guidelines](./quality-guidelines.md) | Required checks and regression coverage |
 | [Type Safety](./type-safety.md) | Strict TypeScript and runtime validation boundaries |
 | [Model Capability Adapters](./model-capability-adapters.md) | Model truth, endpoint intersection, reasoning choices, and wire serialization |
-| [Tool Runtime](./tool-runtime.md) | Ordered tool messages, Tavily execution, cancellation, and safe errors |
+| [Tool Runtime](./tool-runtime.md) | Ordered tool messages, Tavily/Exa/Grok execution, cancellation, and safe errors |
 
 ## Pre-Development Checklist
 

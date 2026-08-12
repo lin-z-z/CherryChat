@@ -106,9 +106,15 @@ import { MessageStreamPersistence } from "@/storage/stream-persistence";
 import { ModelListCacheRepository } from "@/storage/model-list-cache-repository";
 import {
   WebSearchRepository,
+  type WebSearchSaveInput,
   type WebSearchConfiguration,
 } from "@/storage/web-search-repository";
 import { DEFAULT_TAVILY_BASE_URL } from "@/runtime/tools/tavily-url";
+import { DEFAULT_EXA_BASE_URL } from "@/runtime/tools/exa-url";
+import {
+  DEFAULT_GROK_MODEL,
+  DEFAULT_GROK_RESPONSES_URL,
+} from "@/runtime/tools/grok-url";
 
 const LANGUAGE_STORAGE_KEY = "cherrychat.language";
 const THEME_STORAGE_KEY = "cherrychat.theme";
@@ -183,8 +189,27 @@ export function useChatController() {
     useState<WebSearchConfiguration>({
       enabled: false,
       maxResults: 5,
-      apiKey: "",
-      baseUrl: DEFAULT_TAVILY_BASE_URL,
+      provider: "tavily",
+      hostedProvider: null,
+      providers: {
+        tavily: {
+          apiKey: "",
+          baseUrl: DEFAULT_TAVILY_BASE_URL,
+          hasApiKey: false,
+        },
+        exa: {
+          apiKey: "",
+          baseUrl: DEFAULT_EXA_BASE_URL,
+          hasApiKey: false,
+        },
+        grok: {
+          apiKey: "",
+          responsesUrl: DEFAULT_GROK_RESPONSES_URL,
+          model: DEFAULT_GROK_MODEL,
+          xSearch: false,
+          hasApiKey: false,
+        },
+      },
       hasApiKey: false,
     });
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
@@ -880,18 +905,13 @@ export function useChatController() {
   );
 
   const saveWebSearchSettings = useCallback(
-    async (input: {
-      enabled: boolean;
-      maxResults: number;
-      apiKey: string;
-      baseUrl: string;
-    }) => {
+    async (input: WebSearchSaveInput) => {
+      const candidate = webSearchConfigurationFromSaveInput(input);
       if (
         input.enabled &&
         !resolveWebSearchSource(
           connectionRef.current.mode,
-          input.apiKey,
-          input.baseUrl,
+          candidate,
           publicConfig,
         )
       ) {
@@ -920,11 +940,10 @@ export function useChatController() {
   }, []);
 
   const testWebSearch = useCallback(
-    async (input: { apiKey: string; baseUrl: string; maxResults: number }) => {
+    async (input: WebSearchConfiguration) => {
       const source = resolveWebSearchSource(
         connectionRef.current.mode,
-        input.apiKey,
-        input.baseUrl,
+        input,
         publicConfig,
       );
       if (!source) {
@@ -940,7 +959,7 @@ export function useChatController() {
         createHostedWebSearchUnauthorizedHandler(),
       );
       await executor.execute(
-        { query: "Tavily web search connection test" },
+        { query: "Web search connection test" },
         new AbortController().signal,
       );
     },
@@ -954,8 +973,7 @@ export function useChatController() {
         (!webSearchConfig.enabled ||
           !resolveWebSearchSource(
             connectionRef.current.mode,
-            webSearchConfig.apiKey,
-            webSearchConfig.baseUrl,
+            webSearchConfig,
             publicConfig,
           ))
       ) {
@@ -1175,8 +1193,7 @@ export function useChatController() {
       try {
         const webSearchSource = resolveWebSearchSource(
           connection.mode,
-          webSearchConfig.apiKey,
-          webSearchConfig.baseUrl,
+          webSearchConfig,
           publicConfig,
         );
         if (
@@ -2009,8 +2026,7 @@ export function useChatController() {
 
   const webSearchSource = resolveWebSearchSource(
     connection.mode,
-    webSearchConfig.apiKey,
-    webSearchConfig.baseUrl,
+    webSearchConfig,
     publicConfig,
   );
 
@@ -2106,6 +2122,32 @@ export function useChatController() {
     exportCurrentMarkdown,
     loadPrintProjection,
     refreshLists,
+  };
+}
+
+function webSearchConfigurationFromSaveInput(
+  input: WebSearchSaveInput,
+): WebSearchConfiguration {
+  return {
+    enabled: input.enabled,
+    maxResults: input.maxResults,
+    provider: input.provider,
+    hostedProvider: input.hostedProvider,
+    providers: {
+      tavily: {
+        ...input.providers.tavily,
+        hasApiKey: Boolean(input.providers.tavily.apiKey.trim()),
+      },
+      exa: {
+        ...input.providers.exa,
+        hasApiKey: Boolean(input.providers.exa.apiKey.trim()),
+      },
+      grok: {
+        ...input.providers.grok,
+        hasApiKey: Boolean(input.providers.grok.apiKey.trim()),
+      },
+    },
+    hasApiKey: Boolean(input.providers[input.provider].apiKey.trim()),
   };
 }
 

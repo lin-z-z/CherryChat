@@ -34,7 +34,7 @@ CherryChat 是带有可选 Vercel Route Handler 的浏览器本地 AI 客户端�
 
 ## 浏览器凭据与本地数据
 
-BYOK API Key、访问码输入和可选个人 Tavily 凭据会保存在本地以便使用。CherryChat
+BYOK API Key、访问码输入和可选个人 Tavily、Exa 或 Grok 凭据会保存在本地以便使用。CherryChat
 不会对它们进行静态加密。恶意扩展、受入侵的依赖、注入的同源脚本，或能够访问
 浏览器 Profile 的人员，都可能读取这些数据。
 
@@ -74,9 +74,9 @@ CherryChat 有三条相关路径：
 系统拒绝重定向。托管聊天会校验严格、有界的请求结构和模型白名单。同源 BYOK 会
 保留 OpenAI-compatible 扩展字段，但仍不能改变固定目标。
 
-托管 Tavily 搜索使用独立的同源 POST 路由。它要求有效托管 Session，只接受有界
-Query 和结果数，并使用部署 Key 请求经过校验的 `TAVILY_BASE_URL`。浏览器不能为
-此路由提供服务端目标或凭据。
+托管网络搜索使用独立的同源 POST 路由。它要求有效托管 Session，只接受有界
+Query 和结果数，并使用部署端固定的 Tavily、Exa 或 Grok 目标及凭据。浏览器不能为
+此路由提供 Provider、模型、服务端目标或凭据。
 
 生产环境托管上游必须使用 HTTPS。明确的 Insecure-local 选项只在非生产环境、且
 目标为 Loopback Host 时生效；它不允许 LAN、私有地址、元数据地址或普通远程 HTTP

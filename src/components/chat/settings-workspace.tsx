@@ -535,8 +535,24 @@ export function SettingsWorkspace({
       const saved = await chat.saveWebSearchSettings({
         enabled: webSearchDraft.enabled,
         maxResults: webSearchDraft.maxResults,
-        apiKey: webSearchDraft.apiKey,
-        baseUrl: webSearchDraft.baseUrl,
+        provider: webSearchDraft.provider,
+        hostedProvider: webSearchDraft.hostedProvider,
+        providers: {
+          tavily: {
+            apiKey: webSearchDraft.providers.tavily.apiKey,
+            baseUrl: webSearchDraft.providers.tavily.baseUrl,
+          },
+          exa: {
+            apiKey: webSearchDraft.providers.exa.apiKey,
+            baseUrl: webSearchDraft.providers.exa.baseUrl,
+          },
+          grok: {
+            apiKey: webSearchDraft.providers.grok.apiKey,
+            responsesUrl: webSearchDraft.providers.grok.responsesUrl,
+            model: webSearchDraft.providers.grok.model,
+            xSearch: webSearchDraft.providers.grok.xSearch,
+          },
+        },
       });
       setWebSearchDraft(saved);
       setWebSearchBaseline(saved);
@@ -553,11 +569,7 @@ export function SettingsWorkspace({
     setWebSearchStatus(null);
     setWebSearchTesting(true);
     try {
-      await chat.testWebSearch({
-        apiKey: webSearchDraft.apiKey,
-        baseUrl: webSearchDraft.baseUrl,
-        maxResults: webSearchDraft.maxResults,
-      });
+      await chat.testWebSearch(webSearchDraft);
       setWebSearchStatus(t("webSearchTestSucceeded"));
     } catch (cause) {
       setWebSearchError(formatUserFacingError(cause, t, "webSearchTestError"));
@@ -852,6 +864,12 @@ export function SettingsWorkspace({
               error={webSearchError}
               hostedAuthenticated={chat.publicConfig?.authenticated ?? false}
               hostedEnabled={chat.publicConfig?.hostedWebSearchEnabled ?? false}
+              hostedProvider={
+                chat.publicConfig?.hostedWebSearchProvider ?? null
+              }
+              hostedProviders={
+                chat.publicConfig?.hostedWebSearchProviders ?? []
+              }
               onChange={(next) => {
                 setWebSearchDraft(next);
                 setWebSearchError(null);

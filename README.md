@@ -30,7 +30,8 @@
 
 Try the verified [public BYOK-only demo](https://cherrychat-xi.vercel.app). It
 uses a stable Vercel Production alias but has no project-owned model, Hosted
-access, or Tavily credential. Visitors configure their own provider in the
+access, or deployment-funded search credential. Visitors configure their own
+provider in the
 browser. The Vercel target does not change CherryChat's Beta product
 status.
 
@@ -49,8 +50,8 @@ status.
 - **Multiple protocol adapters** — OpenAI Chat Completions, OpenAI Responses,
   native Anthropic, native Gemini, New API endpoint metadata, and generic
   OpenAI-compatible chat endpoints.
-- **Useful chat workflows** — streaming, reasoning display, image input, Tavily
-  web search, message branches, local search, assistants, backup, import, export,
+- **Useful chat workflows** — streaming, reasoning display, image input, Tavily,
+  Exa, and Grok web search, message branches, local search, assistants, backup, import, export,
   print, and an installable Web App manifest.
 - **English and Simplified Chinese** — the interface follows browser language on
   first use and keeps the selected language locally.
@@ -129,8 +130,11 @@ upstream or Hosted access. Never commit real API keys, access codes, or
 
 A BYOK-only deployment needs no provider credential in Vercel. Hosted access
 requires the complete `OPENAI_API_KEY`, `MODELS`, `ACCESS_CODE`, and
-`AUTH_SECRET` configuration. Optional deployment-funded search additionally
-uses `TAVILY_API_KEY`.
+`AUTH_SECRET` configuration. Optional deployment-funded search uses the selected
+`WEB_SEARCH_PROVIDER` and its matching provider credentials. Deployments may
+optionally expose several configured providers with
+`WEB_SEARCH_ALLOWED_PROVIDERS`; the default still comes only from
+`WEB_SEARCH_PROVIDER`.
 
 Before sharing a Hosted deployment, configure an upstream spending limit and a
 Vercel Firewall rate-limit rule for `POST /api/auth`. CherryChat's process-local

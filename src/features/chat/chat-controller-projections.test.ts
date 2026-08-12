@@ -12,7 +12,7 @@ import {
   resolveVisibleModelIds,
   resolveWebSearchSource,
 } from "@/features/chat/chat-controller-projections";
-import { WEB_SEARCH_TOOL_NAME } from "@/runtime/tools/tavily-client";
+import { WEB_SEARCH_TOOL_NAME } from "@/runtime/tools/web-search-client";
 import { DEFAULT_REQUEST_TIMEOUT_POLICY } from "@/runtime/transport/request-timeout-policy";
 import type { MessageNode } from "@/runtime/chat/types";
 
@@ -135,8 +135,32 @@ describe("chat controller projections", () => {
     expect(
       resolveWebSearchSource(
         "hosted",
-        "browser-key",
-        "https://api.tavily.com",
+        {
+          enabled: true,
+          maxResults: 5,
+          provider: "tavily",
+          hostedProvider: "grok",
+          providers: {
+            tavily: {
+              apiKey: "browser-key",
+              baseUrl: "https://api.tavily.com",
+              hasApiKey: true,
+            },
+            exa: {
+              apiKey: "",
+              baseUrl: "https://api.exa.ai",
+              hasApiKey: false,
+            },
+            grok: {
+              apiKey: "",
+              responsesUrl: "https://api.x.ai/v1/responses",
+              model: "grok-4.5",
+              xSearch: false,
+              hasApiKey: false,
+            },
+          },
+          hasApiKey: true,
+        },
         {
           hostedEnabled: true,
           byokEnabled: true,
@@ -144,19 +168,46 @@ describe("chat controller projections", () => {
           titleModel: null,
           models: ["gpt-5-mini"],
           hostedWebSearchEnabled: true,
+          hostedWebSearchProvider: "tavily",
+          hostedWebSearchProviders: ["tavily", "grok"],
           authenticated: true,
           requestTimeouts: DEFAULT_REQUEST_TIMEOUT_POLICY,
         },
       ),
-    ).toEqual({ kind: "hosted" });
+    ).toEqual({ kind: "hosted", provider: "grok" });
     const browser = resolveWebSearchSource(
       "byok",
-      "browser-key",
-      "https://api.tavily.com",
+      {
+        enabled: true,
+        maxResults: 5,
+        provider: "tavily",
+        hostedProvider: null,
+        providers: {
+          tavily: {
+            apiKey: "browser-key",
+            baseUrl: "https://api.tavily.com",
+            hasApiKey: true,
+          },
+          exa: {
+            apiKey: "",
+            baseUrl: "https://api.exa.ai",
+            hasApiKey: false,
+          },
+          grok: {
+            apiKey: "",
+            responsesUrl: "https://api.x.ai/v1/responses",
+            model: "grok-4.5",
+            xSearch: false,
+            hasApiKey: false,
+          },
+        },
+        hasApiKey: true,
+      },
       null,
     );
     expect(browser).toEqual({
       kind: "browser",
+      provider: "tavily",
       apiKey: "browser-key",
       baseUrl: "https://api.tavily.com",
     });

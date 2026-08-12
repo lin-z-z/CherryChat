@@ -28,7 +28,7 @@
 
 可直接体验经过验证的 [公开 BYOK-only Demo](https://cherrychat-xi.vercel.app)。
 当前地址使用稳定的 Vercel Production 别名，但没有配置项目所有者的模型、Hosted
-access 或 Tavily 凭据；访客需要在浏览器中使用自己的服务凭据。Vercel 部署目标为
+access 或部署端搜索凭据；访客需要在浏览器中使用自己的服务凭据。Vercel 部署目标为
 Production 不代表产品已经成熟，CherryChat 仍处于 Beta 阶段。
 
 ![CherryChat 桌面对话界面](./docs/images/cherrychat-desktop.png)
@@ -44,7 +44,7 @@ Production 不代表产品已经成熟，CherryChat 仍处于 Beta 阶段。
 - **多协议适配** —— 支持 OpenAI Chat Completions、OpenAI Responses、原生
   Anthropic、原生 Gemini、New API endpoint metadata 和通用 OpenAI-compatible
   Chat 接口。
-- **实用对话工作流** —— 流式输出、推理展示、图片输入、Tavily 搜索、消息分支、
+- **实用对话工作流** —— 流式输出、推理展示、图片输入、Tavily、Exa 和 Grok 搜索、消息分支、
   本地搜索、助手、备份、导入导出、打印和可安装的 Web App manifest。
 - **英文与简体中文** —— 首次进入时跟随浏览器语言，之后在本地保存你的选择。
 
@@ -116,7 +116,7 @@ npm run dev
 
 BYOK-only 部署不需要在 Vercel 中配置模型服务凭据。Hosted access 必须完整配置
 `OPENAI_API_KEY`、`MODELS`、`ACCESS_CODE` 和 `AUTH_SECRET`；如需由部署端提供
-搜索，再额外配置 `TAVILY_API_KEY`。
+搜索，再配置 `WEB_SEARCH_PROVIDER` 及对应 Provider 的凭据。
 
 公开分享 Hosted 部署前，请同时设置上游消费限额，并为 `POST /api/auth` 配置
 Vercel Firewall 限流规则。CherryChat 的进程内保护只是纵深防御，不是全局配额或

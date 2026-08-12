@@ -6,6 +6,8 @@ const defaultConfig = {
   byokEnabled: true,
   hostedEnabled: false,
   hostedWebSearchEnabled: false,
+  hostedWebSearchProvider: null as "tavily" | "exa" | "grok" | null,
+  hostedWebSearchProviders: [] as Array<"tavily" | "exa" | "grok">,
   models: [] as string[],
   defaultModel: null as string | null,
   titleModel: null as string | null,

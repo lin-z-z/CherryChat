@@ -190,7 +190,7 @@ describe("Chat Completions request builder", () => {
       {
         role: "tool",
         content:
-          '[{"id":1,"title":"Source","url":"https://example.com","content":""}]',
+          '{"results":[{"id":1,"title":"Source","url":"https://example.com","content":""}]}',
         tool_call_id: "call-1",
         name: "web_search",
       },

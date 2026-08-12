@@ -57,7 +57,7 @@ Chat Completions Adapter。
 当前 Adapter 和测试覆盖：
 
 - 流式文本和用量投影。
-- 有界 Tavily 网络搜索流程使用的模型可见工具。
+- 有界 Tavily、Exa 和 Grok 网络搜索流程共用的模型可见 `web_search` 工具。
 - 解析后的模型和 Endpoint 支持时的图片输入。
 - 推理展示和 Provider 特定 Continuation Context。
 - 按模型保存的 Streaming、Temperature、Top P、Context Window、Vision、Tool 和

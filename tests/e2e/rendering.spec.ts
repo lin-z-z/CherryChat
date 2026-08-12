@@ -8,6 +8,8 @@ async function prepareRenderingPage(page: Page, responseText: string) {
         byokEnabled: true,
         hostedEnabled: false,
         hostedWebSearchEnabled: false,
+        hostedWebSearchProvider: null,
+        hostedWebSearchProviders: [],
         models: [],
         defaultModel: null,
         authenticated: false,

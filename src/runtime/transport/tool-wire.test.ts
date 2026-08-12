@@ -21,7 +21,7 @@ describe("tool wire projection", () => {
         },
       }),
     ).toBe(
-      '[{"id":1,"title":"Source","url":"https://example.com","content":"Current information"}]',
+      '{"results":[{"id":1,"title":"Source","url":"https://example.com","content":"Current information"}]}',
     );
   });
 

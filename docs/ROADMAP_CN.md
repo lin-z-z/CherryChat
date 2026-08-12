@@ -39,7 +39,7 @@
 Completions Runtime。
 
 OpenAI Chat Completions、OpenAI Responses、原生 Anthropic 和 Gemini Transport，
-以及内置的有界 Tavily 网络搜索工具，都是当前产品能力，而不是暂缓路线图项目。
+以及内置的有界 Tavily、Exa 和 Grok 网络搜索 Provider，都是当前产品能力，而不是暂缓路线图项目。
 
 ## 产品边界
 

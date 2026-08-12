@@ -14,6 +14,12 @@ const canaries = {
   ACCESS_CODE: "ci-access-4bb72bce1ba74296",
   AUTH_SECRET: "ci-auth-secret-99a3495414054ced9ba9",
   TAVILY_API_KEY: "tvly-ci-93b27c15620d4f75",
+  TAVILY_BASE_URL: "https://tvly-ci-upstream.example/search",
+  EXA_API_KEY: "exa-ci-3495bbf2a7aa49af",
+  EXA_BASE_URL: "https://exa-ci-upstream.example",
+  GROK_API_KEY: "xai-ci-dd0e609949bc42f8",
+  GROK_RESPONSES_URL: "https://grok-ci-upstream.example/v1/responses",
+  GROK_MODEL: "grok-ci-canary-4-5",
 };
 
 let workingDirectory;

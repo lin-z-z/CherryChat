@@ -8,8 +8,9 @@ src/server/security.ts       Same-origin and bounded-body checks
 src/server/http.ts           JSON/error response shape
 src/server/hosted-session.ts Shared signed-session guard
 src/server/upstream-proxy.ts Fixed-target OpenAI-compatible forwarding
-src/server/hosted-web-search.ts Fixed-target authenticated Tavily execution
+src/server/hosted-web-search.ts Authenticated env-selected search execution
 src/runtime/transport/       Browser transport and stable chat errors
+src/runtime/tools/           Web-search registry, Provider adapters, safe projection
 src/storage/                 IndexedDB/localStorage repositories
 ```
 

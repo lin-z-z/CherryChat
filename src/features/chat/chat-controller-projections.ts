@@ -7,12 +7,13 @@ import type {
   ChatEndpointType,
   MessageNode,
   ModelDescriptor,
+  WebSearchConfiguration,
 } from "@/runtime/chat/types";
-import { createTavilyToolExecutor } from "@/runtime/tools/tavily-client";
 import {
-  resolveTavilyExecutionSource,
-  type TavilyExecutionSource,
-} from "@/runtime/tools/tavily-source";
+  createWebSearchProviderExecutor,
+  resolveWebSearchExecutionSource,
+  type WebSearchExecutionSource,
+} from "@/runtime/tools/web-search-provider";
 import type { ToolExecutor } from "@/runtime/tools/tool-registry";
 
 export interface GenerationPreparation {
@@ -144,33 +145,27 @@ export function lastGeneratedModelId(
 
 export function resolveWebSearchSource(
   connectionMode: ConnectionDraft["mode"],
-  browserApiKey: string,
-  browserBaseUrl: string,
+  webSearch: WebSearchConfiguration,
   publicConfig: PublicConfig | null,
-): TavilyExecutionSource | null {
-  return resolveTavilyExecutionSource({
+): WebSearchExecutionSource | null {
+  return resolveWebSearchExecutionSource({
     connectionMode,
-    browserApiKey,
-    browserBaseUrl,
+    webSearch,
     hostedWebSearchEnabled: publicConfig?.hostedWebSearchEnabled ?? false,
+    hostedWebSearchProvider: publicConfig?.hostedWebSearchProvider ?? null,
+    hostedWebSearchProviders: publicConfig?.hostedWebSearchProviders ?? [],
     authenticated: publicConfig?.authenticated ?? false,
   });
 }
 
 export function createWebSearchExecutor(
-  source: TavilyExecutionSource,
+  source: WebSearchExecutionSource,
   maxResults: number,
   onUnauthorized: () => void,
 ): ToolExecutor {
-  return source.kind === "browser"
-    ? createTavilyToolExecutor({
-        apiKey: source.apiKey,
-        baseUrl: source.baseUrl,
-        maxResults,
-      })
-    : createTavilyToolExecutor({
-        mode: "hosted",
-        maxResults,
-        onUnauthorized,
-      });
+  return createWebSearchProviderExecutor({
+    source,
+    maxResults,
+    onUnauthorized,
+  });
 }
