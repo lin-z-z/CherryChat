@@ -43,6 +43,8 @@ describe("public config and hosted session routes", () => {
       hostedWebSearchProviders: ["tavily"],
       hostedImageGenerationEnabled: false,
       hostedImageGenerationModel: null,
+      hostedImageGenerationProfiles: [],
+      hostedImageGenerationDefaultProfileId: null,
       imageGenerationTimeoutMs: 120_000,
       imageGenerationMaximumRequestBytes: 4 * 1024 * 1024,
       models: ["model-a", "model-b"],

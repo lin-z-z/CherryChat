@@ -10,6 +10,13 @@ const defaultConfig = {
   hostedWebSearchProviders: [] as Array<"tavily" | "exa" | "grok">,
   hostedImageGenerationEnabled: false,
   hostedImageGenerationModel: null as string | null,
+  hostedImageGenerationProfiles: [] as Array<{
+    id: string;
+    name: string;
+    modelId: string;
+    sizeMode: "auto" | "fixed" | "custom";
+  }>,
+  hostedImageGenerationDefaultProfileId: null as string | null,
   imageGenerationTimeoutMs: 120_000,
   imageGenerationMaximumRequestBytes: 4 * 1024 * 1024,
   models: [] as string[],

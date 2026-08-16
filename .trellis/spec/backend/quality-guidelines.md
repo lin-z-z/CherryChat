@@ -966,31 +966,51 @@ message snapshots, or backup/import behavior.
 POST /api/image-generation
 Content-Type: application/json | multipart/form-data
 
-JSON: { model, prompt, size, quality, n: 1 }
-Multipart: model, prompt, size, quality, n=1, ordered image[] fields
+JSON: { profileId?, model, prompt, size, quality, output_format,
+        output_compression?, n: 1 }
+Multipart: profileId?, model, prompt, size, quality, output_format,
+           output_compression?, n=1, ordered image[] fields
 
 ImageGenerationTransport.generate(request, signal?)
 ConversationRepository.completeImageGeneration(messageId, images)
+selectImageGenerationProfile(profileId)
+setImageGenerationParameters({ resolutionTier?, aspectRatio?, quality?,
+                               outputFormat?, outputCompression? })
 ```
 
-The durable `image_generation` message part contains `modelId`,
-`connectionScope`, `size`, `quality`, and ordered `referenceAttachmentIds`.
-Generated and reference images are ordinary `AttachmentRecord` rows linked by
+`ImageGenerationConfiguration` owns `profiles`, `defaultProfileId`, separate
+BYOK/Hosted active Profile IDs, and per-Profile parameters. The durable
+`image_generation` message part contains the immutable Profile/model identity,
+resolved `size`, resolution tier, aspect ratio, quality, output format,
+conditional compression, and ordered `referenceAttachmentIds`. Generated and
+reference images are ordinary `AttachmentRecord` rows linked by
 `messageAttachments`.
 
 ### 3. Contracts
 
-- BYOK reads generation URL, edit URL, Key, model, size, and quality from the
-  user's local image settings. Zero references use JSON generations; one
-  through sixteen references use multipart edits with repeated ordered
-  `image[]` fields.
+- Composer mode is explicit: selecting a chat model never enters image mode,
+  and selecting an image Profile never mutates the chat model, reasoning, or
+  web-search state. A settings-page Profile picker is component-local editing
+  state and must not call `selectImageGenerationProfile`; only the image
+  composer changes the active runtime Profile.
+- BYOK stores each Profile URL, Key, model, size mode, and recent parameters
+  independently. Zero references use JSON generations; one through sixteen
+  references use multipart edits with repeated ordered `image[]` fields.
 - Hosted browsers call only same-origin `/api/image-generation`. The server
-  reads `IMAGE_GENERATION_API_KEY`, `IMAGE_GENERATION_URL`, `IMAGE_EDIT_URL`,
-  and `IMAGE_GENERATION_MODEL` as an all-or-none group. Optional
-  `IMAGE_GENERATION_TIMEOUT_SECONDS` and `IMAGE_GENERATION_MAX_REQUEST_MB` are
-  bounded server values.
-- Public config exposes only availability, model, timeout, and request-byte
-  limit. It never exposes the deployment Key or either upstream URL.
+  resolves `profileId` from its allowlist and ignores the caller's model as a
+  routing choice. `IMAGE_GENERATION_PROFILES` is a JSON array of
+  `{ id, name, apiKey, generationUrl, editUrl, model, sizeMode }` and
+  `IMAGE_GENERATION_DEFAULT_PROFILE` selects its default. The legacy Key/URL/
+  edit URL/model quartet remains an all-or-none single-Profile input and cannot
+  be combined with the JSON list. Optional timeout and request-byte env values
+  remain server bounded.
+- Public config exposes only safe Profile identity/capabilities, the default
+  Profile ID, availability, timeout, and request-byte limit. It never exposes
+  a deployment Key or upstream URL.
+- `gpt-image-2` accepts resolved custom dimensions from the supported
+  resolution-tier/aspect-ratio matrix; conservative legacy/unknown Profiles
+  use fixed supported sizes. PNG never carries `output_compression`; JPEG and
+  WebP may carry an integer from 0 through 100.
 - Upstream `data[0].b64_json` is accepted directly. BYOK may download
   `data[0].url` with credentials omitted. Hosted accepts a URL only when its
   protocol and origin match the selected fixed upstream, rejects redirects,
@@ -1005,9 +1025,14 @@ Generated and reference images are ordinary `AttachmentRecord` rows linked by
 | Condition | Result |
 | --- | --- |
 | Partial image env quartet | `CONFIGURATION_ERROR` |
+| Profile JSON combined with the legacy quartet | `CONFIGURATION_ERROR` |
+| Invalid/duplicate Profile ID or missing default Profile | `CONFIGURATION_ERROR` |
 | Image env quartet without Hosted access | `CONFIGURATION_ERROR` |
 | Unsafe active upstream URL | `CONFIGURATION_ERROR` |
 | Missing Session or cross-origin request | `401` / `403` before fetch |
+| Hosted `profileId` is outside the allowlist | `400 INVALID_REQUEST` |
+| Profile does not support the resolved size | `400 INVALID_REQUEST` |
+| PNG request contains `output_compression` | `400 INVALID_REQUEST` |
 | More than 16 references or invalid multipart | `400 INVALID_REQUEST` |
 | Request exceeds configured byte limit | `413 INVALID_REQUEST` |
 | Caller aborts | `499 ABORTED`; lease released |
@@ -1019,21 +1044,27 @@ Generated and reference images are ordinary `AttachmentRecord` rows linked by
 
 ### 5. Good / Base / Bad Cases
 
-- **Good:** two ordered references reach `image[]` in the same order, survive
-  reload and backup/import with remapped IDs, and remain linked to the message.
-- **Base:** a prompt without references sends one JSON request and persists one
-  generated image returned as Base64 or a downloadable URL.
-- **Bad:** accept a browser-supplied Hosted target, follow a Hosted redirect,
-  expose an env URL/Key in `/api/config`, or store a short-lived remote URL in a
-  message instead of a local attachment.
+- **Good:** `gpt-image-2 + 2K + 9:16 + WebP` resolves once, reaches the selected
+  Profile with conditional compression, and survives reload/retry/backup with
+  two references in their original order.
+- **Base:** a prompt without references uses the default Profile, sends one JSON
+  request, and persists one generated image returned as Base64 or a safe URL.
+- **Bad:** infer composer mode from a model name, let the settings editor change
+  the runtime Profile, accept a browser-supplied Hosted target/Key, expose an
+  env URL/Key in `/api/config`, or persist only a short-lived remote image URL.
 
 ### 6. Tests Required
 
-- Transport: exact JSON body, ordered multipart fields, Base64, URL download,
-  invalid/empty response, MIME/size, abort, and response limits.
-- Server: fixed generation/edit targets, deployment model override, Session,
-  Origin, byte/reference limits, timeout/cancel, same-origin URL download,
-  redirect/cross-origin rejection, redaction, and lease release.
+- Options/UI: explicit mode isolation, settings-editor/runtime Profile
+  separation, `gpt-image-2` 1K/2K/4K ratios, legacy fixed-size fallback,
+  conditional compression, and desktop/mobile overflow.
+- Transport: exact Profile/format/compression JSON and multipart fields,
+  ordered references, Base64, URL download, invalid/empty response, MIME/size,
+  abort, and response limits.
+- Server: multi-Profile env parsing/default validation, allowlist selection,
+  fixed generation/edit targets, deployment model override, Session, Origin,
+  byte/reference limits, timeout/cancel, safe URL download, redirect/cross-
+  origin rejection, redaction, and lease release.
 - Storage: transactional generated-output save, SHA-256 de-duplication,
   attachment reference cleanup, and backup round-trip with at least two ordered
   references, ID remapping, and complete `messageAttachments` links.
@@ -1043,14 +1074,25 @@ Generated and reference images are ordinary `AttachmentRecord` rows linked by
 ### 7. Wrong vs Correct
 
 ```ts
-// Wrong: the browser selects where the Hosted deployment sends its secret.
+// Wrong: the browser selects where the Hosted deployment sends its secret and
+// silently changes mode because a model name looks image-capable.
 await fetch("/api/image-generation", {
-  body: JSON.stringify({ targetUrl, apiKey, prompt }),
+  body: JSON.stringify({ targetUrl, apiKey, model, prompt }),
 });
+setComposerMode(isImageModel(model) ? "image" : "chat");
 
-// Correct: the route selects a validated env target and the browser sends only
-// the strict generation contract.
+// Correct: UI mode is explicit; the route resolves a validated allowlisted
+// Profile and the browser sends only its ID plus strict generation parameters.
+setComposerMode("image");
 await fetch("/api/image-generation", {
-  body: JSON.stringify({ model, prompt, size, quality, n: 1 }),
+  body: JSON.stringify({
+    profileId,
+    model,
+    prompt,
+    size,
+    quality,
+    output_format,
+    n: 1,
+  }),
 });
 ```

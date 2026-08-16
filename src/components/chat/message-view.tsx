@@ -369,9 +369,10 @@ export function MessageView({
         {message.role === "assistant" && imageGeneration ? (
           <p className="message-model-label">
             {t("imageGenerationSnapshot", {
-              model: imageGeneration.modelId,
+              model: imageGeneration.profileName ?? imageGeneration.modelId,
               size: imageGeneration.size,
               quality: t(`imageQuality${capitalize(imageGeneration.quality)}`),
+              format: (imageGeneration.outputFormat ?? "png").toUpperCase(),
             })}
           </p>
         ) : null}

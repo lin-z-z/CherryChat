@@ -45,6 +45,8 @@ import { cn } from "@/lib/cn";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import type { ConversationExportProjection } from "@/runtime/chat/export-projection";
 import { summarizeBranchUsage } from "@/runtime/chat/projections";
+import type { ImageGenerationProfile } from "@/runtime/chat/types";
+import { resolveImageGenerationCapabilities } from "@/runtime/image-generation/image-generation-options";
 
 const AUTO_FOLLOW_THRESHOLD_PX = 96;
 
@@ -160,8 +162,8 @@ export function ChatShell() {
     (imageMode || supportsImageInput);
   const imageGenerationAvailable =
     chat.connection.mode === "hosted"
-      ? (chat.publicConfig?.hostedImageGenerationEnabled ?? false)
-      : chat.imageGenerationConfig.hasApiKey;
+      ? chat.imageGenerationProfiles.length > 0
+      : Boolean(chat.activeImageGenerationProfile?.hasApiKey);
   const webSearchButtonDisabled =
     generationBusy || (!chat.webSearchAvailable && !chat.webSearchEnabled);
   const webSearchTooltipContent = chat.webSearchEnabled
@@ -275,28 +277,57 @@ export function ChatShell() {
             chat={chat}
             disabled={!chat.ready || generationBusy}
           />
-          <ModelSelector
-            disabled={!chat.ready || generationBusy}
-            models={chat.models}
-            onValueChange={(modelId) => {
-              if (modelId === chat.connection.modelId) return;
-              const afterMessageId = chat.path.at(-1)?.id;
-              void chat
-                .selectModel(modelId)
-                .then((notice) =>
-                  notice && afterMessageId
-                    ? setModelSwitchNotice({ ...notice, afterMessageId })
-                    : setModelSwitchNotice(null),
-                )
-                .catch((cause: unknown) =>
-                  notify({
-                    message: formatUserFacingError(cause, t),
-                    tone: "error",
-                  }),
-                );
-            }}
-            value={chat.connection.modelId}
-          />
+          {imageMode ? (
+            <select
+              aria-label={t("imageGenerationProfile")}
+              className="topbar-model-select"
+              disabled={
+                !chat.ready ||
+                generationBusy ||
+                chat.imageGenerationProfiles.length === 0
+              }
+              onChange={(event) =>
+                void chat
+                  .selectImageGenerationProfile(event.target.value)
+                  .catch((cause: unknown) =>
+                    notify({
+                      message: formatUserFacingError(cause, t),
+                      tone: "error",
+                    }),
+                  )
+              }
+              value={chat.activeImageGenerationProfile?.id ?? ""}
+            >
+              {chat.imageGenerationProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name} · {profile.modelId}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <ModelSelector
+              disabled={!chat.ready || generationBusy}
+              models={chat.models}
+              onValueChange={(modelId) => {
+                if (modelId === chat.connection.modelId) return;
+                const afterMessageId = chat.path.at(-1)?.id;
+                void chat
+                  .selectModel(modelId)
+                  .then((notice) =>
+                    notice && afterMessageId
+                      ? setModelSwitchNotice({ ...notice, afterMessageId })
+                      : setModelSwitchNotice(null),
+                  )
+                  .catch((cause: unknown) =>
+                    notify({
+                      message: formatUserFacingError(cause, t),
+                      tone: "error",
+                    }),
+                  );
+              }}
+              value={chat.connection.modelId}
+            />
+          )}
           <span className="chat-topbar-spacer" />
           <ThemeSwitcher
             onValueChange={setTheme}
@@ -615,31 +646,40 @@ export function ChatShell() {
                     value={chat.draft}
                   />
                 </div>
-                <div className="composer-action-row">
+                <div
+                  className={cn(
+                    "composer-action-row",
+                    imageMode && "is-image-mode",
+                  )}
+                >
                   <div className="composer-toolbar-left">
-                    <TextTooltip
-                      content={
-                        imageMode ? t("switchToChat") : t("switchToImage")
-                      }
-                    >
+                    <div className="composer-mode-toggle" role="group">
                       <button
-                        aria-label={
-                          imageMode ? t("switchToChat") : t("switchToImage")
-                        }
+                        aria-pressed={!imageMode}
+                        className={cn(
+                          "composer-mode-button",
+                          !imageMode && "is-active",
+                        )}
+                        disabled={generationBusy}
+                        onClick={() => chat.setComposerMode("chat")}
+                        type="button"
+                      >
+                        {t("chatMode")}
+                      </button>
+                      <button
                         aria-pressed={imageMode}
                         className={cn(
-                          "composer-tool-button",
+                          "composer-mode-button",
                           imageMode && "is-active",
                         )}
                         disabled={generationBusy}
-                        onClick={() =>
-                          chat.setComposerMode(imageMode ? "chat" : "image")
-                        }
+                        onClick={() => chat.setComposerMode("image")}
                         type="button"
                       >
-                        <ImageIcon aria-hidden="true" className="size-5" />
+                        <ImageIcon aria-hidden="true" className="size-4" />
+                        {t("imageMode")}
                       </button>
-                    </TextTooltip>
+                    </div>
                     {imageMode || supportsImageInput ? (
                       <TextTooltip content={t("addImage")}>
                         <button
@@ -705,33 +745,58 @@ export function ChatShell() {
                     {imageMode ? (
                       <>
                         <select
-                          aria-label={t("imageGenerationSize")}
+                          aria-label={t("imageGenerationResolution")}
                           className="composer-compact-select"
                           disabled={generationBusy}
                           onChange={(event) =>
-                            chat.setImageGenerationSize(
-                              event.target
-                                .value as typeof chat.imageGenerationConfig.size,
-                            )
+                            chat.setImageGenerationParameters({
+                              resolutionTier: event.target.value as
+                                "auto" | "1K" | "2K" | "4K",
+                            })
                           }
-                          value={chat.imageGenerationConfig.size}
+                          value={chat.imageGenerationParameters.resolutionTier}
                         >
-                          <option value="auto">Auto</option>
-                          <option value="1024x1024">1:1</option>
-                          <option value="1536x1024">3:2</option>
-                          <option value="1024x1536">2:3</option>
+                          {chat.activeImageGenerationProfile
+                            ? resolveResolutionOptions(
+                                chat.activeImageGenerationProfile,
+                              ).map((value) => (
+                                <option key={value} value={value}>
+                                  {value}
+                                </option>
+                              ))
+                            : null}
+                        </select>
+                        <select
+                          aria-label={t("imageGenerationAspectRatio")}
+                          className="composer-compact-select"
+                          disabled={generationBusy}
+                          onChange={(event) =>
+                            chat.setImageGenerationParameters({
+                              aspectRatio: event.target
+                                .value as typeof chat.imageGenerationParameters.aspectRatio,
+                            })
+                          }
+                          value={chat.imageGenerationParameters.aspectRatio}
+                        >
+                          {resolveAspectRatioOptions(
+                            chat.activeImageGenerationProfile,
+                          ).map((value) => (
+                            <option key={value} value={value}>
+                              {value}
+                            </option>
+                          ))}
                         </select>
                         <select
                           aria-label={t("imageGenerationQuality")}
                           className="composer-compact-select"
                           disabled={generationBusy}
                           onChange={(event) =>
-                            chat.setImageGenerationQuality(
-                              event.target
-                                .value as typeof chat.imageGenerationConfig.quality,
-                            )
+                            chat.setImageGenerationParameters({
+                              quality: event.target
+                                .value as typeof chat.imageGenerationParameters.quality,
+                            })
                           }
-                          value={chat.imageGenerationConfig.quality}
+                          value={chat.imageGenerationParameters.quality}
                         >
                           <option value="auto">{t("imageQualityAuto")}</option>
                           <option value="low">{t("imageQualityLow")}</option>
@@ -740,6 +805,56 @@ export function ChatShell() {
                           </option>
                           <option value="high">{t("imageQualityHigh")}</option>
                         </select>
+                        <select
+                          aria-label={t("imageGenerationOutputFormat")}
+                          className="composer-compact-select"
+                          disabled={generationBusy}
+                          onChange={(event) =>
+                            chat.setImageGenerationParameters({
+                              outputFormat: event.target.value as
+                                "png" | "jpeg" | "webp",
+                              outputCompression:
+                                event.target.value === "png"
+                                  ? null
+                                  : (chat.imageGenerationParameters
+                                      .outputCompression ?? 100),
+                            })
+                          }
+                          value={chat.imageGenerationParameters.outputFormat}
+                        >
+                          <option value="png">PNG</option>
+                          <option value="jpeg">JPEG</option>
+                          <option value="webp">WebP</option>
+                        </select>
+                        {chat.imageGenerationParameters.outputFormat !==
+                        "png" ? (
+                          <input
+                            aria-label={t("imageGenerationCompression")}
+                            className="composer-compact-number"
+                            disabled={generationBusy}
+                            max={100}
+                            min={0}
+                            onChange={(event) => {
+                              const value = event.currentTarget.valueAsNumber;
+                              if (Number.isFinite(value)) {
+                                chat.setImageGenerationParameters({
+                                  outputCompression: Math.min(
+                                    100,
+                                    Math.max(0, value),
+                                  ),
+                                });
+                              }
+                            }}
+                            type="number"
+                            value={
+                              chat.imageGenerationParameters
+                                .outputCompression ?? 100
+                            }
+                          />
+                        ) : null}
+                        <span className="composer-image-size-hint">
+                          {chat.imageGenerationParameters.size}
+                        </span>
                       </>
                     ) : (
                       <ReasoningEffortControl
@@ -795,4 +910,18 @@ export function ChatShell() {
 
 function imageUploadError(cause: unknown, t: TFunction): string {
   return formatUserFacingError(cause, t, "imageError");
+}
+
+function resolveResolutionOptions(
+  profile: ImageGenerationProfile,
+): readonly string[] {
+  return resolveImageGenerationCapabilities(profile).resolutionTiers;
+}
+
+function resolveAspectRatioOptions(
+  profile: ImageGenerationProfile | null,
+): readonly string[] {
+  return profile
+    ? resolveImageGenerationCapabilities(profile).aspectRatios
+    : ["1:1"];
 }

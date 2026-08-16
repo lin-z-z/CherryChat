@@ -1,7 +1,9 @@
 import {
+  IMAGE_GENERATION_SIZE_MODES,
   WEB_SEARCH_PROVIDER_IDS,
   type ChatApiType,
   type ConnectionBundle,
+  type ImageGenerationSizeMode,
   type WebSearchProviderId,
 } from "@/runtime/chat/types";
 import { ChatTransportError } from "@/runtime/transport/chat-errors";
@@ -20,6 +22,8 @@ export interface PublicConfig {
   hostedWebSearchProviders: WebSearchProviderId[];
   hostedImageGenerationEnabled?: boolean;
   hostedImageGenerationModel?: string | null;
+  hostedImageGenerationProfiles?: PublicImageGenerationProfile[];
+  hostedImageGenerationDefaultProfileId?: string | null;
   imageGenerationTimeoutMs?: number;
   imageGenerationMaximumRequestBytes?: number;
   models: string[];
@@ -27,6 +31,13 @@ export interface PublicConfig {
   titleModel: string | null;
   authenticated: boolean;
   requestTimeouts: RequestTimeoutPolicy;
+}
+
+export interface PublicImageGenerationProfile {
+  id: string;
+  name: string;
+  modelId: string;
+  sizeMode: ImageGenerationSizeMode;
 }
 
 export interface ConnectionDraft {
@@ -224,6 +235,34 @@ export function parsePublicConfig(value: unknown): PublicConfig {
   if (hostedImageGenerationEnabled && !hostedImageGenerationModel) {
     throw new Error("Invalid server config");
   }
+  const hostedImageGenerationProfiles =
+    record.hostedImageGenerationProfiles === undefined
+      ? hostedImageGenerationEnabled && hostedImageGenerationModel
+        ? [
+            {
+              id: "hosted-default",
+              name: hostedImageGenerationModel,
+              modelId: hostedImageGenerationModel,
+              sizeMode: "auto" as const,
+            },
+          ]
+        : []
+      : parsePublicImageGenerationProfiles(
+          record.hostedImageGenerationProfiles,
+        );
+  const hostedImageGenerationDefaultProfileId =
+    typeof record.hostedImageGenerationDefaultProfileId === "string"
+      ? record.hostedImageGenerationDefaultProfileId
+      : (hostedImageGenerationProfiles[0]?.id ?? null);
+  if (
+    hostedImageGenerationEnabled !== hostedImageGenerationProfiles.length > 0 ||
+    (hostedImageGenerationDefaultProfileId !== null &&
+      !hostedImageGenerationProfiles.some(
+        ({ id }) => id === hostedImageGenerationDefaultProfileId,
+      ))
+  ) {
+    throw new Error("Invalid server config");
+  }
   const imageGenerationTimeoutMs =
     typeof record.imageGenerationTimeoutMs === "number" &&
     Number.isInteger(record.imageGenerationTimeoutMs) &&
@@ -244,6 +283,8 @@ export function parsePublicConfig(value: unknown): PublicConfig {
     hostedWebSearchProviders,
     hostedImageGenerationEnabled,
     hostedImageGenerationModel,
+    hostedImageGenerationProfiles,
+    hostedImageGenerationDefaultProfileId,
     imageGenerationTimeoutMs,
     imageGenerationMaximumRequestBytes,
     authenticated: record.authenticated,
@@ -256,6 +297,44 @@ export function parsePublicConfig(value: unknown): PublicConfig {
       typeof record.titleModel === "string" ? record.titleModel : null,
     requestTimeouts: { ...requestTimeouts },
   };
+}
+
+function parsePublicImageGenerationProfiles(
+  value: unknown,
+): PublicImageGenerationProfile[] {
+  if (!Array.isArray(value) || value.length > 32) {
+    throw new Error("Invalid server config");
+  }
+  const profiles = value.map((profile) => {
+    if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
+      throw new Error("Invalid server config");
+    }
+    const record = profile as Record<string, unknown>;
+    if (
+      typeof record.id !== "string" ||
+      !record.id ||
+      typeof record.name !== "string" ||
+      !record.name ||
+      typeof record.modelId !== "string" ||
+      !record.modelId ||
+      typeof record.sizeMode !== "string" ||
+      !(IMAGE_GENERATION_SIZE_MODES as readonly string[]).includes(
+        record.sizeMode,
+      )
+    ) {
+      throw new Error("Invalid server config");
+    }
+    return {
+      id: record.id,
+      name: record.name,
+      modelId: record.modelId,
+      sizeMode: record.sizeMode as ImageGenerationSizeMode,
+    };
+  });
+  if (new Set(profiles.map(({ id }) => id)).size !== profiles.length) {
+    throw new Error("Invalid server config");
+  }
+  return profiles;
 }
 
 function isWebSearchProviderId(value: unknown): value is WebSearchProviderId {

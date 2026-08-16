@@ -21,6 +21,8 @@ import {
 } from "@/runtime/tools/grok-url";
 import {
   WEB_SEARCH_PROVIDER_IDS,
+  IMAGE_GENERATION_SIZE_MODES,
+  type ImageGenerationSizeMode,
   type WebSearchProviderId,
 } from "@/runtime/chat/types";
 
@@ -51,6 +53,8 @@ const rawEnvironmentSchema = z.object({
   IMAGE_GENERATION_URL: z.string().optional(),
   IMAGE_EDIT_URL: z.string().optional(),
   IMAGE_GENERATION_MODEL: z.string().optional(),
+  IMAGE_GENERATION_PROFILES: z.string().optional(),
+  IMAGE_GENERATION_DEFAULT_PROFILE: z.string().optional(),
   IMAGE_GENERATION_TIMEOUT_SECONDS: z.string().optional(),
   IMAGE_GENERATION_MAX_REQUEST_MB: z.string().optional(),
   DISABLE_BYOK: booleanStringSchema,
@@ -91,8 +95,20 @@ export interface HostedImageGenerationConfig {
   generationUrl: string;
   editUrl: string;
   model: string;
+  profiles?: HostedImageGenerationProfileConfig[];
+  defaultProfileId?: string;
   timeoutMs: number;
   maximumRequestBytes: number;
+}
+
+export interface HostedImageGenerationProfileConfig {
+  id: string;
+  name: string;
+  apiKey: string;
+  generationUrl: string;
+  editUrl: string;
+  model: string;
+  sizeMode: ImageGenerationSizeMode;
 }
 
 export interface ServerConfig {
@@ -113,6 +129,13 @@ export interface PublicServerConfig {
   hostedWebSearchProviders: WebSearchProviderId[];
   hostedImageGenerationEnabled: boolean;
   hostedImageGenerationModel: string | null;
+  hostedImageGenerationProfiles: Array<{
+    id: string;
+    name: string;
+    modelId: string;
+    sizeMode: ImageGenerationSizeMode;
+  }>;
+  hostedImageGenerationDefaultProfileId: string | null;
   imageGenerationTimeoutMs: number;
   imageGenerationMaximumRequestBytes: number;
   models: string[];
@@ -148,6 +171,10 @@ export function parseServerConfig(
   const rawImageGenerationUrl = nonEmpty(raw.IMAGE_GENERATION_URL?.trim());
   const rawImageEditUrl = nonEmpty(raw.IMAGE_EDIT_URL?.trim());
   const imageModel = nonEmpty(raw.IMAGE_GENERATION_MODEL?.trim());
+  const rawImageProfiles = nonEmpty(raw.IMAGE_GENERATION_PROFILES?.trim());
+  const rawImageDefaultProfile = nonEmpty(
+    raw.IMAGE_GENERATION_DEFAULT_PROFILE?.trim(),
+  );
   const imageGenerationTimeoutMs = parseTimeoutMilliseconds(
     "IMAGE_GENERATION_TIMEOUT_SECONDS",
     raw.IMAGE_GENERATION_TIMEOUT_SECONDS,
@@ -236,12 +263,17 @@ export function parseServerConfig(
     rawImageEditUrl,
     imageModel,
   ].filter(Boolean).length;
-  if (imageFieldCount !== 0 && imageFieldCount !== 4) {
+  if (rawImageProfiles && imageFieldCount > 0) {
+    throw new ServerConfigurationError(
+      "IMAGE_GENERATION_PROFILES cannot be combined with legacy image environment variables",
+    );
+  }
+  if (!rawImageProfiles && imageFieldCount !== 0 && imageFieldCount !== 4) {
     throw new ServerConfigurationError(
       "IMAGE_GENERATION_API_KEY, IMAGE_GENERATION_URL, IMAGE_EDIT_URL and IMAGE_GENERATION_MODEL must be configured together",
     );
   }
-  if (imageFieldCount > 0 && hostedFieldCount !== 3) {
+  if ((imageFieldCount > 0 || rawImageProfiles) && hostedFieldCount !== 3) {
     throw new ServerConfigurationError(
       "Hosted image generation requires a complete hosted-mode configuration",
     );
@@ -293,6 +325,19 @@ export function parseServerConfig(
   const imageEditUrl = rawImageEditUrl
     ? normalizeServerImageEndpoint(rawImageEditUrl, "IMAGE_EDIT_URL")
     : null;
+  const imageProfiles = buildHostedImageGenerationProfiles({
+    rawProfiles: rawImageProfiles,
+    defaultProfileId: rawImageDefaultProfile,
+    legacy:
+      imageApiKey && imageGenerationUrl && imageEditUrl && imageModel
+        ? {
+            apiKey: imageApiKey,
+            generationUrl: imageGenerationUrl,
+            editUrl: imageEditUrl,
+            model: imageModel,
+          }
+        : null,
+  });
   if (hostedFieldCount === 3) {
     assertHostedUpstreamSecurity(
       baseUrl,
@@ -324,23 +369,24 @@ export function parseServerConfig(
         raw.ALLOW_INSECURE_LOCAL_UPSTREAM,
       );
     }
-    if (imageGenerationUrl) {
+    for (const profile of imageProfiles?.profiles ?? []) {
       assertHostedUpstreamSecurity(
-        imageGenerationUrl,
+        profile.generationUrl,
         "IMAGE_GENERATION_URL",
         raw.NODE_ENV === "production",
         raw.ALLOW_INSECURE_LOCAL_UPSTREAM,
       );
-    }
-    if (imageEditUrl) {
       assertHostedUpstreamSecurity(
-        imageEditUrl,
+        profile.editUrl,
         "IMAGE_EDIT_URL",
         raw.NODE_ENV === "production",
         raw.ALLOW_INSECURE_LOCAL_UPSTREAM,
       );
     }
   }
+  const defaultImageProfile = imageProfiles?.profiles.find(
+    ({ id }) => id === imageProfiles.defaultProfileId,
+  );
 
   return {
     baseUrl,
@@ -355,17 +401,18 @@ export function parseServerConfig(
             accessCodes,
             authSecret,
             webSearch,
-            imageGeneration:
-              imageApiKey && imageGenerationUrl && imageEditUrl && imageModel
-                ? {
-                    apiKey: imageApiKey,
-                    generationUrl: imageGenerationUrl,
-                    editUrl: imageEditUrl,
-                    model: imageModel,
-                    timeoutMs: imageGenerationTimeoutMs,
-                    maximumRequestBytes: imageGenerationMaximumRequestBytes,
-                  }
-                : null,
+            imageGeneration: imageProfiles
+              ? {
+                  apiKey: defaultImageProfile?.apiKey ?? "",
+                  generationUrl: defaultImageProfile?.generationUrl ?? "",
+                  editUrl: defaultImageProfile?.editUrl ?? "",
+                  model: defaultImageProfile?.model ?? "",
+                  profiles: imageProfiles.profiles,
+                  defaultProfileId: imageProfiles.defaultProfileId,
+                  timeoutMs: imageGenerationTimeoutMs,
+                  maximumRequestBytes: imageGenerationMaximumRequestBytes,
+                }
+              : null,
           }
         : null,
     requestTimeouts,
@@ -377,6 +424,7 @@ export function getServerConfig(): ServerConfig {
 }
 
 export function toPublicServerConfig(config: ServerConfig): PublicServerConfig {
+  const imageProfiles = config.hosted?.imageGeneration?.profiles ?? [];
   return {
     byokEnabled: !config.disableByok,
     hostedEnabled: config.hosted !== null,
@@ -386,6 +434,16 @@ export function toPublicServerConfig(config: ServerConfig): PublicServerConfig {
       config.hosted?.webSearch?.providers.map(({ provider }) => provider) ?? [],
     hostedImageGenerationEnabled: Boolean(config.hosted?.imageGeneration),
     hostedImageGenerationModel: config.hosted?.imageGeneration?.model ?? null,
+    hostedImageGenerationProfiles: imageProfiles.map(
+      ({ id, name, model: modelId, sizeMode }) => ({
+        id,
+        name,
+        modelId,
+        sizeMode,
+      }),
+    ),
+    hostedImageGenerationDefaultProfileId:
+      config.hosted?.imageGeneration?.defaultProfileId ?? null,
     imageGenerationTimeoutMs:
       config.hosted?.imageGeneration?.timeoutMs ?? 120_000,
     imageGenerationMaximumRequestBytes:
@@ -472,6 +530,137 @@ function normalizeServerImageEndpoint(value: string, name: string): string {
   return url.toString().replace(/\/$/u, "");
 }
 
+function buildHostedImageGenerationProfiles(input: {
+  rawProfiles: string | undefined;
+  defaultProfileId: string | undefined;
+  legacy: {
+    apiKey: string;
+    generationUrl: string;
+    editUrl: string;
+    model: string;
+  } | null;
+}): {
+  profiles: HostedImageGenerationProfileConfig[];
+  defaultProfileId: string;
+} | null {
+  if (!input.rawProfiles && !input.legacy) return null;
+  const rawProfiles = input.rawProfiles
+    ? parseImageGenerationProfilesJson(input.rawProfiles)
+    : [
+        {
+          id: "default-gpt-image-2",
+          name: input.legacy?.model ?? "GPT Image 2",
+          apiKey: input.legacy?.apiKey ?? "",
+          generationUrl: input.legacy?.generationUrl ?? "",
+          editUrl: input.legacy?.editUrl ?? "",
+          model: input.legacy?.model ?? "",
+          sizeMode: "auto" as const,
+        },
+      ];
+  if (rawProfiles.length === 0 || rawProfiles.length > 32) {
+    throw new ServerConfigurationError(
+      "IMAGE_GENERATION_PROFILES must contain from 1 through 32 profiles",
+    );
+  }
+  const profiles = rawProfiles.map((profile, index) => {
+    const id = profile.id.normalize("NFKC").trim();
+    const name = profile.name.normalize("NFKC").trim();
+    const apiKey = profile.apiKey.trim();
+    const model = profile.model.normalize("NFKC").trim();
+    if (!id || id.length > 128 || !name || name.length > 100) {
+      throw new ServerConfigurationError(
+        `IMAGE_GENERATION_PROFILES[${index}] has an invalid id or name`,
+      );
+    }
+    if (apiKey.length < 8 || apiKey.length > 2_048) {
+      throw new ServerConfigurationError(
+        `IMAGE_GENERATION_PROFILES[${index}].apiKey must contain from 8 through 2048 characters`,
+      );
+    }
+    if (!model || model.length > 512) {
+      throw new ServerConfigurationError(
+        `IMAGE_GENERATION_PROFILES[${index}].model is invalid`,
+      );
+    }
+    if (
+      !(IMAGE_GENERATION_SIZE_MODES as readonly string[]).includes(
+        profile.sizeMode,
+      )
+    ) {
+      throw new ServerConfigurationError(
+        `IMAGE_GENERATION_PROFILES[${index}].sizeMode is invalid`,
+      );
+    }
+    return {
+      id,
+      name,
+      apiKey,
+      generationUrl: normalizeServerImageEndpoint(
+        profile.generationUrl,
+        "IMAGE_GENERATION_URL",
+      ),
+      editUrl: normalizeServerImageEndpoint(profile.editUrl, "IMAGE_EDIT_URL"),
+      model,
+      sizeMode: profile.sizeMode,
+    } satisfies HostedImageGenerationProfileConfig;
+  });
+  if (new Set(profiles.map(({ id }) => id)).size !== profiles.length) {
+    throw new ServerConfigurationError(
+      "IMAGE_GENERATION_PROFILES must use unique ids",
+    );
+  }
+  const defaultProfileId =
+    input.defaultProfileId?.normalize("NFKC").trim() ?? profiles[0]?.id;
+  if (
+    !defaultProfileId ||
+    !profiles.some(({ id }) => id === defaultProfileId)
+  ) {
+    throw new ServerConfigurationError(
+      "IMAGE_GENERATION_DEFAULT_PROFILE must match a configured profile",
+    );
+  }
+  return { profiles, defaultProfileId };
+}
+
+function parseImageGenerationProfilesJson(value: string): Array<{
+  id: string;
+  name: string;
+  apiKey: string;
+  generationUrl: string;
+  editUrl: string;
+  model: string;
+  sizeMode: ImageGenerationSizeMode;
+}> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new ServerConfigurationError(
+      "IMAGE_GENERATION_PROFILES must be valid JSON",
+    );
+  }
+  const schema = z.array(
+    z
+      .object({
+        id: z.string(),
+        name: z.string(),
+        apiKey: z.string(),
+        generationUrl: z.string(),
+        editUrl: z.string(),
+        model: z.string(),
+        sizeMode: z.enum(IMAGE_GENERATION_SIZE_MODES).default("auto"),
+      })
+      .strict(),
+  );
+  const result = schema.safeParse(parsed);
+  if (!result.success) {
+    throw new ServerConfigurationError(
+      "IMAGE_GENERATION_PROFILES contains an invalid profile",
+    );
+  }
+  return result.data;
+}
+
 function assertHostedUpstreamSecurity(
   value: string,
   name:
@@ -480,7 +669,8 @@ function assertHostedUpstreamSecurity(
     | "EXA_BASE_URL"
     | "GROK_RESPONSES_URL"
     | "IMAGE_GENERATION_URL"
-    | "IMAGE_EDIT_URL",
+    | "IMAGE_EDIT_URL"
+    | string,
   production: boolean,
   allowInsecureLocalUpstream: boolean,
 ): void {

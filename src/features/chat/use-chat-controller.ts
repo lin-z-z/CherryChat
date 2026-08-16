@@ -46,7 +46,9 @@ import type {
   ConversationRecord,
   EffectiveModelCapability,
   ImageGenerationConfiguration,
+  ImageGenerationParameters,
   ImageGenerationPart,
+  ImageGenerationProfile,
   ImageGenerationSaveInput,
   MessageNode,
   ModelDescriptor,
@@ -113,7 +115,15 @@ import { StorageError } from "@/storage/errors";
 import { ModelCapabilityRepository } from "@/storage/model-capability-repository";
 import { MessageStreamPersistence } from "@/storage/stream-persistence";
 import { ModelListCacheRepository } from "@/storage/model-list-cache-repository";
-import { ImageGenerationRepository } from "@/storage/image-generation-repository";
+import {
+  createDefaultImageGenerationConfiguration,
+  ImageGenerationRepository,
+} from "@/storage/image-generation-repository";
+import {
+  DEFAULT_IMAGE_GENERATION_PARAMETERS,
+  normalizeImageGenerationParameters,
+  parametersFromLegacySize,
+} from "@/runtime/image-generation/image-generation-options";
 import {
   WebSearchRepository,
   type WebSearchSaveInput,
@@ -238,16 +248,39 @@ export function useChatController() {
     });
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [imageGenerationConfig, setImageGenerationConfig] =
-    useState<ImageGenerationConfiguration>({
-      generationUrl: "https://api.openai.com/v1/images/generations",
-      editUrl: "https://api.openai.com/v1/images/edits",
-      apiKey: "",
-      modelId: "gpt-image-1.5",
-      size: "1024x1024",
-      quality: "auto",
-      hasApiKey: false,
-    });
+    useState<ImageGenerationConfiguration>(
+      createDefaultImageGenerationConfiguration,
+    );
   const [composerMode, setComposerMode] = useState<"chat" | "image">("chat");
+  const imageGenerationProfiles = resolveImageGenerationProfiles(
+    connection.mode,
+    imageGenerationConfig,
+    publicConfig,
+  );
+  const activeImageGenerationProfile =
+    imageGenerationProfiles.find(
+      ({ id }) =>
+        id ===
+        (connection.mode === "hosted"
+          ? imageGenerationConfig.activeHostedProfileId
+          : imageGenerationConfig.activeProfileId),
+    ) ??
+    (connection.mode === "hosted"
+      ? imageGenerationProfiles.find(
+          ({ id }) =>
+            id === publicConfig?.hostedImageGenerationDefaultProfileId,
+        )
+      : null) ??
+    imageGenerationProfiles[0] ??
+    null;
+  const activeImageGenerationParameters = activeImageGenerationProfile
+    ? normalizeImageGenerationParameters(
+        imageGenerationConfig.parametersByProfile[
+          activeImageGenerationProfile.id
+        ] ?? DEFAULT_IMAGE_GENERATION_PARAMETERS,
+        activeImageGenerationProfile,
+      )
+    : DEFAULT_IMAGE_GENERATION_PARAMETERS;
   const [capability, setCapability] = useState<EffectiveModelCapability | null>(
     null,
   );
@@ -988,18 +1021,80 @@ export function useChatController() {
     [requireServices],
   );
 
-  const setImageGenerationSize = useCallback(
-    (size: ImageGenerationConfiguration["size"]) => {
-      setImageGenerationConfig((current) => ({ ...current, size }));
+  const selectImageGenerationProfile = useCallback(
+    async (profileId: string) => {
+      const mode = connectionRef.current.mode;
+      const profiles = resolveImageGenerationProfiles(
+        mode,
+        imageGenerationConfig,
+        publicConfig,
+      );
+      if (!profiles.some(({ id }) => id === profileId)) {
+        throw new ChatTransportError(
+          "INVALID_REQUEST",
+          "Image generation profile is unavailable",
+          null,
+        );
+      }
+      const saved =
+        mode === "hosted"
+          ? await requireServices().imageGeneration.selectHostedProfile(
+              profileId,
+            )
+          : await requireServices().imageGeneration.selectProfile(profileId);
+      setImageGenerationConfig(saved);
+      return saved;
     },
-    [],
+    [imageGenerationConfig, publicConfig, requireServices],
+  );
+
+  const updateImageGenerationParameters = useCallback(
+    (patch: Partial<ImageGenerationParameters>) => {
+      if (!activeImageGenerationProfile) return;
+      setImageGenerationConfig((current) => {
+        const currentParameters =
+          current.parametersByProfile[activeImageGenerationProfile.id] ??
+          DEFAULT_IMAGE_GENERATION_PARAMETERS;
+        const parameters = normalizeImageGenerationParameters(
+          { ...currentParameters, ...patch },
+          activeImageGenerationProfile,
+        );
+        return {
+          ...current,
+          parametersByProfile: {
+            ...current.parametersByProfile,
+            [activeImageGenerationProfile.id]: parameters,
+          },
+        };
+      });
+    },
+    [activeImageGenerationProfile],
+  );
+
+  const setImageGenerationSize = useCallback(
+    (size: ImageGenerationParameters["size"]) => {
+      if (!activeImageGenerationProfile) return;
+      updateImageGenerationParameters(
+        parametersFromLegacySize(size, activeImageGenerationParameters.quality),
+      );
+    },
+    [
+      activeImageGenerationParameters.quality,
+      activeImageGenerationProfile,
+      updateImageGenerationParameters,
+    ],
   );
 
   const setImageGenerationQuality = useCallback(
-    (quality: ImageGenerationConfiguration["quality"]) => {
-      setImageGenerationConfig((current) => ({ ...current, quality }));
-    },
-    [],
+    (quality: ImageGenerationParameters["quality"]) =>
+      updateImageGenerationParameters({ quality }),
+    [updateImageGenerationParameters],
+  );
+
+  const setImageGenerationParameters = useCallback(
+    (patch: Partial<ImageGenerationParameters>) =>
+      updateImageGenerationParameters(patch),
+    [updateImageGenerationParameters],
   );
 
   const createHostedWebSearchUnauthorizedHandler = useCallback(() => {
@@ -1469,10 +1564,20 @@ export function useChatController() {
     ) => {
       const services = requireServices();
       const mode = connectionRef.current.mode;
-      const currentScope = imageGenerationConnectionScope(
+      const profile = findImageGenerationProfileForSnapshot(
         mode,
+        snapshot,
         imageGenerationConfig,
+        publicConfig,
       );
+      if (!profile) {
+        throw new ChatTransportError(
+          "UPSTREAM_NOT_FOUND",
+          "The image generation profile is unavailable",
+          null,
+        );
+      }
+      const currentScope = imageGenerationConnectionScope(mode, profile);
       if (snapshot.connectionScope !== currentScope) {
         throw new ChatTransportError(
           "INVALID_REQUEST",
@@ -1481,17 +1586,14 @@ export function useChatController() {
         );
       }
       if (mode === "hosted") {
-        if (
-          !publicConfig?.hostedImageGenerationEnabled ||
-          !publicConfig.hostedImageGenerationModel
-        ) {
+        if (!publicConfig?.hostedImageGenerationEnabled) {
           throw new ChatTransportError(
             "UPSTREAM_NOT_FOUND",
             "Hosted image generation is unavailable",
             null,
           );
         }
-      } else if (!imageGenerationConfig.apiKey.trim()) {
+      } else if (!profile.apiKey.trim()) {
         throw new ChatTransportError(
           "UNAUTHORIZED",
           "An image generation API key is required",
@@ -1561,9 +1663,9 @@ export function useChatController() {
         const transport = new OpenAICompatibleImageTransport({
           endpoint: {
             mode,
-            generationUrl: imageGenerationConfig.generationUrl,
-            editUrl: imageGenerationConfig.editUrl,
-            apiKey: imageGenerationConfig.apiKey,
+            generationUrl: profile.generationUrl,
+            editUrl: profile.editUrl,
+            apiKey: profile.apiKey,
           },
         });
         const result = await transport.generate(
@@ -1573,6 +1675,13 @@ export function useChatController() {
             size: snapshot.size,
             quality: snapshot.quality,
             references,
+            ...(snapshot.profileId ? { profileId: snapshot.profileId } : {}),
+            ...(snapshot.outputFormat
+              ? { outputFormat: snapshot.outputFormat }
+              : {}),
+            ...(snapshot.outputCompression !== undefined
+              ? { outputCompression: snapshot.outputCompression }
+              : {}),
           },
           controller.signal,
         );
@@ -1645,26 +1754,30 @@ export function useChatController() {
           false,
         );
       }
-      const modelId =
-        mode === "hosted"
-          ? publicConfig?.hostedImageGenerationModel
-          : imageGenerationConfig.modelId;
-      if (!modelId) {
+      const profile = activeImageGenerationProfile;
+      if (!profile) {
         throw new ChatTransportError(
           "UPSTREAM_NOT_FOUND",
           "Image generation is unavailable",
           null,
         );
       }
+      const parameters = activeImageGenerationParameters;
+      const savedImageConfiguration =
+        await services.imageGeneration.saveParameters(profile, parameters);
+      setImageGenerationConfig(savedImageConfiguration);
       const snapshot: ImageGenerationPart = {
         type: "image_generation",
-        modelId,
-        connectionScope: imageGenerationConnectionScope(
-          mode,
-          imageGenerationConfig,
-        ),
-        size: imageGenerationConfig.size,
-        quality: imageGenerationConfig.quality,
+        profileId: profile.id,
+        profileName: profile.name,
+        modelId: profile.modelId,
+        connectionScope: imageGenerationConnectionScope(mode, profile),
+        resolutionTier: parameters.resolutionTier,
+        aspectRatio: parameters.aspectRatio,
+        size: parameters.size,
+        quality: parameters.quality,
+        outputFormat: parameters.outputFormat,
+        outputCompression: parameters.outputCompression,
         referenceAttachmentIds: imageReferences.map(({ id }) => id),
       };
       const user = await services.conversations.appendMessage(
@@ -1707,10 +1820,10 @@ export function useChatController() {
     createConversation,
     currentConversation,
     draft,
-    imageGenerationConfig,
+    activeImageGenerationParameters,
+    activeImageGenerationProfile,
     imageReferences,
     path.length,
-    publicConfig,
     requireServices,
     runImageGeneration,
   ]);
@@ -2539,6 +2652,9 @@ export function useChatController() {
     models,
     webSearchConfig,
     imageGenerationConfig,
+    imageGenerationProfiles,
+    activeImageGenerationProfile,
+    imageGenerationParameters: activeImageGenerationParameters,
     composerMode,
     setComposerMode,
     webSearchSource: webSearchSource?.kind ?? null,
@@ -2588,6 +2704,8 @@ export function useChatController() {
     refreshModels,
     saveWebSearchSettings,
     saveImageGenerationSettings,
+    selectImageGenerationProfile,
+    setImageGenerationParameters,
     setImageGenerationSize,
     setImageGenerationQuality,
     testWebSearch,
@@ -2660,13 +2778,46 @@ function webSearchConfigurationFromSaveInput(
   };
 }
 
-function imageGenerationConnectionScope(
+function resolveImageGenerationProfiles(
   mode: ConnectionDraft["mode"],
   config: ImageGenerationConfiguration,
+  publicConfig: PublicConfig | null,
+): ImageGenerationProfile[] {
+  if (mode === "byok") return config.profiles;
+  return (publicConfig?.hostedImageGenerationProfiles ?? []).map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+    mode: "hosted" as const,
+    generationUrl: "",
+    editUrl: "",
+    apiKey: "",
+    modelId: profile.modelId,
+    sizeMode: profile.sizeMode,
+    hasApiKey: true,
+  }));
+}
+
+function findImageGenerationProfileForSnapshot(
+  mode: ConnectionDraft["mode"],
+  snapshot: ImageGenerationPart,
+  config: ImageGenerationConfiguration,
+  publicConfig: PublicConfig | null,
+): ImageGenerationProfile | null {
+  const profiles = resolveImageGenerationProfiles(mode, config, publicConfig);
+  return (
+    (snapshot.profileId
+      ? profiles.find(({ id }) => id === snapshot.profileId)
+      : profiles.find(({ modelId }) => modelId === snapshot.modelId)) ?? null
+  );
+}
+
+function imageGenerationConnectionScope(
+  mode: ConnectionDraft["mode"],
+  profile: ImageGenerationProfile,
 ): string {
   return mode === "hosted"
     ? "image:hosted:same-origin"
-    : `image:byok:${config.generationUrl}\n${config.editUrl}`;
+    : `image:byok:${profile.id}\n${profile.generationUrl}\n${profile.editUrl}`;
 }
 
 function imageGenerationMaximumRequestBytes(

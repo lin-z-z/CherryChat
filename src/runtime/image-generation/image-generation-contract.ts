@@ -4,12 +4,14 @@ import { inspectImageMetadata } from "@/runtime/attachments/image-metadata";
 import { sha256Blob } from "@/runtime/attachments/blob-utils";
 import type { ProcessedImage } from "@/runtime/attachments/image-processor";
 import {
+  IMAGE_GENERATION_OUTPUT_FORMATS,
   IMAGE_GENERATION_QUALITIES,
-  IMAGE_GENERATION_SIZES,
   type AttachmentRecord,
+  type ImageGenerationOutputFormat,
   type ImageGenerationQuality,
   type ImageGenerationSize,
 } from "@/runtime/chat/types";
+import { isValidImageGenerationSize } from "@/runtime/image-generation/image-generation-options";
 import { ChatTransportError } from "@/runtime/transport/chat-errors";
 
 export const MAX_IMAGE_GENERATION_REFERENCES = 16;
@@ -18,13 +20,16 @@ export const MAX_IMAGE_GENERATION_RESPONSE_BYTES = 32 * 1024 * 1024;
 export const DEFAULT_IMAGE_GENERATION_URL =
   "https://api.openai.com/v1/images/generations";
 export const DEFAULT_IMAGE_EDIT_URL = "https://api.openai.com/v1/images/edits";
-export const DEFAULT_IMAGE_GENERATION_MODEL = "gpt-image-1.5";
+export const DEFAULT_IMAGE_GENERATION_MODEL = "gpt-image-2";
 
 export interface ImageGenerationRequest {
+  profileId?: string;
   modelId: string;
   prompt: string;
   size: ImageGenerationSize;
   quality: ImageGenerationQuality;
+  outputFormat?: ImageGenerationOutputFormat;
+  outputCompression?: number | null;
   references: readonly AttachmentRecord[];
 }
 
@@ -40,15 +45,28 @@ export interface ImageGenerationEndpoint {
   mode: "byok" | "hosted";
 }
 
+const imageGenerationRequestShape = {
+  model: z.string().trim().min(1).max(512),
+  prompt: z.string().trim().min(1).max(32_000),
+  size: z.string().refine(isValidImageGenerationSize),
+  quality: z.enum(IMAGE_GENERATION_QUALITIES),
+  output_format: z.enum(IMAGE_GENERATION_OUTPUT_FORMATS).default("png"),
+  output_compression: z.number().int().min(0).max(100).optional(),
+  n: z.literal(1),
+};
+
 export const imageGenerationRequestSchema = z
+  .object(imageGenerationRequestShape)
+  .strict()
+  .superRefine(validateOutputCompression);
+
+export const hostedImageGenerationRequestSchema = z
   .object({
-    model: z.string().trim().min(1).max(512),
-    prompt: z.string().trim().min(1).max(32_000),
-    size: z.enum(IMAGE_GENERATION_SIZES),
-    quality: z.enum(IMAGE_GENERATION_QUALITIES),
-    n: z.literal(1),
+    ...imageGenerationRequestShape,
+    profileId: z.string().trim().min(1).max(128).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(validateOutputCompression);
 
 export const imageGenerationResponseSchema = z
   .object({
@@ -139,4 +157,20 @@ export async function generatedBlobToProcessedImage(
     byteSize: normalized.size,
     sha256: await sha256Blob(normalized),
   };
+}
+
+function validateOutputCompression(
+  value: {
+    output_format: ImageGenerationOutputFormat;
+    output_compression?: number | undefined;
+  },
+  context: z.RefinementCtx,
+): void {
+  if (value.output_format === "png" && value.output_compression !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["output_compression"],
+      message: "PNG output does not support output compression",
+    });
+  }
 }

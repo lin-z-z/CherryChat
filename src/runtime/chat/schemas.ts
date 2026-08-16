@@ -3,12 +3,15 @@ import { z } from "zod";
 import {
   ASSISTANT_ICONS,
   CHAT_API_TYPES,
+  IMAGE_GENERATION_ASPECT_RATIOS,
   IMAGE_GENERATION_QUALITIES,
-  IMAGE_GENERATION_SIZES,
+  IMAGE_GENERATION_OUTPUT_FORMATS,
+  IMAGE_GENERATION_RESOLUTION_TIERS,
   REASONING_EFFORTS,
   type JsonValue,
   type OpenAIChatReasoningContextPart,
 } from "@/runtime/chat/types";
+import { isValidImageGenerationSize } from "@/runtime/image-generation/image-generation-options";
 import { CHAT_ERROR_CODES } from "@/runtime/transport/chat-errors";
 import { MAX_MODEL_LIST_ITEMS } from "@/runtime/transport/response-reader";
 
@@ -178,8 +181,14 @@ const visibleMessagePartSchema = z.discriminatedUnion("type", [
       type: z.literal("image_generation"),
       modelId: z.string().trim().min(1).max(512),
       connectionScope: z.string().min(1).max(8_192),
-      size: z.enum(IMAGE_GENERATION_SIZES),
+      size: z.string().refine(isValidImageGenerationSize),
       quality: z.enum(IMAGE_GENERATION_QUALITIES),
+      profileId: z.string().trim().min(1).max(128).optional(),
+      profileName: z.string().trim().min(1).max(100).optional(),
+      resolutionTier: z.enum(IMAGE_GENERATION_RESOLUTION_TIERS).optional(),
+      aspectRatio: z.enum(IMAGE_GENERATION_ASPECT_RATIOS).optional(),
+      outputFormat: z.enum(IMAGE_GENERATION_OUTPUT_FORMATS).optional(),
+      outputCompression: z.number().int().min(0).max(100).nullable().optional(),
       referenceAttachmentIds: z
         .array(z.string().min(1).max(128))
         .max(16)
