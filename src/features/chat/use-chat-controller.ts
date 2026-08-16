@@ -26,8 +26,13 @@ import {
 } from "@/features/chat/chat-controller-projections";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { ImageProcessor } from "@/runtime/attachments/image-processor";
+import { ImageReferenceProcessor } from "@/runtime/image-generation/image-reference-processor";
+import { DEFAULT_IMAGE_REFERENCE_MAX_REQUEST_BYTES } from "@/runtime/image-generation/image-reference-processor";
+import { MAX_IMAGE_GENERATION_REFERENCES } from "@/runtime/image-generation/image-generation-contract";
+import { OpenAICompatibleImageTransport } from "@/runtime/image-generation/openai-compatible-image-transport";
 import type { ConversationExportProjection } from "@/runtime/chat/export-projection";
 import { buildChatCompletionsRequest } from "@/runtime/chat/request-builder";
+import { textFromMessage } from "@/runtime/chat/projections";
 import {
   buildTitleRequest,
   parseGeneratedTitle,
@@ -40,6 +45,9 @@ import type {
   AttachmentRecord,
   ConversationRecord,
   EffectiveModelCapability,
+  ImageGenerationConfiguration,
+  ImageGenerationPart,
+  ImageGenerationSaveInput,
   MessageNode,
   ModelDescriptor,
   ModelCapabilityOverride,
@@ -101,9 +109,11 @@ import {
 import { ConversationRepository } from "@/storage/conversation-repository";
 import { clearLocalData } from "@/storage/clear-local-data";
 import { ChatDatabase } from "@/storage/database";
+import { StorageError } from "@/storage/errors";
 import { ModelCapabilityRepository } from "@/storage/model-capability-repository";
 import { MessageStreamPersistence } from "@/storage/stream-persistence";
 import { ModelListCacheRepository } from "@/storage/model-list-cache-repository";
+import { ImageGenerationRepository } from "@/storage/image-generation-repository";
 import {
   WebSearchRepository,
   type WebSearchSaveInput,
@@ -136,10 +146,20 @@ interface Services {
   attachments: AttachmentRepository;
   objectUrls: ObjectUrlRegistry;
   imageProcessor: ImageProcessor;
+  imageReferenceProcessor: ImageReferenceProcessor;
+  imageGeneration: ImageGenerationRepository;
   webSearch: WebSearchRepository;
 }
 
 interface ActiveGenerationHandle {
+  id: string;
+  conversationId: string;
+  assistantMessageId: string;
+  controller: AbortController;
+  completion: Promise<void>;
+}
+
+interface ActiveImageGenerationHandle {
   id: string;
   conversationId: string;
   assistantMessageId: string;
@@ -159,8 +179,12 @@ export function useChatController() {
   const translateRef = useRef(t);
   const servicesRef = useRef<Services | null>(null);
   const activeGenerationRef = useRef<ActiveGenerationHandle | null>(null);
+  const activeImageGenerationRef = useRef<ActiveImageGenerationHandle | null>(
+    null,
+  );
   const generationPreparationRef = useRef<GenerationPreparation | null>(null);
   const generationStartingRef = useRef(false);
+  const imageGenerationStartingRef = useRef(false);
   const currentConversationIdRef = useRef<string | null>(null);
   const connectionRef = useRef<ConnectionDraft>(EMPTY_CONNECTION);
   const requestTimeoutsRef = useRef<RequestTimeoutPolicy>(
@@ -213,6 +237,17 @@ export function useChatController() {
       hasApiKey: false,
     });
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [imageGenerationConfig, setImageGenerationConfig] =
+    useState<ImageGenerationConfiguration>({
+      generationUrl: "https://api.openai.com/v1/images/generations",
+      editUrl: "https://api.openai.com/v1/images/edits",
+      apiKey: "",
+      modelId: "gpt-image-1.5",
+      size: "1024x1024",
+      quality: "auto",
+      hasApiKey: false,
+    });
+  const [composerMode, setComposerMode] = useState<"chat" | "image">("chat");
   const [capability, setCapability] = useState<EffectiveModelCapability | null>(
     null,
   );
@@ -235,12 +270,21 @@ export function useChatController() {
   const [pendingAttachments, setPendingAttachments] = useState<
     AttachmentRecord[]
   >([]);
+  const [imageReferences, setImageReferences] = useState<AttachmentRecord[]>(
+    [],
+  );
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>(
     {},
   );
   const [activeGeneration, setActiveGeneration] =
     useState<ActiveGenerationProjection | null>(null);
   const [generationStarting, setGenerationStarting] = useState(false);
+  const [imageGenerationStarting, setImageGenerationStarting] = useState(false);
+  const [activeImageGeneration, setActiveImageGeneration] = useState<{
+    id: string;
+    conversationId: string;
+    assistantMessageId: string;
+  } | null>(null);
   const stream = activeGeneration?.snapshot ?? null;
   const [contextStats, setContextStats] = useState<Pick<
     SelectedContext,
@@ -298,6 +342,7 @@ export function useChatController() {
     setPath([]);
     setAllMessages([]);
     setPendingAttachments([]);
+    setImageReferences([]);
     setAttachmentUrls({});
     setContextStats(null);
     webSearchEnabledRef.current = false;
@@ -493,6 +538,8 @@ export function useChatController() {
           attachments: new AttachmentRepository(database),
           objectUrls,
           imageProcessor: new ImageProcessor(),
+          imageReferenceProcessor: new ImageReferenceProcessor(),
+          imageGeneration: new ImageGenerationRepository(database),
           webSearch: new WebSearchRepository(database),
         };
         activeServices = services;
@@ -509,6 +556,7 @@ export function useChatController() {
           active,
           archived,
           nextAssistants,
+          nextImageGenerationConfig,
         ] = await Promise.all([
           publicConfigPromise,
           services.connections.load(),
@@ -517,6 +565,7 @@ export function useChatController() {
           services.conversations.listConversations(false),
           services.conversations.listConversations(true),
           services.assistants.list(),
+          services.imageGeneration.load(),
         ]);
         requestTimeoutsRef.current = config.requestTimeouts;
         const {
@@ -568,6 +617,7 @@ export function useChatController() {
         setAvailableModels(initialAvailableModels);
         setModels(initialModelProjection.models);
         setWebSearchConfig(nextWebSearchConfig);
+        setImageGenerationConfig(nextImageGenerationConfig);
         setConversations(active);
         setArchivedConversations(archived);
         setAssistants(nextAssistants);
@@ -585,6 +635,7 @@ export function useChatController() {
       disposed = true;
       generationPreparationRef.current?.controller.abort();
       activeGenerationRef.current?.controller.abort();
+      activeImageGenerationRef.current?.controller.abort();
       activeServices?.objectUrls.dispose();
       activeServices?.database.close();
       servicesRef.current = null;
@@ -928,6 +979,29 @@ export function useChatController() {
     [publicConfig, requireServices],
   );
 
+  const saveImageGenerationSettings = useCallback(
+    async (input: ImageGenerationSaveInput) => {
+      const saved = await requireServices().imageGeneration.save(input);
+      setImageGenerationConfig(saved);
+      return saved;
+    },
+    [requireServices],
+  );
+
+  const setImageGenerationSize = useCallback(
+    (size: ImageGenerationConfiguration["size"]) => {
+      setImageGenerationConfig((current) => ({ ...current, size }));
+    },
+    [],
+  );
+
+  const setImageGenerationQuality = useCallback(
+    (quality: ImageGenerationConfiguration["quality"]) => {
+      setImageGenerationConfig((current) => ({ ...current, quality }));
+    },
+    [],
+  );
+
   const createHostedWebSearchUnauthorizedHandler = useCallback(() => {
     const requestEpoch = hostedAuthEpochRef.current;
     return () => {
@@ -1028,12 +1102,38 @@ export function useChatController() {
     [],
   );
 
+  const settleActiveImageGeneration = useCallback(
+    async (conversationId?: string) => {
+      const active = activeImageGenerationRef.current;
+      if (
+        !active ||
+        (conversationId !== undefined &&
+          active.conversationId !== conversationId)
+      ) {
+        return;
+      }
+      active.controller.abort();
+      await active.completion;
+    },
+    [],
+  );
+
+  const settleAllGeneration = useCallback(
+    async (conversationId?: string) => {
+      await Promise.all([
+        settleActiveGeneration(conversationId),
+        settleActiveImageGeneration(conversationId),
+      ]);
+    },
+    [settleActiveGeneration, settleActiveImageGeneration],
+  );
+
   const selectAssistant = useCallback(
     async (assistantId: string) => {
       if (currentConversation?.assistantId === assistantId) {
         return currentConversation;
       }
-      await settleActiveGeneration();
+      await settleAllGeneration();
       const services = requireServices();
       const assistant = await services.assistants.get(assistantId);
       const binding = {
@@ -1059,7 +1159,7 @@ export function useChatController() {
       loadConversation,
       refreshLists,
       requireServices,
-      settleActiveGeneration,
+      settleAllGeneration,
     ],
   );
 
@@ -1359,11 +1459,273 @@ export function useChatController() {
     [buildTransport, connection, refreshLists, requireServices, titleModel],
   );
 
+  const runImageGeneration = useCallback(
+    async (
+      conversationRecord: ConversationRecord,
+      user: MessageNode,
+      historyPath: readonly MessageNode[],
+      snapshot: ImageGenerationPart,
+      versionOfAssistantId: string | null,
+    ) => {
+      const services = requireServices();
+      const mode = connectionRef.current.mode;
+      const currentScope = imageGenerationConnectionScope(
+        mode,
+        imageGenerationConfig,
+      );
+      if (snapshot.connectionScope !== currentScope) {
+        throw new ChatTransportError(
+          "INVALID_REQUEST",
+          "The image generation connection has changed",
+          null,
+        );
+      }
+      if (mode === "hosted") {
+        if (
+          !publicConfig?.hostedImageGenerationEnabled ||
+          !publicConfig.hostedImageGenerationModel
+        ) {
+          throw new ChatTransportError(
+            "UPSTREAM_NOT_FOUND",
+            "Hosted image generation is unavailable",
+            null,
+          );
+        }
+      } else if (!imageGenerationConfig.apiKey.trim()) {
+        throw new ChatTransportError(
+          "UNAUTHORIZED",
+          "An image generation API key is required",
+          null,
+        );
+      }
+
+      const references: AttachmentRecord[] = [];
+      for (const attachmentId of snapshot.referenceAttachmentIds) {
+        const attachment = await services.attachments.get(attachmentId);
+        if (!attachment) {
+          throw new ChatTransportError(
+            "INVALID_REQUEST",
+            "A reference image is unavailable",
+            null,
+          );
+        }
+        references.push(attachment);
+      }
+      services.imageReferenceProcessor.assertRequestBudget(
+        references,
+        imageGenerationMaximumRequestBytes(mode, publicConfig),
+      );
+      const assistantInput = {
+        role: "assistant" as const,
+        parts: [structuredClone(snapshot)],
+        status: "pending" as const,
+        modelSnapshot: null,
+      };
+      const assistant = versionOfAssistantId
+        ? await services.conversations.createVersion(
+            versionOfAssistantId,
+            assistantInput,
+          )
+        : await services.conversations.appendMessage(
+            conversationRecord.id,
+            assistantInput,
+          );
+      setPath([...historyPath, user, assistant]);
+
+      const controller = new AbortController();
+      const generationId = crypto.randomUUID();
+      let resolveCompletion: () => void = () => {};
+      const completion = new Promise<void>((resolve) => {
+        resolveCompletion = resolve;
+      });
+      activeImageGenerationRef.current = {
+        id: generationId,
+        conversationId: conversationRecord.id,
+        assistantMessageId: assistant.id,
+        controller,
+        completion,
+      };
+      setActiveImageGeneration({
+        id: generationId,
+        conversationId: conversationRecord.id,
+        assistantMessageId: assistant.id,
+      });
+      const timeoutMs = publicConfig?.imageGenerationTimeoutMs ?? 120_000;
+      let timedOut = false;
+      const timeout = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        const transport = new OpenAICompatibleImageTransport({
+          endpoint: {
+            mode,
+            generationUrl: imageGenerationConfig.generationUrl,
+            editUrl: imageGenerationConfig.editUrl,
+            apiKey: imageGenerationConfig.apiKey,
+          },
+        });
+        const result = await transport.generate(
+          {
+            modelId: snapshot.modelId,
+            prompt: textFromMessage(user),
+            size: snapshot.size,
+            quality: snapshot.quality,
+            references,
+          },
+          controller.signal,
+        );
+        await services.conversations.completeImageGeneration(
+          assistant.id,
+          result.images,
+        );
+      } catch (cause) {
+        const error = imageGenerationTransportError(cause, timedOut);
+        const stopped = error.code === "ABORTED" && !timedOut;
+        await services.conversations.failImageGeneration(
+          assistant.id,
+          stopped ? null : error,
+        );
+      } finally {
+        window.clearTimeout(timeout);
+        try {
+          if (
+            activeImageGenerationRef.current?.id === generationId &&
+            currentConversationIdRef.current === conversationRecord.id
+          ) {
+            await loadConversation(conversationRecord.id);
+          }
+          await refreshLists();
+        } catch (cause) {
+          if (activeImageGenerationRef.current?.id === generationId) {
+            setError(formatUserFacingError(cause, t));
+          }
+        } finally {
+          if (activeImageGenerationRef.current?.id === generationId) {
+            activeImageGenerationRef.current = null;
+            setActiveImageGeneration(null);
+          }
+          resolveCompletion();
+        }
+      }
+    },
+    [
+      imageGenerationConfig,
+      loadConversation,
+      publicConfig,
+      refreshLists,
+      requireServices,
+      t,
+    ],
+  );
+
+  const sendImageGeneration = useCallback(async () => {
+    const prompt = draft.trim();
+    if (
+      !prompt ||
+      imageGenerationStartingRef.current ||
+      generationStartingRef.current ||
+      activeGenerationRef.current ||
+      activeImageGenerationRef.current
+    ) {
+      return;
+    }
+    imageGenerationStartingRef.current = true;
+    setImageGenerationStarting(true);
+    try {
+      setError(null);
+      const services = requireServices();
+      const mode = connectionRef.current.mode;
+      let conversationRecord = currentConversation;
+      if (!conversationRecord) {
+        conversationRecord = await createConversation(
+          DEFAULT_ASSISTANT_ID,
+          false,
+          false,
+        );
+      }
+      const modelId =
+        mode === "hosted"
+          ? publicConfig?.hostedImageGenerationModel
+          : imageGenerationConfig.modelId;
+      if (!modelId) {
+        throw new ChatTransportError(
+          "UPSTREAM_NOT_FOUND",
+          "Image generation is unavailable",
+          null,
+        );
+      }
+      const snapshot: ImageGenerationPart = {
+        type: "image_generation",
+        modelId,
+        connectionScope: imageGenerationConnectionScope(
+          mode,
+          imageGenerationConfig,
+        ),
+        size: imageGenerationConfig.size,
+        quality: imageGenerationConfig.quality,
+        referenceAttachmentIds: imageReferences.map(({ id }) => id),
+      };
+      const user = await services.conversations.appendMessage(
+        conversationRecord.id,
+        {
+          role: "user",
+          parts: [
+            { type: "text", text: prompt },
+            ...imageReferences.map((attachment) => ({
+              type: "image_ref" as const,
+              attachmentId: attachment.id,
+              alt: null,
+            })),
+          ],
+        },
+      );
+      if (path.length === 0) {
+        await services.conversations.setLocalTitle(
+          conversationRecord.id,
+          prompt.slice(0, 48),
+        );
+      }
+      const currentPath = await services.conversations.getCurrentPath(
+        conversationRecord.id,
+      );
+      setDraft("");
+      setImageReferences([]);
+      await runImageGeneration(
+        conversationRecord,
+        user,
+        currentPath.slice(0, -1),
+        snapshot,
+        null,
+      );
+    } finally {
+      imageGenerationStartingRef.current = false;
+      setImageGenerationStarting(false);
+    }
+  }, [
+    createConversation,
+    currentConversation,
+    draft,
+    imageGenerationConfig,
+    imageReferences,
+    path.length,
+    publicConfig,
+    requireServices,
+    runImageGeneration,
+  ]);
+
   const send = useCallback(async () => {
+    if (composerMode === "image") {
+      await sendImageGeneration();
+      return;
+    }
     if (
       (!draft.trim() && pendingAttachments.length === 0) ||
       generationStartingRef.current ||
-      activeGenerationRef.current
+      activeGenerationRef.current ||
+      imageGenerationStartingRef.current ||
+      activeImageGenerationRef.current
     ) {
       return;
     }
@@ -1432,6 +1794,7 @@ export function useChatController() {
     if (titleConversationId) void maybeGenerateTitle(titleConversationId);
   }, [
     createConversation,
+    composerMode,
     currentConversation,
     draft,
     generateAssistant,
@@ -1439,6 +1802,7 @@ export function useChatController() {
     pendingAttachments,
     requireServices,
     maybeGenerateTitle,
+    sendImageGeneration,
     webSearchEnabled,
   ]);
 
@@ -1447,35 +1811,55 @@ export function useChatController() {
       if (
         !currentConversation ||
         generationStartingRef.current ||
-        activeGenerationRef.current
+        activeGenerationRef.current ||
+        imageGenerationStartingRef.current ||
+        activeImageGenerationRef.current
       ) {
         return;
       }
+      const services = requireServices();
+      const assistant = allMessages.find(({ id }) => id === assistantId);
+      if (!assistant || assistant.role !== "assistant" || !assistant.parentId) {
+        throw new Error(t("regenerateError"));
+      }
+      const parentPath = await services.conversations.selectPathToMessage(
+        assistant.parentId,
+      );
+      const user = parentPath.at(-1);
+      if (!user || user.role !== "user") {
+        throw new Error(t("regenerateError"));
+      }
+      const conversationRecord = await services.conversations.getConversation(
+        currentConversation.id,
+      );
+      const imageSnapshot = assistant.parts.find(
+        (part) => part.type === "image_generation",
+      );
+      if (imageSnapshot) {
+        imageGenerationStartingRef.current = true;
+        setImageGenerationStarting(true);
+        try {
+          setError(null);
+          await runImageGeneration(
+            conversationRecord,
+            user,
+            parentPath.slice(0, -1),
+            imageSnapshot,
+            assistant.id,
+          );
+        } finally {
+          imageGenerationStartingRef.current = false;
+          setImageGenerationStarting(false);
+        }
+        return;
+      }
+
       const preparation = createGenerationPreparation(currentConversation.id);
       generationStartingRef.current = true;
       setGenerationStarting(true);
       generationPreparationRef.current = preparation;
       try {
         setError(null);
-        const services = requireServices();
-        const assistant = allMessages.find(({ id }) => id === assistantId);
-        if (
-          !assistant ||
-          assistant.role !== "assistant" ||
-          !assistant.parentId
-        ) {
-          throw new Error(t("regenerateError"));
-        }
-        const parentPath = await services.conversations.selectPathToMessage(
-          assistant.parentId,
-        );
-        const user = parentPath.at(-1);
-        if (!user || user.role !== "user") {
-          throw new Error(t("regenerateError"));
-        }
-        const conversationRecord = await services.conversations.getConversation(
-          currentConversation.id,
-        );
         await generateAssistant(
           conversationRecord,
           user,
@@ -1492,7 +1876,14 @@ export function useChatController() {
         setGenerationStarting(false);
       }
     },
-    [allMessages, currentConversation, generateAssistant, requireServices, t],
+    [
+      allMessages,
+      currentConversation,
+      generateAssistant,
+      requireServices,
+      runImageGeneration,
+      t,
+    ],
   );
 
   const addImages = useCallback(
@@ -1537,12 +1928,120 @@ export function useChatController() {
     [requireServices],
   );
 
+  const addImageReferences = useCallback(
+    async (files: readonly File[]) => {
+      if (files.length === 0) return;
+      const services = requireServices();
+      const operationEpoch = conversationLoadEpochRef.current;
+      const processed = await services.imageReferenceProcessor.add(
+        imageReferences,
+        files,
+        imageGenerationMaximumRequestBytes(
+          connectionRef.current.mode,
+          publicConfig,
+        ),
+      );
+      if (operationEpoch !== conversationLoadEpochRef.current) return;
+      const saved: AttachmentRecord[] = [];
+      for (const image of processed) {
+        saved.push(await services.attachments.save(image));
+      }
+      if (operationEpoch !== conversationLoadEpochRef.current) return;
+      const urls = Object.fromEntries(
+        saved.map((attachment) => [
+          attachment.id,
+          services.objectUrls.acquire(attachment.id, attachment.blob),
+        ]),
+      );
+      setAttachmentUrls((previous) => ({ ...previous, ...urls }));
+      setImageReferences((previous) => {
+        const existing = new Set(previous.map(({ id }) => id));
+        return [
+          ...previous,
+          ...saved.filter((attachment) => !existing.has(attachment.id)),
+        ];
+      });
+    },
+    [imageReferences, publicConfig, requireServices],
+  );
+
+  const addStoredImageReference = useCallback(
+    async (attachmentId: string) => {
+      if (imageReferences.some(({ id }) => id === attachmentId)) {
+        setComposerMode("image");
+        return;
+      }
+      if (imageReferences.length >= MAX_IMAGE_GENERATION_REFERENCES) {
+        throw new ChatTransportError(
+          "INVALID_REQUEST",
+          "Too many reference images",
+          null,
+        );
+      }
+      const services = requireServices();
+      const attachment = await services.attachments.get(attachmentId);
+      if (!attachment) {
+        throw new ChatTransportError(
+          "INVALID_REQUEST",
+          "Reference image is unavailable",
+          null,
+        );
+      }
+      const next = [...imageReferences, attachment];
+      services.imageReferenceProcessor.assertRequestBudget(
+        next,
+        imageGenerationMaximumRequestBytes(
+          connectionRef.current.mode,
+          publicConfig,
+        ),
+      );
+      setAttachmentUrls((previous) => ({
+        ...previous,
+        [attachment.id]: services.objectUrls.acquire(
+          attachment.id,
+          attachment.blob,
+        ),
+      }));
+      setImageReferences(next);
+      setComposerMode("image");
+    },
+    [imageReferences, publicConfig, requireServices],
+  );
+
+  const removeImageReference = useCallback((attachmentId: string) => {
+    setImageReferences((items) =>
+      items.filter(({ id }) => id !== attachmentId),
+    );
+  }, []);
+
+  const reorderImageReferences = useCallback(
+    (sourceAttachmentId: string, targetAttachmentId: string) => {
+      setImageReferences((items) => {
+        const sourceIndex = items.findIndex(
+          ({ id }) => id === sourceAttachmentId,
+        );
+        const targetIndex = items.findIndex(
+          ({ id }) => id === targetAttachmentId,
+        );
+        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+          return items;
+        }
+        const next = [...items];
+        const [source] = next.splice(sourceIndex, 1);
+        if (!source) return items;
+        next.splice(targetIndex, 0, source);
+        return next;
+      });
+    },
+    [],
+  );
+
   const archiveConversation = useCallback(
     async (conversationId: string) => {
       const isCurrent = currentConversationIdRef.current === conversationId;
       const index = conversations.findIndex(({ id }) => id === conversationId);
       const neighbor = conversations[index + 1] ?? conversations[index - 1];
-      await settleActiveGeneration(conversationId);
+      await settleAllGeneration(conversationId);
       await requireServices().conversations.setArchived(conversationId, true);
       if (isCurrent) clearCurrentProjection();
       await refreshLists();
@@ -1554,7 +2053,7 @@ export function useChatController() {
       loadConversation,
       refreshLists,
       requireServices,
-      settleActiveGeneration,
+      settleAllGeneration,
     ],
   );
 
@@ -1836,7 +2335,7 @@ export function useChatController() {
       const visibleList = isCurrent ? conversations : archivedConversations;
       const index = visibleList.findIndex(({ id }) => id === conversationId);
       const neighbor = visibleList[index + 1] ?? visibleList[index - 1];
-      await settleActiveGeneration(conversationId);
+      await settleAllGeneration(conversationId);
       await requireServices().conversations.deleteConversation(conversationId);
       if (isCurrent) clearCurrentProjection();
       await refreshLists();
@@ -1849,18 +2348,18 @@ export function useChatController() {
       loadConversation,
       refreshLists,
       requireServices,
-      settleActiveGeneration,
+      settleAllGeneration,
     ],
   );
 
   const clearAllConversations = useCallback(async () => {
-    await settleActiveGeneration();
+    await settleAllGeneration();
     const services = requireServices();
     await services.conversations.clearConversations();
     clearCurrentProjection();
     setConversations([]);
     setArchivedConversations([]);
-  }, [clearCurrentProjection, requireServices, settleActiveGeneration]);
+  }, [clearCurrentProjection, requireServices, settleAllGeneration]);
 
   const search = useCallback(
     async (query: string) => {
@@ -1883,13 +2382,13 @@ export function useChatController() {
 
   const clearAllLocalData = useCallback(async () => {
     const services = requireServices();
-    await settleActiveGeneration();
+    await settleAllGeneration();
     services.objectUrls.dispose();
     const signOut = fetch("/api/auth", { method: "DELETE" }).catch(() => null);
     await clearLocalData(services.database, window.localStorage);
     await signOut;
     window.location.reload();
-  }, [requireServices, settleActiveGeneration]);
+  }, [requireServices, settleAllGeneration]);
 
   const createBackup = useCallback(async (): Promise<Blob> => {
     const database = requireServices().database;
@@ -1910,7 +2409,7 @@ export function useChatController() {
 
   const restoreBackup = useCallback(
     async (prepared: PreparedBackup) => {
-      await settleActiveGeneration();
+      await settleAllGeneration();
       const database = requireServices().database;
       await importPreparedBackup(database, prepared);
       const [language, theme, restoredDefaultModel, restoredTitleModel] =
@@ -1975,7 +2474,7 @@ export function useChatController() {
       refreshLists,
       requireServices,
       resolveCapability,
-      settleActiveGeneration,
+      settleAllGeneration,
       titleModel,
     ],
   );
@@ -2019,10 +2518,7 @@ export function useChatController() {
     [currentConversation, requireServices, t],
   );
 
-  const stop = useCallback(
-    () => settleActiveGeneration(),
-    [settleActiveGeneration],
-  );
+  const stop = useCallback(() => settleAllGeneration(), [settleAllGeneration]);
 
   const webSearchSource = resolveWebSearchSource(
     connection.mode,
@@ -2042,6 +2538,9 @@ export function useChatController() {
     availableModels,
     models,
     webSearchConfig,
+    imageGenerationConfig,
+    composerMode,
+    setComposerMode,
     webSearchSource: webSearchSource?.kind ?? null,
     webSearchEnabled,
     webSearchAvailable:
@@ -2061,9 +2560,12 @@ export function useChatController() {
     draft,
     setDraft,
     pendingAttachments,
+    imageReferences,
     attachmentUrls,
     activeGeneration,
     generationStarting,
+    activeImageGeneration,
+    imageGenerationStarting,
     stream,
     contextStats,
     error,
@@ -2085,6 +2587,9 @@ export function useChatController() {
     saveEnabledModels,
     refreshModels,
     saveWebSearchSettings,
+    saveImageGenerationSettings,
+    setImageGenerationSize,
+    setImageGenerationQuality,
     testWebSearch,
     setConversationWebSearch,
     send,
@@ -2092,6 +2597,10 @@ export function useChatController() {
     stop,
     addImages,
     removePendingAttachment,
+    addImageReferences,
+    addStoredImageReference,
+    removeImageReference,
+    reorderImageReferences,
     archiveConversation,
     renameConversation,
     restoreConversation,
@@ -2149,6 +2658,50 @@ function webSearchConfigurationFromSaveInput(
     },
     hasApiKey: Boolean(input.providers[input.provider].apiKey.trim()),
   };
+}
+
+function imageGenerationConnectionScope(
+  mode: ConnectionDraft["mode"],
+  config: ImageGenerationConfiguration,
+): string {
+  return mode === "hosted"
+    ? "image:hosted:same-origin"
+    : `image:byok:${config.generationUrl}\n${config.editUrl}`;
+}
+
+function imageGenerationMaximumRequestBytes(
+  mode: ConnectionDraft["mode"],
+  config: PublicConfig | null,
+): number {
+  return mode === "hosted"
+    ? (config?.imageGenerationMaximumRequestBytes ?? 4 * 1024 * 1024)
+    : DEFAULT_IMAGE_REFERENCE_MAX_REQUEST_BYTES;
+}
+
+function imageGenerationTransportError(
+  cause: unknown,
+  timedOut: boolean,
+): ChatTransportError {
+  if (timedOut) {
+    return new ChatTransportError(
+      "REQUEST_TIMEOUT",
+      "Image generation timed out",
+      504,
+    );
+  }
+  if (cause instanceof ChatTransportError) return cause;
+  if (cause instanceof StorageError) {
+    return new ChatTransportError(
+      "STORAGE_UNAVAILABLE",
+      "Generated image could not be stored",
+      null,
+    );
+  }
+  return new ChatTransportError(
+    "UPSTREAM_ERROR",
+    cause instanceof Error ? cause.message : "Image generation failed",
+    null,
+  );
 }
 
 async function resolveCachedModels(

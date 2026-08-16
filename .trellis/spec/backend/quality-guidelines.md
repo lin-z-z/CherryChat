@@ -951,3 +951,106 @@ steps:
       persist-credentials: false
   - run: node scripts/release.mjs
 ```
+
+## Scenario: OpenAI-Compatible Image Generation
+
+### 1. Scope / Trigger
+
+Use this contract when changing image-generation environment variables, the
+Hosted image route, OpenAI-compatible image transport, generated attachments,
+message snapshots, or backup/import behavior.
+
+### 2. Signatures
+
+```text
+POST /api/image-generation
+Content-Type: application/json | multipart/form-data
+
+JSON: { model, prompt, size, quality, n: 1 }
+Multipart: model, prompt, size, quality, n=1, ordered image[] fields
+
+ImageGenerationTransport.generate(request, signal?)
+ConversationRepository.completeImageGeneration(messageId, images)
+```
+
+The durable `image_generation` message part contains `modelId`,
+`connectionScope`, `size`, `quality`, and ordered `referenceAttachmentIds`.
+Generated and reference images are ordinary `AttachmentRecord` rows linked by
+`messageAttachments`.
+
+### 3. Contracts
+
+- BYOK reads generation URL, edit URL, Key, model, size, and quality from the
+  user's local image settings. Zero references use JSON generations; one
+  through sixteen references use multipart edits with repeated ordered
+  `image[]` fields.
+- Hosted browsers call only same-origin `/api/image-generation`. The server
+  reads `IMAGE_GENERATION_API_KEY`, `IMAGE_GENERATION_URL`, `IMAGE_EDIT_URL`,
+  and `IMAGE_GENERATION_MODEL` as an all-or-none group. Optional
+  `IMAGE_GENERATION_TIMEOUT_SECONDS` and `IMAGE_GENERATION_MAX_REQUEST_MB` are
+  bounded server values.
+- Public config exposes only availability, model, timeout, and request-byte
+  limit. It never exposes the deployment Key or either upstream URL.
+- Upstream `data[0].b64_json` is accepted directly. BYOK may download
+  `data[0].url` with credentials omitted. Hosted accepts a URL only when its
+  protocol and origin match the selected fixed upstream, rejects redirects,
+  validates MIME/size, and converts the result to Base64 before returning it.
+- Generated images become local blobs before message completion. The
+  repository saves attachments, message links, status, and output `image_ref`
+  parts in one transaction. Backup import remaps both output IDs and ordered
+  snapshot reference IDs.
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+| --- | --- |
+| Partial image env quartet | `CONFIGURATION_ERROR` |
+| Image env quartet without Hosted access | `CONFIGURATION_ERROR` |
+| Unsafe active upstream URL | `CONFIGURATION_ERROR` |
+| Missing Session or cross-origin request | `401` / `403` before fetch |
+| More than 16 references or invalid multipart | `400 INVALID_REQUEST` |
+| Request exceeds configured byte limit | `413 INVALID_REQUEST` |
+| Caller aborts | `499 ABORTED`; lease released |
+| Image timeout | `504 REQUEST_TIMEOUT`; lease released |
+| Oversized/invalid upstream response | `502 UPSTREAM_ERROR` |
+| Hosted URL crosses origin or redirects | `502 UPSTREAM_ERROR` |
+| Upstream detail contains a Key/Bearer token | Return only redacted detail |
+| Attachment write or link fails | Roll back the whole completion transaction |
+
+### 5. Good / Base / Bad Cases
+
+- **Good:** two ordered references reach `image[]` in the same order, survive
+  reload and backup/import with remapped IDs, and remain linked to the message.
+- **Base:** a prompt without references sends one JSON request and persists one
+  generated image returned as Base64 or a downloadable URL.
+- **Bad:** accept a browser-supplied Hosted target, follow a Hosted redirect,
+  expose an env URL/Key in `/api/config`, or store a short-lived remote URL in a
+  message instead of a local attachment.
+
+### 6. Tests Required
+
+- Transport: exact JSON body, ordered multipart fields, Base64, URL download,
+  invalid/empty response, MIME/size, abort, and response limits.
+- Server: fixed generation/edit targets, deployment model override, Session,
+  Origin, byte/reference limits, timeout/cancel, same-origin URL download,
+  redirect/cross-origin rejection, redaction, and lease release.
+- Storage: transactional generated-output save, SHA-256 de-duplication,
+  attachment reference cleanup, and backup round-trip with at least two ordered
+  references, ID remapping, and complete `messageAttachments` links.
+- Build security: set process-local canaries for all four image env values, run
+  `npm run build`, then `npm run security:scan-client-bundle`.
+
+### 7. Wrong vs Correct
+
+```ts
+// Wrong: the browser selects where the Hosted deployment sends its secret.
+await fetch("/api/image-generation", {
+  body: JSON.stringify({ targetUrl, apiKey, prompt }),
+});
+
+// Correct: the route selects a validated env target and the browser sends only
+// the strict generation contract.
+await fetch("/api/image-generation", {
+  body: JSON.stringify({ model, prompt, size, quality, n: 1 }),
+});
+```

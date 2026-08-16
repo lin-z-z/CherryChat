@@ -6,6 +6,7 @@ import {
   Database,
   Globe2,
   Info,
+  Image,
   Palette,
   Plug,
   X,
@@ -33,6 +34,7 @@ import { AboutPage } from "@/components/chat/settings-pages/about-page";
 import { AppearancePage } from "@/components/chat/settings-pages/appearance-page";
 import { DataPage } from "@/components/chat/settings-pages/data-page";
 import { ModelManagementPage } from "@/components/chat/settings-pages/model-management-page";
+import { ImageGenerationPage } from "@/components/chat/settings-pages/image-generation-page";
 import { ModelServicePage } from "@/components/chat/settings-pages/model-service-page";
 import { WebSearchPage } from "@/components/chat/settings-pages/web-search-page";
 import {
@@ -55,7 +57,13 @@ import type { AppLanguage } from "@/i18n/resources";
 import type { ConversationExportProjection } from "@/runtime/chat/export-projection";
 
 type SettingsCategory =
-  "appearance" | "service" | "models" | "webSearch" | "data" | "about";
+  | "appearance"
+  | "service"
+  | "models"
+  | "webSearch"
+  | "imageGeneration"
+  | "data"
+  | "about";
 
 interface SettingsWorkspaceProps {
   chat: ChatController;
@@ -92,6 +100,12 @@ const categories = [
     descriptionKey: "webSearchPageDescription",
   },
   {
+    id: "imageGeneration",
+    icon: Image,
+    labelKey: "settingsImageGeneration",
+    descriptionKey: "imageGenerationPageDescription",
+  },
+  {
     id: "data",
     icon: Database,
     labelKey: "settingsData",
@@ -111,6 +125,7 @@ const categories = [
     | "settingsService"
     | "settingsModels"
     | "settingsWebSearch"
+    | "settingsImageGeneration"
     | "settingsData"
     | "settingsAbout";
   descriptionKey:
@@ -118,6 +133,7 @@ const categories = [
     | "modelServiceDescription"
     | "modelManagementPageDescription"
     | "webSearchPageDescription"
+    | "imageGenerationPageDescription"
     | "dataPageDescription"
     | "aboutDescription";
 }>;
@@ -199,6 +215,19 @@ export function SettingsWorkspace({
   const [webSearchTesting, setWebSearchTesting] = useState(false);
   const [webSearchError, setWebSearchError] = useState<string | null>(null);
   const [webSearchStatus, setWebSearchStatus] = useState<string | null>(null);
+  const [imageGenerationDraft, setImageGenerationDraft] = useState(
+    chat.imageGenerationConfig,
+  );
+  const [imageGenerationBaseline, setImageGenerationBaseline] = useState(
+    chat.imageGenerationConfig,
+  );
+  const [imageGenerationSaving, setImageGenerationSaving] = useState(false);
+  const [imageGenerationError, setImageGenerationError] = useState<
+    string | null
+  >(null);
+  const [imageGenerationStatus, setImageGenerationStatus] = useState<
+    string | null
+  >(null);
 
   const [includeReasoning, setIncludeReasoning] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -215,18 +244,24 @@ export function SettingsWorkspace({
   const titleModelDirty = titleModelDraft !== titleModelBaseline;
   const capabilityDirty = !sameValue(capabilityDraft, capabilityBaseline);
   const webSearchDirty = !sameValue(webSearchDraft, webSearchBaseline);
+  const imageGenerationDirty = !sameValue(
+    imageGenerationDraft,
+    imageGenerationBaseline,
+  );
   const hasUnsavedChanges =
     connectionDirty ||
     defaultModelDirty ||
     titleModelDirty ||
     capabilityDirty ||
-    webSearchDirty;
+    webSearchDirty ||
+    imageGenerationDirty;
   const settingsSaving =
     connectionSaving ||
     defaultModelSaving ||
     titleModelSaving ||
     capabilitySaving ||
-    webSearchSaving;
+    webSearchSaving ||
+    imageGenerationSaving;
 
   const currentCategory =
     categories.find(({ id: categoryId }) => categoryId === category) ??
@@ -578,6 +613,31 @@ export function SettingsWorkspace({
     }
   };
 
+  const saveImageGeneration = async () => {
+    setImageGenerationError(null);
+    setImageGenerationStatus(null);
+    setImageGenerationSaving(true);
+    try {
+      const saved = await chat.saveImageGenerationSettings({
+        generationUrl: imageGenerationDraft.generationUrl,
+        editUrl: imageGenerationDraft.editUrl,
+        apiKey: imageGenerationDraft.apiKey,
+        modelId: imageGenerationDraft.modelId,
+        size: imageGenerationDraft.size,
+        quality: imageGenerationDraft.quality,
+      });
+      setImageGenerationDraft(saved);
+      setImageGenerationBaseline(saved);
+      setImageGenerationStatus(t("imageGenerationSaved"));
+    } catch (cause) {
+      setImageGenerationError(
+        formatUserFacingError(cause, t, "imageGenerationSaveError"),
+      );
+    } finally {
+      setImageGenerationSaving(false);
+    }
+  };
+
   const importBackupFile = async (file: File) => {
     setDataError(null);
     try {
@@ -880,6 +940,29 @@ export function SettingsWorkspace({
               saving={webSearchSaving}
               status={webSearchStatus}
               testing={webSearchTesting}
+            />
+          ) : null}
+
+          {category === "imageGeneration" ? (
+            <ImageGenerationPage
+              connectionMode={chat.connection.mode}
+              dirty={imageGenerationDirty}
+              draft={imageGenerationDraft}
+              error={imageGenerationError}
+              hostedEnabled={
+                chat.publicConfig?.hostedImageGenerationEnabled ?? false
+              }
+              hostedModel={
+                chat.publicConfig?.hostedImageGenerationModel ?? null
+              }
+              onChange={(next) => {
+                setImageGenerationDraft(next);
+                setImageGenerationError(null);
+                setImageGenerationStatus(null);
+              }}
+              onSave={() => void saveImageGeneration()}
+              saving={imageGenerationSaving}
+              status={imageGenerationStatus}
             />
           ) : null}
 

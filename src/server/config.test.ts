@@ -64,6 +64,10 @@ describe("server configuration", () => {
       hostedWebSearchEnabled: true,
       hostedWebSearchProvider: "tavily",
       hostedWebSearchProviders: ["tavily"],
+      hostedImageGenerationEnabled: false,
+      hostedImageGenerationModel: null,
+      imageGenerationTimeoutMs: 120_000,
+      imageGenerationMaximumRequestBytes: 4 * 1024 * 1024,
       models: ["model-a", "model-b"],
       defaultModel: "model-b",
       titleModel: "model-a",
@@ -94,6 +98,117 @@ describe("server configuration", () => {
     expect(toPublicServerConfig(config).hostedWebSearchEnabled).toBe(false);
     expect(toPublicServerConfig(config).titleModel).toBe("model-a");
   });
+
+  it("enables Hosted image generation only from a complete safe configuration", () => {
+    const config = parseServerConfig({
+      ...hostedEnvironment(),
+      IMAGE_GENERATION_API_KEY: "image-deployment-secret",
+      IMAGE_GENERATION_URL: "https://images.example/v1/images/generations/",
+      IMAGE_EDIT_URL: "https://images.example/v1/images/edits/",
+      IMAGE_GENERATION_MODEL: "gpt-image-1.5",
+      IMAGE_GENERATION_TIMEOUT_SECONDS: "45",
+      IMAGE_GENERATION_MAX_REQUEST_MB: "8",
+    });
+
+    expect(config.hosted?.imageGeneration).toEqual({
+      apiKey: "image-deployment-secret",
+      generationUrl: "https://images.example/v1/images/generations",
+      editUrl: "https://images.example/v1/images/edits",
+      model: "gpt-image-1.5",
+      timeoutMs: 45_000,
+      maximumRequestBytes: 8 * 1024 * 1024,
+    });
+    const publicConfig = toPublicServerConfig(config);
+    expect(publicConfig).toMatchObject({
+      hostedImageGenerationEnabled: true,
+      hostedImageGenerationModel: "gpt-image-1.5",
+      imageGenerationTimeoutMs: 45_000,
+      imageGenerationMaximumRequestBytes: 8 * 1024 * 1024,
+    });
+    const publicText = JSON.stringify(publicConfig);
+    expect(publicText).not.toContain("image-deployment-secret");
+    expect(publicText).not.toContain("images.example");
+  });
+
+  it.each([
+    {
+      IMAGE_GENERATION_API_KEY: "image-deployment-secret",
+    },
+    {
+      IMAGE_GENERATION_API_KEY: "image-deployment-secret",
+      IMAGE_GENERATION_URL: "https://images.example/generations",
+    },
+    {
+      IMAGE_GENERATION_API_KEY: "image-deployment-secret",
+      IMAGE_GENERATION_URL: "https://images.example/generations",
+      IMAGE_EDIT_URL: "https://images.example/edits",
+    },
+    {
+      IMAGE_GENERATION_URL: "https://images.example/generations",
+      IMAGE_EDIT_URL: "https://images.example/edits",
+      IMAGE_GENERATION_MODEL: "gpt-image-1.5",
+    },
+  ])("rejects incomplete Hosted image configuration %#", (extra) => {
+    expect(() =>
+      parseServerConfig({ ...hostedEnvironment(), ...extra }),
+    ).toThrow(
+      "IMAGE_GENERATION_API_KEY, IMAGE_GENERATION_URL, IMAGE_EDIT_URL and IMAGE_GENERATION_MODEL must be configured together",
+    );
+  });
+
+  it("rejects image configuration without Hosted access and unsafe active URLs", () => {
+    expect(() =>
+      parseServerConfig({
+        IMAGE_GENERATION_API_KEY: "image-deployment-secret",
+        IMAGE_GENERATION_URL: "https://images.example/generations",
+        IMAGE_EDIT_URL: "https://images.example/edits",
+        IMAGE_GENERATION_MODEL: "gpt-image-1.5",
+      }),
+    ).toThrow("Hosted image generation requires");
+    expect(() =>
+      parseServerConfig({
+        ...hostedEnvironment(),
+        IMAGE_GENERATION_API_KEY: "image-deployment-secret",
+        IMAGE_GENERATION_URL:
+          "https://user:password@images.example/generations",
+        IMAGE_EDIT_URL: "https://images.example/edits",
+        IMAGE_GENERATION_MODEL: "gpt-image-1.5",
+      }),
+    ).toThrow("IMAGE_GENERATION_URL cannot contain credentials");
+    expect(() =>
+      parseServerConfig({
+        ...hostedEnvironment(),
+        NODE_ENV: "production",
+        IMAGE_GENERATION_API_KEY: "image-deployment-secret",
+        IMAGE_GENERATION_URL: "http://localhost:8080/generations",
+        IMAGE_EDIT_URL: "https://images.example/edits",
+        IMAGE_GENERATION_MODEL: "gpt-image-1.5",
+      }),
+    ).toThrow("IMAGE_GENERATION_URL must use HTTPS");
+  });
+
+  it.each([
+    ["IMAGE_GENERATION_TIMEOUT_SECONDS", "-1"],
+    ["IMAGE_GENERATION_TIMEOUT_SECONDS", "1.5"],
+    ["IMAGE_GENERATION_TIMEOUT_SECONDS", "86401"],
+    ["IMAGE_GENERATION_MAX_REQUEST_MB", "00"],
+    ["IMAGE_GENERATION_MAX_REQUEST_MB", "1.5"],
+    ["IMAGE_GENERATION_MAX_REQUEST_MB", "51"],
+  ])(
+    "rejects invalid image setting %s without echoing its value",
+    (name, value) => {
+      let error: unknown;
+      try {
+        parseServerConfig({ [name]: value });
+      } catch (cause) {
+        error = cause;
+      }
+
+      expect(error).toBeInstanceOf(ServerConfigurationError);
+      expect(String(error)).toContain(name);
+      expect(String(error)).not.toContain(value);
+    },
+  );
 
   it("parses Exa and Grok Hosted search settings with safe defaults", () => {
     const exa = parseServerConfig({

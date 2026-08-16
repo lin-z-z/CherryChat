@@ -13,6 +13,10 @@ const requiredCanaryNames = [
   "GROK_API_KEY",
   "GROK_RESPONSES_URL",
   "GROK_MODEL",
+  "IMAGE_GENERATION_API_KEY",
+  "IMAGE_GENERATION_URL",
+  "IMAGE_EDIT_URL",
+  "IMAGE_GENERATION_MODEL",
 ];
 
 function readCanaries(environment) {

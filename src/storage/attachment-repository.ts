@@ -12,24 +12,12 @@ export class AttachmentRepository {
 
   async save(image: ProcessedImage): Promise<AttachmentRecord> {
     try {
-      const existing = await this.database.attachments
-        .where("sha256")
-        .equals(image.sha256)
-        .first();
-      if (existing) return existing;
-
-      const attachment: AttachmentRecord = {
-        id: this.createId(),
-        blob: image.blob,
-        mimeType: image.mimeType,
-        width: image.width,
-        height: image.height,
-        byteSize: image.byteSize,
-        sha256: image.sha256,
-        createdAt: this.now(),
-      };
-      await this.database.attachments.add(attachment);
-      return attachment;
+      return await saveProcessedImage(
+        this.database,
+        image,
+        this.createId,
+        this.now,
+      );
     } catch (cause) {
       throw normalizeStorageError(cause);
     }
@@ -38,6 +26,32 @@ export class AttachmentRepository {
   get(attachmentId: string): Promise<AttachmentRecord | undefined> {
     return this.database.attachments.get(attachmentId);
   }
+}
+
+export async function saveProcessedImage(
+  database: Pick<ChatDatabase, "attachments">,
+  image: ProcessedImage,
+  createId: () => string,
+  now: () => string,
+): Promise<AttachmentRecord> {
+  const existing = await database.attachments
+    .where("sha256")
+    .equals(image.sha256)
+    .first();
+  if (existing) return existing;
+
+  const attachment: AttachmentRecord = {
+    id: createId(),
+    blob: image.blob,
+    mimeType: image.mimeType,
+    width: image.width,
+    height: image.height,
+    byteSize: image.byteSize,
+    sha256: image.sha256,
+    createdAt: now(),
+  };
+  await database.attachments.add(attachment);
+  return attachment;
 }
 
 export class ObjectUrlRegistry {

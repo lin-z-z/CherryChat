@@ -5,6 +5,7 @@ import type {
   ConversationRecord,
   MessageNode,
 } from "@/runtime/chat/types";
+import { attachmentIdsFromParts } from "@/runtime/chat/message-attachments";
 
 export interface ExportAttachmentMetadata {
   id: string;
@@ -57,11 +58,7 @@ export function projectConversationExport(
       .map((part) => structuredClone(part)),
   }));
   const attachmentIds = new Set(
-    messages.flatMap((message) =>
-      message.parts
-        .filter((part) => part.type === "image_ref")
-        .map((part) => part.attachmentId),
-    ),
+    messages.flatMap((message) => attachmentIdsFromParts(message.parts)),
   );
   const attachments = source.attachments
     .filter(({ id }) => attachmentIds.has(id))

@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Copy,
   Globe2,
+  ImagePlus,
   LoaderCircle,
   Pencil,
   RotateCcw,
@@ -51,6 +52,14 @@ export function MessageView({
   const versionIndex = siblings.findIndex(({ id }) => id === message.id);
   const text = textFromMessage(message);
   const reasoning = message.parts.find((part) => part.type === "reasoning");
+  const imageGeneration = message.parts.find(
+    (part) => part.type === "image_generation",
+  );
+  const generationBusy =
+    chat.generationStarting ||
+    Boolean(chat.stream) ||
+    chat.imageGenerationStarting ||
+    Boolean(chat.activeImageGeneration);
   const isLive = Boolean(
     message.role === "assistant" &&
     (message.status === "pending" || message.status === "streaming") &&
@@ -248,7 +257,21 @@ export function MessageView({
                 parts={[]}
                 pendingNames={pendingToolCalls.map(({ name }) => name)}
               />
-              {contentParts.length === 0 && isLive ? (
+              {imageGeneration &&
+              message.status === "pending" &&
+              chat.activeImageGeneration?.assistantMessageId === message.id ? (
+                <div
+                  aria-label={t("generatingImage")}
+                  className="image-generation-pending"
+                  role="status"
+                >
+                  <LoaderCircle
+                    aria-hidden="true"
+                    className="pending-spinner size-4"
+                  />
+                  <span>{t("generatingImage")}</span>
+                </div>
+              ) : contentParts.length === 0 && isLive ? (
                 <div aria-label={t("generating")} className="typing-indicator">
                   <span />
                   <span />
@@ -256,7 +279,8 @@ export function MessageView({
                 </div>
               ) : contentParts.length === 0 &&
                 message.role === "assistant" &&
-                message.status !== "error" ? (
+                message.status !== "error" &&
+                (!imageGeneration || message.status === "stopped") ? (
                 <p className="terminal-message-state">
                   {message.status === "stopped"
                     ? t("generationStopped")
@@ -275,7 +299,7 @@ export function MessageView({
                     </span>
                   </div>
                   <button
-                    disabled={chat.generationStarting || Boolean(chat.stream)}
+                    disabled={generationBusy}
                     onClick={() =>
                       void chat
                         .regenerateAssistant(message.id)
@@ -297,12 +321,41 @@ export function MessageView({
                 {message.parts
                   .filter((part) => part.type === "image_ref")
                   .map((part) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      alt={part.alt ?? t("attachedImage")}
-                      key={part.attachmentId}
-                      src={chat.attachmentUrls[part.attachmentId]}
-                    />
+                    <div className="message-image" key={part.attachmentId}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        alt={part.alt ?? t("attachedImage")}
+                        src={chat.attachmentUrls[part.attachmentId]}
+                      />
+                      {message.role === "assistant" && imageGeneration ? (
+                        <TextTooltip content={t("useAsImageReference")}>
+                          <button
+                            aria-label={t("useAsImageReference")}
+                            className="message-image-reference-button"
+                            disabled={generationBusy}
+                            onClick={() =>
+                              void chat
+                                .addStoredImageReference(part.attachmentId)
+                                .then(() =>
+                                  notify({
+                                    message: t("imageReferenceAdded"),
+                                    tone: "success",
+                                  }),
+                                )
+                                .catch((cause: unknown) =>
+                                  notify({
+                                    message: formatUserFacingError(cause, t),
+                                    tone: "error",
+                                  }),
+                                )
+                            }
+                            type="button"
+                          >
+                            <ImagePlus aria-hidden="true" className="size-4" />
+                          </button>
+                        </TextTooltip>
+                      ) : null}
+                    </div>
                   ))}
               </div>
             </>
@@ -311,6 +364,15 @@ export function MessageView({
         {message.role === "assistant" && message.modelSnapshot ? (
           <p className="message-model-label">
             {t("responseModel", { model: message.modelSnapshot.modelId })}
+          </p>
+        ) : null}
+        {message.role === "assistant" && imageGeneration ? (
+          <p className="message-model-label">
+            {t("imageGenerationSnapshot", {
+              model: imageGeneration.modelId,
+              size: imageGeneration.size,
+              quality: t(`imageQuality${capitalize(imageGeneration.quality)}`),
+            })}
           </p>
         ) : null}
         {!editOpen ? (
@@ -340,7 +402,7 @@ export function MessageView({
                 <TextTooltip content={t("edit")}>
                   <button
                     aria-label={t("edit")}
-                    disabled={chat.generationStarting || Boolean(chat.stream)}
+                    disabled={generationBusy}
                     onClick={startEditing}
                     ref={editTriggerRef}
                     type="button"
@@ -352,7 +414,7 @@ export function MessageView({
                   <TextTooltip content={t("sendEditedMessage")}>
                     <button
                       aria-label={t("sendEditedMessage")}
-                      disabled={chat.generationStarting || Boolean(chat.stream)}
+                      disabled={generationBusy}
                       onClick={() =>
                         void chat
                           .generateUserMessage(message.id)
@@ -374,7 +436,7 @@ export function MessageView({
               <TextTooltip content={t("regenerate")}>
                 <button
                   aria-label={t("regenerate")}
-                  disabled={chat.generationStarting || Boolean(chat.stream)}
+                  disabled={generationBusy}
                   onClick={() =>
                     void chat
                       .regenerateAssistant(message.id)
@@ -563,4 +625,8 @@ function webSearchErrorMessage(
     default:
       return t("webSearchRequestFailed");
   }
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }

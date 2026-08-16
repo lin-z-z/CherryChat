@@ -1,6 +1,6 @@
 import { strToU8, zipSync } from "fflate";
 
-import { readBlobBytes } from "@/runtime/attachments/blob-utils";
+import { bytesToBlob, readBlobBytes } from "@/runtime/attachments/blob-utils";
 import {
   projectConversationExport,
   type ConversationExportProjection,
@@ -100,7 +100,7 @@ export async function exportConversationMarkdown(
     ] = await readBlobBytes(attachment.blob);
   }
   return {
-    blob: bytesBlob(zipSync(files, { level: 6 }), "application/zip"),
+    blob: bytesToBlob(zipSync(files, { level: 6 }), "application/zip"),
     filename: `${baseName}-markdown.zip`,
     mimeType: "application/zip",
   };
@@ -166,11 +166,5 @@ function extensionForMime(mimeType: string): "png" | "jpg" | "webp" {
 }
 
 function textBlob(text: string, type: string): Blob {
-  return bytesBlob(strToU8(text), `${type};charset=utf-8`);
-}
-
-function bytesBlob(bytes: Uint8Array, type: string): Blob {
-  const buffer = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(buffer).set(bytes);
-  return new Blob([buffer], { type });
+  return bytesToBlob(strToU8(text), `${type};charset=utf-8`);
 }

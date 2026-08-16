@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatDatabase } from "@/storage/database";
 import { ConversationRepository } from "@/storage/conversation-repository";
 import { createDefaultAssistantSnapshot } from "@/runtime/chat/types";
+import { StorageError } from "@/storage/errors";
 
 describe("ConversationRepository", () => {
   let database: ChatDatabase;
@@ -113,6 +114,49 @@ describe("ConversationRepository", () => {
     expect(
       (await database.conversations.get(conversation.id))?.activeLeafId,
     ).toBeNull();
+  });
+
+  it("atomically completes image generation and rolls back failed attachment writes", async () => {
+    const conversation = await repository.createConversation();
+    const reference = await repository.appendMessage(conversation.id, {
+      role: "user",
+      parts: [{ type: "image_ref", attachmentId: "reference-1", alt: null }],
+    });
+    const assistant = await repository.appendMessage(conversation.id, {
+      role: "assistant",
+      status: "pending",
+      parts: [
+        {
+          type: "image_generation",
+          modelId: "gpt-image-test",
+          connectionScope: "byok:https://images.example",
+          size: "1024x1024",
+          quality: "high",
+          referenceAttachmentIds: ["reference-1"],
+        },
+      ],
+    });
+    expect(
+      await database.messageAttachments.get([reference.id, "reference-1"]),
+    ).toBeDefined();
+    vi.spyOn(database.messageAttachments, "bulkPut").mockRejectedValueOnce(
+      new DOMException("aborted", "AbortError"),
+    );
+
+    await expect(
+      repository.completeImageGeneration(assistant.id, [processedImage()]),
+    ).rejects.toBeInstanceOf(StorageError);
+    expect(await database.attachments.count()).toBe(0);
+    expect(await database.messages.get(assistant.id)).toMatchObject({
+      status: "pending",
+      parts: [{ type: "image_generation" }],
+    });
+    expect(
+      await database.messageAttachments
+        .where("messageId")
+        .equals(assistant.id)
+        .count(),
+    ).toBe(1);
   });
 
   it("stores Assistant snapshots and only rebinds an empty conversation", async () => {
@@ -359,3 +403,14 @@ describe("ConversationRepository", () => {
     });
   });
 });
+
+function processedImage() {
+  return {
+    blob: new Blob(["generated"], { type: "image/png" }),
+    mimeType: "image/png" as const,
+    width: 1,
+    height: 1,
+    byteSize: 9,
+    sha256: "generated".padEnd(64, "0"),
+  };
+}

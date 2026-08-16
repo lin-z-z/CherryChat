@@ -1,5 +1,6 @@
 import type {
   AssistantSnapshot,
+  AttachmentRecord,
   BranchSelectionRecord,
   ConversationRecord,
   MessageNode,
@@ -19,7 +20,13 @@ import {
   createDefaultAssistantSnapshot,
   DEFAULT_ASSISTANT_ID,
 } from "@/runtime/chat/types";
+import { attachmentIdsFromParts } from "@/runtime/chat/message-attachments";
+import type { ProcessedImage } from "@/runtime/attachments/image-processor";
+import { toMessageError } from "@/runtime/transport/chat-errors";
+import type { ChatTransportError } from "@/runtime/transport/chat-errors";
+import { saveProcessedImage } from "@/storage/attachment-repository";
 import type { ChatDatabase } from "@/storage/database";
+import { normalizeStorageError } from "@/storage/errors";
 
 export class ConversationNotFoundError extends Error {
   constructor(conversationId: string) {
@@ -317,6 +324,95 @@ export class ConversationRepository {
       );
       return interrupted.length;
     });
+  }
+
+  async completeImageGeneration(
+    messageId: string,
+    images: readonly ProcessedImage[],
+  ): Promise<AttachmentRecord[]> {
+    try {
+      return await this.database.transaction(
+        "rw",
+        this.database.messages,
+        this.database.conversations,
+        this.database.messageAttachments,
+        this.database.attachments,
+        async () => {
+          const message = await this.database.messages.get(messageId);
+          if (!message) throw new MessageNotFoundError(messageId);
+          const snapshot = message.parts.find(
+            (part) => part.type === "image_generation",
+          );
+          if (!snapshot) {
+            throw new TypeError("Image generation message has no snapshot");
+          }
+          if (images.length === 0) {
+            throw new TypeError("Image generation returned no attachments");
+          }
+          const attachments: AttachmentRecord[] = [];
+          for (const image of images) {
+            attachments.push(
+              await saveProcessedImage(
+                this.database,
+                image,
+                this.dependencies.createId,
+                this.dependencies.now,
+              ),
+            );
+          }
+          const attachmentIds = [...new Set(attachments.map(({ id }) => id))];
+          const updatedAt = this.dependencies.now();
+          const parts: MessagePart[] = [
+            structuredClone(snapshot),
+            ...attachmentIds.map((attachmentId) => ({
+              type: "image_ref" as const,
+              attachmentId,
+              alt: null,
+            })),
+          ];
+          await this.database.messages.update(messageId, {
+            parts,
+            status: "completed",
+            error: null,
+            updatedAt,
+          });
+          await this.linkMessageAttachments({ ...message, parts });
+          await this.database.conversations.update(message.conversationId, {
+            updatedAt,
+          });
+          return attachments;
+        },
+      );
+    } catch (cause) {
+      if (cause instanceof MessageNotFoundError || cause instanceof TypeError) {
+        throw cause;
+      }
+      throw normalizeStorageError(cause);
+    }
+  }
+
+  async failImageGeneration(
+    messageId: string,
+    error: ChatTransportError | null,
+  ): Promise<void> {
+    await this.database.transaction(
+      "rw",
+      this.database.messages,
+      this.database.conversations,
+      async () => {
+        const message = await this.database.messages.get(messageId);
+        if (!message) throw new MessageNotFoundError(messageId);
+        const updatedAt = this.dependencies.now();
+        await this.database.messages.update(messageId, {
+          status: error ? "error" : "stopped",
+          error: error ? toMessageError(error) : null,
+          updatedAt,
+        });
+        await this.database.conversations.update(message.conversationId, {
+          updatedAt,
+        });
+      },
+    );
   }
 
   async listConversations(archived: boolean): Promise<ConversationRecord[]> {
@@ -626,13 +722,7 @@ export class ConversationRepository {
   }
 
   private async linkMessageAttachments(message: MessageNode): Promise<void> {
-    const attachmentIds = [
-      ...new Set(
-        message.parts
-          .filter((part) => part.type === "image_ref")
-          .map((part) => part.attachmentId),
-      ),
-    ];
+    const attachmentIds = attachmentIdsFromParts(message.parts);
     if (attachmentIds.length === 0) return;
     await this.database.messageAttachments.bulkPut(
       attachmentIds.map((attachmentId) => ({

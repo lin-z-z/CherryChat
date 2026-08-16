@@ -47,6 +47,12 @@ const rawEnvironmentSchema = z.object({
   GROK_RESPONSES_URL: z.string().optional(),
   GROK_MODEL: z.string().optional(),
   GROK_X_SEARCH: booleanStringSchema,
+  IMAGE_GENERATION_API_KEY: z.string().optional(),
+  IMAGE_GENERATION_URL: z.string().optional(),
+  IMAGE_EDIT_URL: z.string().optional(),
+  IMAGE_GENERATION_MODEL: z.string().optional(),
+  IMAGE_GENERATION_TIMEOUT_SECONDS: z.string().optional(),
+  IMAGE_GENERATION_MAX_REQUEST_MB: z.string().optional(),
   DISABLE_BYOK: booleanStringSchema,
   ALLOW_INSECURE_LOCAL_UPSTREAM: booleanStringSchema,
   NODE_ENV: z.string().optional(),
@@ -77,6 +83,16 @@ export interface HostedServerConfig {
   accessCodes: string[];
   authSecret: string;
   webSearch: HostedWebSearchConfig | null;
+  imageGeneration?: HostedImageGenerationConfig | null;
+}
+
+export interface HostedImageGenerationConfig {
+  apiKey: string;
+  generationUrl: string;
+  editUrl: string;
+  model: string;
+  timeoutMs: number;
+  maximumRequestBytes: number;
 }
 
 export interface ServerConfig {
@@ -95,6 +111,10 @@ export interface PublicServerConfig {
   hostedWebSearchEnabled: boolean;
   hostedWebSearchProvider: WebSearchProviderId | null;
   hostedWebSearchProviders: WebSearchProviderId[];
+  hostedImageGenerationEnabled: boolean;
+  hostedImageGenerationModel: string | null;
+  imageGenerationTimeoutMs: number;
+  imageGenerationMaximumRequestBytes: number;
   models: string[];
   defaultModel: string | null;
   titleModel: string | null;
@@ -124,6 +144,20 @@ export function parseServerConfig(
   const grokApiKey = nonEmpty(raw.GROK_API_KEY?.trim());
   const rawGrokResponsesUrl = nonEmpty(raw.GROK_RESPONSES_URL?.trim());
   const grokModel = nonEmpty(raw.GROK_MODEL?.trim()) ?? DEFAULT_GROK_MODEL;
+  const imageApiKey = nonEmpty(raw.IMAGE_GENERATION_API_KEY?.trim());
+  const rawImageGenerationUrl = nonEmpty(raw.IMAGE_GENERATION_URL?.trim());
+  const rawImageEditUrl = nonEmpty(raw.IMAGE_EDIT_URL?.trim());
+  const imageModel = nonEmpty(raw.IMAGE_GENERATION_MODEL?.trim());
+  const imageGenerationTimeoutMs = parseTimeoutMilliseconds(
+    "IMAGE_GENERATION_TIMEOUT_SECONDS",
+    raw.IMAGE_GENERATION_TIMEOUT_SECONDS,
+    120_000,
+  );
+  const imageGenerationMaximumRequestBytes = parseMegabytes(
+    "IMAGE_GENERATION_MAX_REQUEST_MB",
+    raw.IMAGE_GENERATION_MAX_REQUEST_MB,
+    4,
+  );
   const requestTimeouts = {
     modelListMs: parseTimeoutMilliseconds(
       "MODEL_LIST_TIMEOUT_SECONDS",
@@ -196,6 +230,30 @@ export function parseServerConfig(
   validateSearchApiKey(tavilyApiKey, "TAVILY_API_KEY", hostedFieldCount);
   validateSearchApiKey(exaApiKey, "EXA_API_KEY", hostedFieldCount);
   validateSearchApiKey(grokApiKey, "GROK_API_KEY", hostedFieldCount);
+  const imageFieldCount = [
+    imageApiKey,
+    rawImageGenerationUrl,
+    rawImageEditUrl,
+    imageModel,
+  ].filter(Boolean).length;
+  if (imageFieldCount !== 0 && imageFieldCount !== 4) {
+    throw new ServerConfigurationError(
+      "IMAGE_GENERATION_API_KEY, IMAGE_GENERATION_URL, IMAGE_EDIT_URL and IMAGE_GENERATION_MODEL must be configured together",
+    );
+  }
+  if (imageFieldCount > 0 && hostedFieldCount !== 3) {
+    throw new ServerConfigurationError(
+      "Hosted image generation requires a complete hosted-mode configuration",
+    );
+  }
+  if (imageApiKey && (imageApiKey.length < 8 || imageApiKey.length > 2_048)) {
+    throw new ServerConfigurationError(
+      "IMAGE_GENERATION_API_KEY must contain from 8 through 2048 characters",
+    );
+  }
+  if (imageModel && imageModel.length > 512) {
+    throw new ServerConfigurationError("IMAGE_GENERATION_MODEL is too long");
+  }
   if (grokModel.length > 512) {
     throw new ServerConfigurationError("GROK_MODEL is too long");
   }
@@ -226,6 +284,15 @@ export function parseServerConfig(
     grokModel,
     grokXSearch: raw.GROK_X_SEARCH,
   });
+  const imageGenerationUrl = rawImageGenerationUrl
+    ? normalizeServerImageEndpoint(
+        rawImageGenerationUrl,
+        "IMAGE_GENERATION_URL",
+      )
+    : null;
+  const imageEditUrl = rawImageEditUrl
+    ? normalizeServerImageEndpoint(rawImageEditUrl, "IMAGE_EDIT_URL")
+    : null;
   if (hostedFieldCount === 3) {
     assertHostedUpstreamSecurity(
       baseUrl,
@@ -257,6 +324,22 @@ export function parseServerConfig(
         raw.ALLOW_INSECURE_LOCAL_UPSTREAM,
       );
     }
+    if (imageGenerationUrl) {
+      assertHostedUpstreamSecurity(
+        imageGenerationUrl,
+        "IMAGE_GENERATION_URL",
+        raw.NODE_ENV === "production",
+        raw.ALLOW_INSECURE_LOCAL_UPSTREAM,
+      );
+    }
+    if (imageEditUrl) {
+      assertHostedUpstreamSecurity(
+        imageEditUrl,
+        "IMAGE_EDIT_URL",
+        raw.NODE_ENV === "production",
+        raw.ALLOW_INSECURE_LOCAL_UPSTREAM,
+      );
+    }
   }
 
   return {
@@ -272,6 +355,17 @@ export function parseServerConfig(
             accessCodes,
             authSecret,
             webSearch,
+            imageGeneration:
+              imageApiKey && imageGenerationUrl && imageEditUrl && imageModel
+                ? {
+                    apiKey: imageApiKey,
+                    generationUrl: imageGenerationUrl,
+                    editUrl: imageEditUrl,
+                    model: imageModel,
+                    timeoutMs: imageGenerationTimeoutMs,
+                    maximumRequestBytes: imageGenerationMaximumRequestBytes,
+                  }
+                : null,
           }
         : null,
     requestTimeouts,
@@ -290,6 +384,12 @@ export function toPublicServerConfig(config: ServerConfig): PublicServerConfig {
     hostedWebSearchProvider: config.hosted?.webSearch?.defaultProvider ?? null,
     hostedWebSearchProviders:
       config.hosted?.webSearch?.providers.map(({ provider }) => provider) ?? [],
+    hostedImageGenerationEnabled: Boolean(config.hosted?.imageGeneration),
+    hostedImageGenerationModel: config.hosted?.imageGeneration?.model ?? null,
+    imageGenerationTimeoutMs:
+      config.hosted?.imageGeneration?.timeoutMs ?? 120_000,
+    imageGenerationMaximumRequestBytes:
+      config.hosted?.imageGeneration?.maximumRequestBytes ?? 4 * 1024 * 1024,
     models: config.hosted ? [...config.models] : [],
     defaultModel: config.hosted ? config.defaultModel : null,
     titleModel: config.hosted ? config.titleModel : null,
@@ -353,9 +453,34 @@ function normalizeServerGrokResponsesUrl(value: string): string {
   }
 }
 
+function normalizeServerImageEndpoint(value: string, name: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ServerConfigurationError(`${name} must be an absolute URL`);
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new ServerConfigurationError(`${name} must use HTTP or HTTPS`);
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new ServerConfigurationError(
+      `${name} cannot contain credentials, query parameters or fragments`,
+    );
+  }
+  url.pathname = url.pathname.replace(/\/+$/u, "");
+  return url.toString().replace(/\/$/u, "");
+}
+
 function assertHostedUpstreamSecurity(
   value: string,
-  name: "BASE_URL" | "TAVILY_BASE_URL" | "EXA_BASE_URL" | "GROK_RESPONSES_URL",
+  name:
+    | "BASE_URL"
+    | "TAVILY_BASE_URL"
+    | "EXA_BASE_URL"
+    | "GROK_RESPONSES_URL"
+    | "IMAGE_GENERATION_URL"
+    | "IMAGE_EDIT_URL",
   production: boolean,
   allowInsecureLocalUpstream: boolean,
 ): void {
@@ -565,4 +690,25 @@ function parseTimeoutMilliseconds(
     );
   }
   return seconds * 1_000;
+}
+
+function parseMegabytes(
+  name: string,
+  value: string | undefined,
+  defaultMegabytes: number,
+): number {
+  const normalized = value?.trim();
+  if (!normalized) return defaultMegabytes * 1024 * 1024;
+  if (!/^\d+$/u.test(normalized)) {
+    throw new ServerConfigurationError(
+      `${name} must be a whole number from 1 through 50`,
+    );
+  }
+  const megabytes = Number(normalized);
+  if (!Number.isSafeInteger(megabytes) || megabytes < 1 || megabytes > 50) {
+    throw new ServerConfigurationError(
+      `${name} must be a whole number from 1 through 50`,
+    );
+  }
+  return megabytes * 1024 * 1024;
 }
