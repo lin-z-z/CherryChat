@@ -138,6 +138,32 @@ export interface ImageRefPart {
   alt: string | null;
 }
 
+export const IMAGE_GENERATION_SIZES = [
+  "auto",
+  "1024x1024",
+  "1536x1024",
+  "1024x1536",
+] as const;
+export type ImageGenerationSize = (typeof IMAGE_GENERATION_SIZES)[number];
+
+export const IMAGE_GENERATION_QUALITIES = [
+  "auto",
+  "low",
+  "medium",
+  "high",
+] as const;
+export type ImageGenerationQuality =
+  (typeof IMAGE_GENERATION_QUALITIES)[number];
+
+export interface ImageGenerationPart {
+  type: "image_generation";
+  modelId: string;
+  connectionScope: string;
+  size: ImageGenerationSize;
+  quality: ImageGenerationQuality;
+  referenceAttachmentIds: string[];
+}
+
 export interface ReasoningPart {
   type: "reasoning";
   text: string;
@@ -251,7 +277,31 @@ export type ProviderContextPart =
   | AnthropicThinkingContextPart;
 
 export type MessagePart =
-  TextPart | ImageRefPart | ReasoningPart | ToolCallPart | ProviderContextPart;
+  | TextPart
+  | ImageRefPart
+  | ImageGenerationPart
+  | ReasoningPart
+  | ToolCallPart
+  | ProviderContextPart;
+
+export interface ImageGenerationConfiguration {
+  generationUrl: string;
+  editUrl: string;
+  apiKey: string;
+  modelId: string;
+  size: ImageGenerationSize;
+  quality: ImageGenerationQuality;
+  hasApiKey: boolean;
+}
+
+export interface ImageGenerationSaveInput {
+  generationUrl: string;
+  editUrl: string;
+  apiKey: string;
+  modelId: string;
+  size: ImageGenerationSize;
+  quality: ImageGenerationQuality;
+}
 
 export interface TokenUsage {
   promptTokens: number | null;

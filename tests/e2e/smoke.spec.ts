@@ -142,7 +142,7 @@ test("renders the CherryChat shell", async ({ page }) => {
       settingsWorkspace.locator(".settings-mobile-nav-trigger"),
     ).toHaveAccessibleName("Settings page: Appearance");
   } else {
-    await expect(settingsWorkspace.getByRole("tab")).toHaveCount(6);
+    await expect(settingsWorkspace.getByRole("tab")).toHaveCount(7);
   }
   await expect(
     settingsWorkspace.getByText("Instructions & context", { exact: true }),
@@ -368,7 +368,7 @@ test("uses one adaptive sidebar and a compact composer", async ({ page }) => {
   await expect(page.locator(".chat-disclaimer")).toHaveCount(0);
 });
 
-test("supports the six settings destinations without horizontal overflow", async ({
+test("supports the seven settings destinations without horizontal overflow", async ({
   page,
 }) => {
   await mockConfig(page);
@@ -407,12 +407,15 @@ test("supports the six settings destinations without horizontal overflow", async
     const pageMenu = settings.locator(".settings-mobile-nav-trigger");
     await expect(pageMenu).toHaveAccessibleName("Settings page: Appearance");
     await pageMenu.click();
-    await expect(page.getByRole("menuitem")).toHaveCount(6);
+    await expect(page.getByRole("menuitem")).toHaveCount(7);
     await expect(
       page.getByRole("menuitem", { name: "Model service", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("menuitem", { name: "Web search", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: "Image generation", exact: true }),
     ).toBeVisible();
     await page.getByRole("menuitem", { name: "About", exact: true }).click();
     await expect(
@@ -422,9 +425,12 @@ test("supports the six settings destinations without horizontal overflow", async
     const appearanceTab = settings.getByRole("tab", { name: "Appearance" });
     const aboutTab = settings.getByRole("tab", { name: "About" });
     const serviceTab = settings.getByRole("tab", { name: "Model service" });
-    await expect(settings.getByRole("tab")).toHaveCount(6);
+    await expect(settings.getByRole("tab")).toHaveCount(7);
     await expect(
       settings.getByRole("tab", { name: "Web search", exact: true }),
+    ).toBeVisible();
+    await expect(
+      settings.getByRole("tab", { name: "Image generation", exact: true }),
     ).toBeVisible();
     await expect(appearanceTab).toHaveAttribute("aria-selected", "true");
     await appearanceTab.focus();
@@ -542,6 +548,19 @@ test("supports the six settings destinations without horizontal overflow", async
   await expectNoHorizontalOverflow(settings);
   await page.screenshot({
     path: `test-results/settings-web-search-${test.info().project.name}-light.png`,
+    fullPage: true,
+  });
+
+  await selectSettingsPage(page, settings, "Image generation");
+  await expect(settings.getByLabel("Image generation URL")).toBeVisible();
+  await expect(settings.getByLabel("Image edit URL")).toBeVisible();
+  await expect(
+    settings.getByRole("textbox", { name: "API key", exact: true }),
+  ).toBeVisible();
+  await expect(settings.getByLabel("Image model")).toBeVisible();
+  await expectNoHorizontalOverflow(settings);
+  await page.screenshot({
+    path: `test-results/settings-image-generation-${test.info().project.name}-light.png`,
     fullPage: true,
   });
 

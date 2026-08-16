@@ -3,6 +3,8 @@ import { z } from "zod";
 import {
   ASSISTANT_ICONS,
   CHAT_API_TYPES,
+  IMAGE_GENERATION_QUALITIES,
+  IMAGE_GENERATION_SIZES,
   REASONING_EFFORTS,
   type JsonValue,
   type OpenAIChatReasoningContextPart,
@@ -169,6 +171,19 @@ const visibleMessagePartSchema = z.discriminatedUnion("type", [
       type: z.literal("image_ref"),
       attachmentId: z.string().min(1),
       alt: z.string().nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("image_generation"),
+      modelId: z.string().trim().min(1).max(512),
+      connectionScope: z.string().min(1).max(8_192),
+      size: z.enum(IMAGE_GENERATION_SIZES),
+      quality: z.enum(IMAGE_GENERATION_QUALITIES),
+      referenceAttachmentIds: z
+        .array(z.string().min(1).max(128))
+        .max(16)
+        .refine((items) => new Set(items).size === items.length),
     })
     .strict(),
   z

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,9 @@ import { spawnSync } from "node:child_process";
 
 const scriptPath = fileURLToPath(
   new URL("./check-client-secrets.mjs", import.meta.url),
+);
+const ciWorkflowPath = fileURLToPath(
+  new URL("../.github/workflows/ci.yml", import.meta.url),
 );
 const canaries = {
   OPENAI_API_KEY: "sk-ci-openai-7df8c15a5c6c4ab9",
@@ -20,6 +23,11 @@ const canaries = {
   GROK_API_KEY: "xai-ci-dd0e609949bc42f8",
   GROK_RESPONSES_URL: "https://grok-ci-upstream.example/v1/responses",
   GROK_MODEL: "grok-ci-canary-4-5",
+  IMAGE_GENERATION_API_KEY: "image-ci-f55ac84fdc314eef",
+  IMAGE_GENERATION_URL:
+    "https://image-ci-upstream.example/v1/images/generations",
+  IMAGE_EDIT_URL: "https://image-ci-upstream.example/v1/images/edits",
+  IMAGE_GENERATION_MODEL: "image-ci-canary-model",
 };
 
 let workingDirectory;
@@ -30,6 +38,24 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(workingDirectory, { force: true, recursive: true });
+});
+
+test("CI builds and scans with every server canary", async () => {
+  const workflow = await readFile(ciWorkflowPath, "utf8");
+  const buildStep = workflow.match(
+    /- name: Build production application[\s\S]*?(?=\n\s+- name:)/u,
+  )?.[0];
+  const scanStep = workflow.match(
+    /- name: Scan client bundle for server canaries[\s\S]*?(?=\n\s+- name:)/u,
+  )?.[0];
+
+  assert.ok(buildStep, "Build step is missing from CI");
+  assert.ok(scanStep, "Client-bundle scan step is missing from CI");
+  for (const [name, value] of Object.entries(canaries)) {
+    const declaration = `${name}: ${value}`;
+    assert.ok(buildStep.includes(declaration), `${name} is missing from build`);
+    assert.ok(scanStep.includes(declaration), `${name} is missing from scan`);
+  }
 });
 
 async function writeBundle(relativePath, content) {

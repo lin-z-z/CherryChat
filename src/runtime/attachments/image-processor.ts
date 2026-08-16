@@ -12,6 +12,7 @@ export const TARGET_IMAGE_BYTES = 256 * 1024;
 export const MAX_SOURCE_IMAGE_BYTES = 20 * 1024 * 1024;
 
 export type OutputImageMime = "image/jpeg" | "image/webp";
+export type PersistedImageMime = "image/png" | OutputImageMime;
 
 export interface DecodedImage {
   width: number;
@@ -35,7 +36,7 @@ export interface ImageCodec {
 
 export interface ProcessedImage {
   blob: Blob;
-  mimeType: OutputImageMime;
+  mimeType: PersistedImageMime;
   width: number;
   height: number;
   byteSize: number;

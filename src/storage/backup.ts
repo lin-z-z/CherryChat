@@ -1,7 +1,11 @@
 import { strToU8, unzipSync, zipSync } from "fflate";
 import { z } from "zod";
 
-import { readBlobBytes, sha256Bytes } from "@/runtime/attachments/blob-utils";
+import {
+  bytesToBlob,
+  readBlobBytes,
+  sha256Bytes,
+} from "@/runtime/attachments/blob-utils";
 import {
   inspectImageMetadata,
   type ImageMetadata,
@@ -24,6 +28,7 @@ import type {
   MessageNode,
   ModelOverrideRecord,
 } from "@/runtime/chat/types";
+import { attachmentIdsFromParts } from "@/runtime/chat/message-attachments";
 import { DEFAULT_ASSISTANT_ID } from "@/runtime/chat/types";
 import { parseModelCapabilityOverride } from "@/runtime/models/model-capabilities";
 import type { ChatDatabase, KeyValueRecord } from "@/storage/database";
@@ -400,14 +405,23 @@ export async function importPreparedBackup(
     id: requireRemapped(messageIds, message.id),
     conversationId: requireRemapped(conversationIds, message.conversationId),
     parentId: remapNullable(messageIds, message.parentId),
-    parts: message.parts.map((part) =>
-      part.type === "image_ref"
-        ? {
-            ...part,
-            attachmentId: requireRemapped(attachmentIds, part.attachmentId),
-          }
-        : structuredClone(part),
-    ),
+    parts: message.parts.map((part) => {
+      if (part.type === "image_ref") {
+        return {
+          ...part,
+          attachmentId: requireRemapped(attachmentIds, part.attachmentId),
+        };
+      }
+      if (part.type === "image_generation") {
+        return {
+          ...part,
+          referenceAttachmentIds: part.referenceAttachmentIds.map((id) =>
+            requireRemapped(attachmentIds, id),
+          ),
+        };
+      }
+      return structuredClone(part);
+    }),
   }));
   const branchSelections: BranchSelectionRecord[] =
     prepared.manifest.branchSelections.map((selection) => ({
@@ -572,18 +586,16 @@ function assertManifestIntegrity(manifest: BackupManifest): void {
         );
       }
     }
-    for (const part of message.parts) {
-      if (part.type === "image_ref") {
-        if (!attachments.has(part.attachmentId)) {
-          throw new BackupValidationError(
-            `Message attachment is missing: ${part.attachmentId}`,
-          );
-        }
-        if (!links.has(`${message.id}\0${part.attachmentId}`)) {
-          throw new BackupValidationError(
-            `Message attachment link is missing: ${message.id}`,
-          );
-        }
+    for (const attachmentId of attachmentIdsFromParts(message.parts)) {
+      if (!attachments.has(attachmentId)) {
+        throw new BackupValidationError(
+          `Message attachment is missing: ${attachmentId}`,
+        );
+      }
+      if (!links.has(`${message.id}\0${attachmentId}`)) {
+        throw new BackupValidationError(
+          `Message attachment link is missing: ${message.id}`,
+        );
       }
     }
   }
@@ -744,12 +756,6 @@ async function assertAttachmentImageMetadata(
   if (metadata.width !== expectedWidth || metadata.height !== expectedHeight) {
     throw new BackupValidationError(`Attachment dimensions are invalid: ${id}`);
   }
-}
-
-function bytesToBlob(bytes: Uint8Array, type: string): Blob {
-  const buffer = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(buffer).set(bytes);
-  return new Blob([buffer], { type });
 }
 
 function remapIds(

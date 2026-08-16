@@ -18,6 +18,10 @@ export interface PublicConfig {
   hostedWebSearchEnabled: boolean;
   hostedWebSearchProvider: WebSearchProviderId | null;
   hostedWebSearchProviders: WebSearchProviderId[];
+  hostedImageGenerationEnabled?: boolean;
+  hostedImageGenerationModel?: string | null;
+  imageGenerationTimeoutMs?: number;
+  imageGenerationMaximumRequestBytes?: number;
   models: string[];
   defaultModel: string | null;
   titleModel: string | null;
@@ -211,12 +215,37 @@ export function parsePublicConfig(value: unknown): PublicConfig {
   if (!isRequestTimeoutPolicy(requestTimeouts)) {
     throw new Error("Invalid server config");
   }
+  const hostedImageGenerationEnabled =
+    record.hostedImageGenerationEnabled === true;
+  const hostedImageGenerationModel =
+    typeof record.hostedImageGenerationModel === "string"
+      ? record.hostedImageGenerationModel
+      : null;
+  if (hostedImageGenerationEnabled && !hostedImageGenerationModel) {
+    throw new Error("Invalid server config");
+  }
+  const imageGenerationTimeoutMs =
+    typeof record.imageGenerationTimeoutMs === "number" &&
+    Number.isInteger(record.imageGenerationTimeoutMs) &&
+    record.imageGenerationTimeoutMs >= 0
+      ? record.imageGenerationTimeoutMs
+      : 120_000;
+  const imageGenerationMaximumRequestBytes =
+    typeof record.imageGenerationMaximumRequestBytes === "number" &&
+    Number.isInteger(record.imageGenerationMaximumRequestBytes) &&
+    record.imageGenerationMaximumRequestBytes > 0
+      ? record.imageGenerationMaximumRequestBytes
+      : 4 * 1024 * 1024;
   return {
     byokEnabled: record.byokEnabled,
     hostedEnabled: record.hostedEnabled,
     hostedWebSearchEnabled: record.hostedWebSearchEnabled,
     hostedWebSearchProvider,
     hostedWebSearchProviders,
+    hostedImageGenerationEnabled,
+    hostedImageGenerationModel,
+    imageGenerationTimeoutMs,
+    imageGenerationMaximumRequestBytes,
     authenticated: record.authenticated,
     models: record.models.filter(
       (model): model is string => typeof model === "string",

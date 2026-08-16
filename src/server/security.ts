@@ -54,6 +54,22 @@ export async function readRequestText(
   request: Request,
   maximumBytes: number,
 ): Promise<string> {
+  const bytes = await readRequestBytes(request, maximumBytes);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new RequestSecurityError(
+      400,
+      "INVALID_REQUEST",
+      "Request body must be valid UTF-8",
+    );
+  }
+}
+
+export async function readRequestBytes(
+  request: Request,
+  maximumBytes: number,
+): Promise<Uint8Array> {
   const declaredLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maximumBytes) {
     throw new RequestSecurityError(
@@ -62,11 +78,10 @@ export async function readRequestText(
       "Request body is too large",
     );
   }
-  if (!request.body) return "";
+  if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
-  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const chunks: Uint8Array[] = [];
   let totalBytes = 0;
-  let text = "";
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -80,18 +95,23 @@ export async function readRequestText(
           "Request body is too large",
         );
       }
-      text += decoder.decode(value, { stream: true });
+      chunks.push(value);
     }
-    text += decoder.decode();
-    return text;
   } catch (error) {
     if (error instanceof RequestSecurityError) throw error;
     throw new RequestSecurityError(
       400,
       "INVALID_REQUEST",
-      "Request body must be valid UTF-8",
+      "Request body could not be read",
     );
   } finally {
     reader.releaseLock();
   }
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }

@@ -59,6 +59,7 @@ export function PrintView({
               }
               if (part.type === "tool_call") return null;
               if (part.type === "provider_context") return null;
+              if (part.type === "image_generation") return null;
               return (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img

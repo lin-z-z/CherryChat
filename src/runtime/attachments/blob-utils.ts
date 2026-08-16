@@ -20,6 +20,12 @@ export async function readBlobBytes(blob: Blob): Promise<Uint8Array> {
   });
 }
 
+export function bytesToBlob(bytes: Uint8Array, type: string): Blob {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return new Blob([buffer], { type });
+}
+
 export async function sha256Bytes(bytes: Uint8Array): Promise<string> {
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);

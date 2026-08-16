@@ -246,6 +246,80 @@ describe("backup archive", () => {
     });
   });
 
+  it("round-trips ordered image-generation references with remapped links", async () => {
+    const source = await createDatabase("backup-image-generation-source");
+    await seedDatabase(source);
+
+    const firstAttachment = await source.attachments.get("attachment-1");
+    if (!firstAttachment) throw new Error("Image fixture is missing");
+    await source.attachments.add({
+      ...firstAttachment,
+      id: "attachment-2",
+    });
+    const assistant = await source.messages.get("assistant-1");
+    if (!assistant) throw new Error("Assistant fixture is missing");
+    await source.messages.put({
+      ...assistant,
+      parts: [
+        ...assistant.parts,
+        {
+          type: "image_generation",
+          modelId: "gpt-image-1.5",
+          connectionScope: "byok:https://api.example.test",
+          size: "1024x1024",
+          quality: "high",
+          referenceAttachmentIds: ["attachment-1", "attachment-2"],
+        },
+      ],
+    });
+    await source.messageAttachments.bulkAdd([
+      {
+        messageId: "assistant-1",
+        attachmentId: "attachment-1",
+        conversationId: "conversation-1",
+      },
+      {
+        messageId: "assistant-1",
+        attachmentId: "attachment-2",
+        conversationId: "conversation-1",
+      },
+    ]);
+
+    const archive = await exportBackupArchive(source, () => timestamp);
+    const prepared = await prepareBackupImport(archive);
+    const target = await createDatabase("backup-image-generation-target");
+    let id = 0;
+    await importPreparedBackup(target, prepared, () => `image-import-${++id}`);
+
+    const importedAssistant = (await target.messages.toArray()).find(
+      ({ role }) => role === "assistant",
+    );
+    const generation = importedAssistant?.parts.find(
+      (part) => part.type === "image_generation",
+    );
+    expect(generation).toMatchObject({
+      type: "image_generation",
+      referenceAttachmentIds: ["image-import-5", "image-import-6"],
+    });
+
+    const importedLinks = (await target.messageAttachments.toArray()).filter(
+      ({ messageId }) => messageId === importedAssistant?.id,
+    );
+    expect(
+      importedLinks
+        .map(({ attachmentId }) => attachmentId)
+        .filter((attachmentId) =>
+          ["image-import-5", "image-import-6"].includes(attachmentId),
+        ),
+    ).toEqual(["image-import-5", "image-import-6"]);
+    expect(
+      await target.attachments.bulkGet(["image-import-5", "image-import-6"]),
+    ).toEqual([
+      expect.objectContaining({ id: "image-import-5" }),
+      expect.objectContaining({ id: "image-import-6" }),
+    ]);
+  });
+
   it("accepts legacy v2 conversation settings without exporting them again", async () => {
     const source = await createDatabase("backup-legacy-settings-source");
     await seedDatabase(source);

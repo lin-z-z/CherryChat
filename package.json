@@ -32,6 +32,7 @@
     "e2e:chat-core": "playwright test tests/e2e/chat-core.spec.ts",
     "e2e:chat-models": "playwright test tests/e2e/chat-models.spec.ts",
     "e2e:chat-data-tools": "playwright test tests/e2e/chat-data-tools.spec.ts",
+    "e2e:chat-images": "playwright test tests/e2e/chat-image-generation.spec.ts",
     "docs:check": "node scripts/check-doc-links.mjs",
     "docs:screenshots": "node scripts/capture-readme-screenshots.mjs",
     "models:update": "node scripts/update-model-catalog.mjs && prettier --write src/runtime/models/model-catalog.json",

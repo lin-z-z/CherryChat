@@ -148,6 +148,17 @@ function createController(
       },
       hasApiKey: false,
     },
+    imageGenerationConfig: {
+      generationUrl: "https://api.openai.com/v1/images/generations",
+      editUrl: "https://api.openai.com/v1/images/edits",
+      apiKey: "",
+      modelId: "gpt-image-1.5",
+      size: "1024x1024" as const,
+      quality: "auto" as const,
+      hasApiKey: false,
+    },
+    composerMode: "chat" as const,
+    setComposerMode: vi.fn(),
     webSearchSource: null,
     webSearchEnabled: false,
     webSearchAvailable: false,
@@ -164,6 +175,7 @@ function createController(
     draft: "",
     setDraft: vi.fn(),
     pendingAttachments: [],
+    imageReferences: [],
     attachmentUrls: {},
     activeGeneration:
       message && stream
@@ -175,6 +187,8 @@ function createController(
           }
         : null,
     generationStarting: false,
+    activeImageGeneration: null,
+    imageGenerationStarting: false,
     stream,
     contextStats: null,
     error: null,
@@ -198,6 +212,9 @@ function createController(
     ]),
     refreshModels: vi.fn(async () => ["gpt-4.1-mini"]),
     saveWebSearchSettings: vi.fn(),
+    saveImageGenerationSettings: vi.fn(),
+    setImageGenerationSize: vi.fn(),
+    setImageGenerationQuality: vi.fn(),
     testWebSearch: vi.fn(),
     setConversationWebSearch: vi.fn(async () => undefined),
     send: vi.fn(),
@@ -205,6 +222,10 @@ function createController(
     stop: vi.fn(),
     addImages: vi.fn(),
     removePendingAttachment: vi.fn(),
+    addImageReferences: vi.fn(),
+    addStoredImageReference: vi.fn(async () => undefined),
+    removeImageReference: vi.fn(),
+    reorderImageReferences: vi.fn(),
     archiveConversation: vi.fn(),
     renameConversation: vi.fn(),
     restoreConversation: vi.fn(),
@@ -673,19 +694,20 @@ describe("ChatShell", () => {
     );
   });
 
-  it("uses the six end-user settings destinations", () => {
+  it("uses the seven end-user settings destinations", () => {
     const controller = createController();
     controller.settingsOpen = true;
     vi.mocked(useChatController).mockReturnValue(controller);
 
     renderShell();
 
-    expect(screen.getAllByRole("tab")).toHaveLength(6);
+    expect(screen.getAllByRole("tab")).toHaveLength(7);
     for (const label of [
       "外观",
       "模型服务",
       "模型管理",
       "网络搜索",
+      "图片生成",
       "数据",
       "关于",
     ]) {
@@ -700,6 +722,95 @@ describe("ChatShell", () => {
     expect(
       screen.queryByRole("tab", { name: "指令与上下文" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("switches to image generation and updates request options", async () => {
+    const user = userEvent.setup();
+    const controller = createController();
+    controller.imageGenerationConfig = {
+      ...controller.imageGenerationConfig,
+      apiKey: "sk-test-image-key",
+      hasApiKey: true,
+    };
+    controller.composerMode = "image";
+    vi.mocked(useChatController).mockReturnValue(controller);
+
+    renderShell();
+
+    expect(
+      screen.getByRole("textbox", { name: "描述你想生成的图片" }),
+    ).toBeInTheDocument();
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "图片尺寸" }),
+      "1536x1024",
+    );
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "图片质量" }),
+      "high",
+    );
+
+    expect(controller.setImageGenerationSize).toHaveBeenCalledWith("1536x1024");
+    expect(controller.setImageGenerationQuality).toHaveBeenCalledWith("high");
+    expect(
+      screen.queryByRole("button", { name: "为此会话启用网络搜索" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("saves BYOK image generation settings", async () => {
+    const user = userEvent.setup();
+    const controller = createController();
+    controller.settingsOpen = true;
+    controller.saveImageGenerationSettings = vi.fn(async (input) => ({
+      ...input,
+      hasApiKey: Boolean(input.apiKey),
+    }));
+    vi.mocked(useChatController).mockReturnValue(controller);
+    renderShell();
+
+    await user.click(screen.getByRole("tab", { name: "图片生成" }));
+    await user.clear(screen.getByLabelText("图片模型"));
+    await user.type(screen.getByLabelText("图片模型"), "gpt-image-custom");
+    await user.type(screen.getByLabelText("API 密钥"), "sk-image-secret");
+    await user.click(screen.getByRole("button", { name: "保存图片生成设置" }));
+
+    await waitFor(() =>
+      expect(controller.saveImageGenerationSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: "sk-image-secret",
+          modelId: "gpt-image-custom",
+        }),
+      ),
+    );
+    expect(screen.getByText("图片生成设置已保存。")).toBeInTheDocument();
+  });
+
+  it("adds a generated image to the next reference draft", async () => {
+    const user = userEvent.setup();
+    const controller = createController({
+      ...createAssistantMessage("completed"),
+      parts: [
+        {
+          type: "image_generation",
+          modelId: "gpt-image-1.5",
+          connectionScope: "image:byok:test",
+          size: "1024x1024",
+          quality: "high",
+          referenceAttachmentIds: [],
+        },
+        { type: "image_ref", attachmentId: "generated-1", alt: null },
+      ],
+    });
+    controller.attachmentUrls = { "generated-1": "blob:generated-1" };
+    vi.mocked(useChatController).mockReturnValue(controller);
+    renderShell();
+
+    await user.click(screen.getByRole("button", { name: "作为参考图" }));
+
+    await waitFor(() =>
+      expect(controller.addStoredImageReference).toHaveBeenCalledWith(
+        "generated-1",
+      ),
+    );
   });
 
   it("saves the selected Tavily settings from the shared controls", async () => {

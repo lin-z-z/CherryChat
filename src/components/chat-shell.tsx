@@ -4,6 +4,7 @@ import {
   ArrowUp,
   ChevronRight,
   Globe2,
+  Image as ImageIcon,
   Menu,
   Plus,
   Square,
@@ -59,6 +60,8 @@ export function ChatShell() {
   const messageScrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const imageReferenceInputRef = useRef<HTMLInputElement>(null);
+  const draggedImageReferenceRef = useRef<string | null>(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const [modelSwitchNotice, setModelSwitchNotice] = useState<{
     conversationId: string;
@@ -140,13 +143,25 @@ export function ChatShell() {
     : "en";
   const selectedTheme: AppTheme =
     theme === "light" || theme === "dark" ? theme : "system";
-  const generationBusy = chat.generationStarting || Boolean(chat.stream);
+  const generationBusy =
+    chat.generationStarting ||
+    Boolean(chat.stream) ||
+    chat.imageGenerationStarting ||
+    Boolean(chat.activeImageGeneration);
+  const imageMode = chat.composerMode === "image";
   const supportsImageInput = Boolean(
     chat.capability?.modelId === chat.connection.modelId &&
     chat.capability.vision,
   );
   const canAttachImages =
-    chat.ready && chat.online && supportsImageInput && !generationBusy;
+    chat.ready &&
+    chat.online &&
+    !generationBusy &&
+    (imageMode || supportsImageInput);
+  const imageGenerationAvailable =
+    chat.connection.mode === "hosted"
+      ? (chat.publicConfig?.hostedImageGenerationEnabled ?? false)
+      : chat.imageGenerationConfig.hasApiKey;
   const webSearchButtonDisabled =
     generationBusy || (!chat.webSearchAvailable && !chat.webSearchEnabled);
   const webSearchTooltipContent = chat.webSearchEnabled
@@ -397,7 +412,7 @@ export function ChatShell() {
               </p>
             ) : null}
             <form className="composer" onSubmit={submit}>
-              {supportsImageInput ? (
+              {supportsImageInput && !imageMode ? (
                 <input
                   accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
                   hidden
@@ -417,21 +432,95 @@ export function ChatShell() {
                   type="file"
                 />
               ) : null}
+              {imageMode ? (
+                <input
+                  accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
+                  hidden
+                  multiple
+                  name="image-references"
+                  onChange={(event) => {
+                    const files = [...(event.target.files ?? [])];
+                    void chat
+                      .addImageReferences(files)
+                      .catch((cause: unknown) =>
+                        notify({
+                          message: imageUploadError(cause, t),
+                          tone: "error",
+                        }),
+                      );
+                    event.target.value = "";
+                  }}
+                  ref={imageReferenceInputRef}
+                  type="file"
+                />
+              ) : null}
               <div className="composer-frame" id="message-input-container">
-                {chat.pendingAttachments.length > 0 ? (
+                {(
+                  imageMode
+                    ? chat.imageReferences.length > 0
+                    : chat.pendingAttachments.length > 0
+                ) ? (
                   <div className="attachment-preview-row">
-                    {chat.pendingAttachments.map((attachment) => (
-                      <div className="preview-chip" key={attachment.id}>
+                    {(imageMode
+                      ? chat.imageReferences
+                      : chat.pendingAttachments
+                    ).map((attachment, index) => (
+                      <div
+                        aria-label={
+                          imageMode
+                            ? t("imageReferencePosition", { index: index + 1 })
+                            : undefined
+                        }
+                        className={cn(
+                          "preview-chip",
+                          imageMode && "image-reference-chip",
+                        )}
+                        draggable={imageMode}
+                        key={attachment.id}
+                        onDragEnd={() => {
+                          draggedImageReferenceRef.current = null;
+                        }}
+                        onDragOver={(event) => {
+                          if (imageMode) event.preventDefault();
+                        }}
+                        onDragStart={() => {
+                          draggedImageReferenceRef.current = attachment.id;
+                        }}
+                        onDrop={(event) => {
+                          if (!imageMode) return;
+                          event.preventDefault();
+                          const sourceId = draggedImageReferenceRef.current;
+                          if (sourceId) {
+                            chat.reorderImageReferences(
+                              sourceId,
+                              attachment.id,
+                            );
+                          }
+                        }}
+                      >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          alt={t("imagePreview")}
+                          alt={
+                            imageMode
+                              ? t("imageReferencePosition", {
+                                  index: index + 1,
+                                })
+                              : t("imagePreview")
+                          }
                           src={chat.attachmentUrls[attachment.id]}
                         />
+                        {imageMode ? (
+                          <span className="image-reference-index">
+                            {index + 1}
+                          </span>
+                        ) : null}
                         <button
                           aria-label={t("removeImage")}
                           className="preview-remove"
                           onClick={() =>
-                            chat.removePendingAttachment(attachment.id)
+                            imageMode
+                              ? chat.removeImageReference(attachment.id)
+                              : chat.removePendingAttachment(attachment.id)
                           }
                           type="button"
                         >
@@ -439,11 +528,44 @@ export function ChatShell() {
                         </button>
                       </div>
                     ))}
+                    {imageMode ? (
+                      <span className="image-reference-count">
+                        {t("imageReferenceCount", {
+                          count: chat.imageReferences.length,
+                        })}
+                      </span>
+                    ) : null}
                   </div>
                 ) : null}
-                <div className="composer-input-shell">
+                <div
+                  className="composer-input-shell"
+                  onDragOver={(event) => {
+                    if (
+                      imageMode &&
+                      event.dataTransfer.types.includes("Files")
+                    ) {
+                      event.preventDefault();
+                    }
+                  }}
+                  onDrop={(event) => {
+                    if (!imageMode || !event.dataTransfer.files.length) return;
+                    event.preventDefault();
+                    void chat
+                      .addImageReferences([...event.dataTransfer.files])
+                      .catch((cause: unknown) =>
+                        notify({
+                          message: imageUploadError(cause, t),
+                          tone: "error",
+                        }),
+                      );
+                  }}
+                >
                   <textarea
-                    aria-label={t("composerPlaceholder")}
+                    aria-label={
+                      imageMode
+                        ? t("imageComposerPlaceholder")
+                        : t("composerPlaceholder")
+                    }
                     className="composer-textarea"
                     disabled={!chat.ready || !chat.online || generationBusy}
                     name="message"
@@ -471,7 +593,11 @@ export function ChatShell() {
                         .filter((file): file is File => file !== null);
                       if (files.length > 0 && canAttachImages) {
                         event.preventDefault();
-                        void chat.addImages(files).catch((cause: unknown) =>
+                        void (
+                          imageMode
+                            ? chat.addImageReferences(files)
+                            : chat.addImages(files)
+                        ).catch((cause: unknown) =>
                           notify({
                             message: imageUploadError(cause, t),
                             tone: "error",
@@ -479,7 +605,11 @@ export function ChatShell() {
                         );
                       }
                     }}
-                    placeholder={t("composerPlaceholder")}
+                    placeholder={
+                      imageMode
+                        ? t("imageComposerPlaceholder")
+                        : t("composerPlaceholder")
+                    }
                     ref={textareaRef}
                     rows={1}
                     value={chat.draft}
@@ -487,67 +617,139 @@ export function ChatShell() {
                 </div>
                 <div className="composer-action-row">
                   <div className="composer-toolbar-left">
-                    {supportsImageInput ? (
+                    <TextTooltip
+                      content={
+                        imageMode ? t("switchToChat") : t("switchToImage")
+                      }
+                    >
+                      <button
+                        aria-label={
+                          imageMode ? t("switchToChat") : t("switchToImage")
+                        }
+                        aria-pressed={imageMode}
+                        className={cn(
+                          "composer-tool-button",
+                          imageMode && "is-active",
+                        )}
+                        disabled={generationBusy}
+                        onClick={() =>
+                          chat.setComposerMode(imageMode ? "chat" : "image")
+                        }
+                        type="button"
+                      >
+                        <ImageIcon aria-hidden="true" className="size-5" />
+                      </button>
+                    </TextTooltip>
+                    {imageMode || supportsImageInput ? (
                       <TextTooltip content={t("addImage")}>
                         <button
                           aria-label={t("addImage")}
                           className="composer-tool-button"
                           disabled={!canAttachImages}
-                          onClick={() => imageInputRef.current?.click()}
+                          onClick={() =>
+                            imageMode
+                              ? imageReferenceInputRef.current?.click()
+                              : imageInputRef.current?.click()
+                          }
                           type="button"
                         >
                           <Plus aria-hidden="true" className="size-5" />
                         </button>
                       </TextTooltip>
                     ) : null}
-                    <TextTooltip content={webSearchTooltipContent}>
-                      <span
-                        className="composer-tooltip-trigger"
-                        {...(webSearchButtonDisabled
-                          ? {
-                              "aria-label": webSearchTooltipContent,
-                              role: "note",
-                              tabIndex: 0,
-                            }
-                          : {})}
-                      >
-                        <button
-                          aria-label={
-                            chat.webSearchEnabled
-                              ? t("disableWebSearchForChat")
-                              : t("enableWebSearchForChat")
-                          }
-                          aria-pressed={chat.webSearchEnabled}
-                          className={cn(
-                            "composer-tool-button",
-                            chat.webSearchEnabled && "is-active",
-                          )}
-                          disabled={webSearchButtonDisabled}
-                          onClick={() =>
-                            void chat
-                              .setConversationWebSearch(!chat.webSearchEnabled)
-                              .catch((cause: unknown) =>
-                                notify({
-                                  message: formatUserFacingError(cause, t),
-                                  tone: "error",
-                                }),
-                              )
-                          }
-                          type="button"
+                    {!imageMode ? (
+                      <TextTooltip content={webSearchTooltipContent}>
+                        <span
+                          className="composer-tooltip-trigger"
+                          {...(webSearchButtonDisabled
+                            ? {
+                                "aria-label": webSearchTooltipContent,
+                                role: "note",
+                                tabIndex: 0,
+                              }
+                            : {})}
                         >
-                          <Globe2 aria-hidden="true" className="size-5" />
-                        </button>
-                      </span>
-                    </TextTooltip>
+                          <button
+                            aria-label={
+                              chat.webSearchEnabled
+                                ? t("disableWebSearchForChat")
+                                : t("enableWebSearchForChat")
+                            }
+                            aria-pressed={chat.webSearchEnabled}
+                            className={cn(
+                              "composer-tool-button",
+                              chat.webSearchEnabled && "is-active",
+                            )}
+                            disabled={webSearchButtonDisabled}
+                            onClick={() =>
+                              void chat
+                                .setConversationWebSearch(
+                                  !chat.webSearchEnabled,
+                                )
+                                .catch((cause: unknown) =>
+                                  notify({
+                                    message: formatUserFacingError(cause, t),
+                                    tone: "error",
+                                  }),
+                                )
+                            }
+                            type="button"
+                          >
+                            <Globe2 aria-hidden="true" className="size-5" />
+                          </button>
+                        </span>
+                      </TextTooltip>
+                    ) : null}
                   </div>
                   <div className="composer-toolbar-right">
-                    <ReasoningEffortControl
-                      capability={chat.capability}
-                      disabled={generationBusy}
-                      modelId={chat.connection.modelId}
-                      onValueChange={chat.setReasoningChoice}
-                      value={chat.reasoningChoice}
-                    />
+                    {imageMode ? (
+                      <>
+                        <select
+                          aria-label={t("imageGenerationSize")}
+                          className="composer-compact-select"
+                          disabled={generationBusy}
+                          onChange={(event) =>
+                            chat.setImageGenerationSize(
+                              event.target
+                                .value as typeof chat.imageGenerationConfig.size,
+                            )
+                          }
+                          value={chat.imageGenerationConfig.size}
+                        >
+                          <option value="auto">Auto</option>
+                          <option value="1024x1024">1:1</option>
+                          <option value="1536x1024">3:2</option>
+                          <option value="1024x1536">2:3</option>
+                        </select>
+                        <select
+                          aria-label={t("imageGenerationQuality")}
+                          className="composer-compact-select"
+                          disabled={generationBusy}
+                          onChange={(event) =>
+                            chat.setImageGenerationQuality(
+                              event.target
+                                .value as typeof chat.imageGenerationConfig.quality,
+                            )
+                          }
+                          value={chat.imageGenerationConfig.quality}
+                        >
+                          <option value="auto">{t("imageQualityAuto")}</option>
+                          <option value="low">{t("imageQualityLow")}</option>
+                          <option value="medium">
+                            {t("imageQualityMedium")}
+                          </option>
+                          <option value="high">{t("imageQualityHigh")}</option>
+                        </select>
+                      </>
+                    ) : (
+                      <ReasoningEffortControl
+                        capability={chat.capability}
+                        disabled={generationBusy}
+                        modelId={chat.connection.modelId}
+                        onValueChange={chat.setReasoningChoice}
+                        value={chat.reasoningChoice}
+                      />
+                    )}
                     {generationBusy ? (
                       <button
                         aria-label={t("stop")}
@@ -568,8 +770,10 @@ export function ChatShell() {
                           !chat.ready ||
                           !chat.online ||
                           generationBusy ||
-                          (!chat.draft.trim() &&
-                            chat.pendingAttachments.length === 0)
+                          (imageMode
+                            ? !chat.draft.trim() || !imageGenerationAvailable
+                            : !chat.draft.trim() &&
+                              chat.pendingAttachments.length === 0)
                         }
                         type="submit"
                       >

@@ -4,13 +4,14 @@ import { errorResponse } from "@/server/http";
 
 export const HOSTED_CHAT_CONCURRENCY_LIMIT = 8;
 export const HOSTED_WEB_SEARCH_CONCURRENCY_LIMIT = 4;
+export const HOSTED_IMAGE_GENERATION_CONCURRENCY_LIMIT = 2;
 export const HOSTED_LOGIN_FAILURE_LIMIT = 5;
 export const HOSTED_LOGIN_GLOBAL_FAILURE_LIMIT = 100;
 export const HOSTED_LOGIN_WINDOW_MS = 60_000;
 export const HOSTED_LOGIN_BLOCK_MS = 60_000;
 export const HOSTED_LOGIN_CLIENT_CAPACITY = 1024;
 
-export type HostedRequestKind = "chat" | "web-search";
+export type HostedRequestKind = "chat" | "web-search" | "image-generation";
 
 export interface HostedRequestLease {
   release(): void;
@@ -19,6 +20,7 @@ export interface HostedRequestLease {
 export interface HostedRequestGuardOptions {
   chatConcurrencyLimit: number;
   webSearchConcurrencyLimit: number;
+  imageGenerationConcurrencyLimit: number;
   loginFailureLimit: number;
   loginGlobalFailureLimit: number;
   loginWindowMs: number;
@@ -37,6 +39,7 @@ interface LoginFailureBucket {
 const defaultOptions: HostedRequestGuardOptions = {
   chatConcurrencyLimit: HOSTED_CHAT_CONCURRENCY_LIMIT,
   webSearchConcurrencyLimit: HOSTED_WEB_SEARCH_CONCURRENCY_LIMIT,
+  imageGenerationConcurrencyLimit: HOSTED_IMAGE_GENERATION_CONCURRENCY_LIMIT,
   loginFailureLimit: HOSTED_LOGIN_FAILURE_LIMIT,
   loginGlobalFailureLimit: HOSTED_LOGIN_GLOBAL_FAILURE_LIMIT,
   loginWindowMs: HOSTED_LOGIN_WINDOW_MS,
@@ -50,6 +53,7 @@ export class HostedRequestGuard {
   private readonly activeRequests: Record<HostedRequestKind, number> = {
     chat: 0,
     "web-search": 0,
+    "image-generation": 0,
   };
   private readonly loginClients = new Map<string, LoginFailureBucket>();
   private globalLoginFailures: LoginFailureBucket | null = null;
@@ -62,7 +66,9 @@ export class HostedRequestGuard {
     const limit =
       kind === "chat"
         ? this.options.chatConcurrencyLimit
-        : this.options.webSearchConcurrencyLimit;
+        : kind === "web-search"
+          ? this.options.webSearchConcurrencyLimit
+          : this.options.imageGenerationConcurrencyLimit;
     if (this.activeRequests[kind] >= limit) return null;
 
     this.activeRequests[kind] += 1;
@@ -125,6 +131,7 @@ export class HostedRequestGuard {
   reset(): void {
     this.activeRequests.chat = 0;
     this.activeRequests["web-search"] = 0;
+    this.activeRequests["image-generation"] = 0;
     this.loginClients.clear();
     this.globalLoginFailures = null;
   }

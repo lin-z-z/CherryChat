@@ -46,9 +46,22 @@ const savedByokConnection: ConnectionBundle = {
   },
 };
 
+const PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
 describe("useChatController integration", () => {
   beforeEach(async () => {
     cleanup();
+    Object.defineProperties(URL, {
+      createObjectURL: {
+        configurable: true,
+        value: vi.fn(() => "blob:cherrychat-test"),
+      },
+      revokeObjectURL: {
+        configurable: true,
+        value: vi.fn(),
+      },
+    });
     window.localStorage.clear();
     await deleteDefaultDatabase();
   });
@@ -56,6 +69,8 @@ describe("useChatController integration", () => {
   afterEach(async () => {
     cleanup();
     vi.unstubAllGlobals();
+    Reflect.deleteProperty(URL, "createObjectURL");
+    Reflect.deleteProperty(URL, "revokeObjectURL");
     window.localStorage.clear();
     await deleteDefaultDatabase();
   });
@@ -165,6 +180,214 @@ describe("useChatController integration", () => {
     expect(result.current.webSearchSource).toBe("hosted");
     expect(result.current.capability?.tools).toBe(true);
     expect(result.current.webSearchAvailable).toBe(true);
+  });
+
+  it("runs the BYOK image generation flow with reference controls", async () => {
+    const fetchMock = installFetchMock({
+      models: [],
+      config: {
+        ...hostedConfig,
+        hostedEnabled: false,
+        models: [],
+        defaultModel: null,
+        titleModel: null,
+        imageGenerationTimeoutMs: 10,
+      },
+    });
+    const { result } = renderController();
+
+    await waitForController(result);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [] }));
+    await act(async () => {
+      await result.current.refreshModels();
+    });
+    const cachedDatabase = new ChatDatabase();
+    await new ModelListCacheRepository(cachedDatabase).save(
+      connectionScope(result.current.connection),
+      [{ id: "cached-image-model", ownedBy: null, endpointTypes: [] }],
+    );
+    cachedDatabase.close();
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [] }));
+    await act(async () => {
+      await result.current.refreshModels();
+    });
+
+    await act(async () => {
+      await result.current.saveImageGenerationSettings({
+        generationUrl: "https://images.example/v1/images/generations",
+        editUrl: "https://images.example/v1/images/edits",
+        apiKey: "image-test-key",
+        modelId: "gpt-image-1.5",
+        size: "1024x1024",
+        quality: "high",
+      });
+      result.current.setImageGenerationSize("1536x1024");
+      result.current.setImageGenerationQuality("auto");
+    });
+
+    expect(result.current.imageGenerationConfig).toMatchObject({
+      generationUrl: "https://images.example/v1/images/generations",
+      editUrl: "https://images.example/v1/images/edits",
+      apiKey: "image-test-key",
+      size: "1536x1024",
+      quality: "auto",
+      hasApiKey: true,
+    });
+
+    await act(async () => {
+      await result.current.saveWebSearchSettings({
+        enabled: false,
+        maxResults: 5,
+        provider: "tavily",
+        hostedProvider: null,
+        providers: {
+          tavily: {
+            apiKey: "",
+            baseUrl: "https://api.tavily.com",
+          },
+          exa: {
+            apiKey: "",
+            baseUrl: "https://api.exa.ai",
+          },
+          grok: {
+            apiKey: "",
+            responsesUrl: "https://api.x.ai/v1/responses",
+            model: "grok-4.5",
+            xSearch: false,
+          },
+        },
+      });
+    });
+
+    const database = new ChatDatabase();
+    await database.attachments.put({
+      id: "stored-reference",
+      blob: new Blob(["reference"], { type: "image/png" }),
+      mimeType: "image/png",
+      width: 1,
+      height: 1,
+      byteSize: 9,
+      sha256: "a".repeat(64),
+      createdAt: "2026-08-01T00:00:00.000Z",
+    });
+    database.close();
+    await act(async () => {
+      await result.current.addStoredImageReference("stored-reference");
+    });
+    expect(result.current.imageReferences).toHaveLength(1);
+    const referenceId = result.current.imageReferences[0]?.id;
+    expect(referenceId).toBe("stored-reference");
+
+    await act(async () => {
+      result.current.reorderImageReferences(referenceId!, referenceId!);
+      result.current.removeImageReference(referenceId!);
+    });
+    expect(result.current.imageReferences).toHaveLength(0);
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        data: [{ url: "https://images.example/generated.png" }],
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(base64ArrayBuffer(PNG_BASE64), {
+        headers: { "Content-Type": "image/png" },
+      }),
+    );
+    await act(async () => {
+      result.current.setComposerMode("image");
+      result.current.setDraft("a tiny test image");
+    });
+    await act(async () => {
+      await result.current.send();
+    });
+
+    expect(result.current.imageGenerationStarting).toBe(false);
+    expect(result.current.activeImageGeneration).toBeNull();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) =>
+          requestPath(input) === "https://images.example/v1/images/generations",
+      ),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.find(
+        ([input]) =>
+          requestPath(input) === "https://images.example/generated.png",
+      )?.[1],
+    ).toMatchObject({ credentials: "omit", redirect: "follow" });
+
+    const persistedDatabase = new ChatDatabase();
+    const generatedMessage = (await persistedDatabase.messages.toArray()).find(
+      (message) =>
+        message.role === "assistant" &&
+        message.parts.some((part) => part.type === "image_generation"),
+    );
+    const generatedImage = generatedMessage?.parts.find(
+      (part) => part.type === "image_ref",
+    );
+    expect(generatedMessage).toMatchObject({
+      status: "completed",
+      error: null,
+    });
+    expect(generatedImage?.type).toBe("image_ref");
+    if (generatedImage?.type !== "image_ref" || !generatedMessage) {
+      persistedDatabase.close();
+      throw new Error("Generated image fixture was not persisted");
+    }
+    const persistedAttachment = await persistedDatabase.attachments.get(
+      generatedImage.attachmentId,
+    );
+    const persistedLinks = await persistedDatabase.messageAttachments.toArray();
+    persistedDatabase.close();
+    expect(persistedAttachment).toMatchObject({
+      id: generatedImage.attachmentId,
+      mimeType: "image/png",
+      width: 1,
+      height: 1,
+    });
+    expect(persistedLinks).toContainEqual({
+      messageId: generatedMessage.id,
+      attachmentId: generatedImage.attachmentId,
+      conversationId: generatedMessage.conversationId,
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      new Response("not-json", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await act(async () => {
+      result.current.setDraft("a failed test image");
+    });
+    await act(async () => {
+      await result.current.send();
+    });
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) =>
+          requestPath(input) === "https://images.example/v1/images/generations",
+      ),
+    ).toHaveLength(2);
+    expect(result.current.path.at(-1)?.status).toBe("error");
+
+    fetchMock.mockImplementationOnce(
+      async (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        }),
+    );
+    await act(async () => {
+      result.current.setDraft("a timed out test image");
+    });
+    await act(async () => {
+      await result.current.send();
+    });
+    expect(result.current.path.at(-1)?.error?.code).toBe("REQUEST_TIMEOUT");
   });
 
   it("restores saved model roles and the active conversation on reload", async () => {
@@ -430,6 +653,16 @@ function jsonResponse(value: unknown): Response {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function base64ArrayBuffer(value: string): ArrayBuffer {
+  const binary = atob(value);
+  const buffer = new ArrayBuffer(binary.length);
+  const bytes = new Uint8Array(buffer);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return buffer;
 }
 
 async function persistConnection(bundle: ConnectionBundle): Promise<void> {
