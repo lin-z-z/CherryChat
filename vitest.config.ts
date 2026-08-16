@@ -6,6 +6,8 @@ const domTests = [
   "src/components/chat/assistant-selector.test.tsx",
   "src/components/chat/model-enablement-list.test.tsx",
   "src/components/chat/model-selector.test.tsx",
+  "src/components/chat/image-generation-parameter-control.test.tsx",
+  "src/components/chat/image-generation-profile-selector.test.tsx",
   "src/components/chat/reasoning-effort-control.test.tsx",
   "src/components/chat/theme-switcher.test.tsx",
   "src/components/chat-shell.test.tsx",

@@ -68,8 +68,8 @@ describe("server configuration", () => {
       hostedImageGenerationModel: null,
       hostedImageGenerationProfiles: [],
       hostedImageGenerationDefaultProfileId: null,
-      imageGenerationTimeoutMs: 120_000,
-      imageGenerationMaximumRequestBytes: 4 * 1024 * 1024,
+      imageGenerationTimeoutMs: 300_000,
+      imageGenerationMaximumRequestBytes: 8 * 1024 * 1024,
       models: ["model-a", "model-b"],
       defaultModel: "model-b",
       titleModel: "model-a",
@@ -105,8 +105,7 @@ describe("server configuration", () => {
     const config = parseServerConfig({
       ...hostedEnvironment(),
       IMAGE_GENERATION_API_KEY: "image-deployment-secret",
-      IMAGE_GENERATION_URL: "https://images.example/v1/images/generations/",
-      IMAGE_EDIT_URL: "https://images.example/v1/images/edits/",
+      IMAGE_GENERATION_BASE_URL: "https://images.example/v1/",
       IMAGE_GENERATION_MODEL: "gpt-image-1.5",
       IMAGE_GENERATION_TIMEOUT_SECONDS: "45",
       IMAGE_GENERATION_MAX_REQUEST_MB: "8",
@@ -114,16 +113,14 @@ describe("server configuration", () => {
 
     expect(config.hosted?.imageGeneration).toEqual({
       apiKey: "image-deployment-secret",
-      generationUrl: "https://images.example/v1/images/generations",
-      editUrl: "https://images.example/v1/images/edits",
+      baseUrl: "https://images.example/v1",
       model: "gpt-image-1.5",
       profiles: [
         {
           id: "default-gpt-image-2",
           name: "gpt-image-1.5",
           apiKey: "image-deployment-secret",
-          generationUrl: "https://images.example/v1/images/generations",
-          editUrl: "https://images.example/v1/images/edits",
+          baseUrl: "https://images.example/v1",
           model: "gpt-image-1.5",
           sizeMode: "auto",
         },
@@ -152,8 +149,7 @@ describe("server configuration", () => {
           id: "standard",
           name: "Standard",
           apiKey: "standard-image-secret",
-          generationUrl: "https://standard.images.example/generations",
-          editUrl: "https://standard.images.example/edits",
+          baseUrl: "https://standard.images.example",
           model: "gpt-image-1.5",
           sizeMode: "fixed",
         },
@@ -161,8 +157,7 @@ describe("server configuration", () => {
           id: "portrait",
           name: "Portrait 4K",
           apiKey: "portrait-image-secret",
-          generationUrl: "https://portrait.images.example/generations",
-          editUrl: "https://portrait.images.example/edits",
+          baseUrl: "https://portrait.images.example",
           model: "gpt-image-2",
           sizeMode: "auto",
         },
@@ -207,23 +202,21 @@ describe("server configuration", () => {
     },
     {
       IMAGE_GENERATION_API_KEY: "image-deployment-secret",
-      IMAGE_GENERATION_URL: "https://images.example/generations",
+      IMAGE_GENERATION_BASE_URL: "https://images.example",
     },
     {
       IMAGE_GENERATION_API_KEY: "image-deployment-secret",
-      IMAGE_GENERATION_URL: "https://images.example/generations",
-      IMAGE_EDIT_URL: "https://images.example/edits",
+      IMAGE_GENERATION_BASE_URL: "https://images.example",
     },
     {
-      IMAGE_GENERATION_URL: "https://images.example/generations",
-      IMAGE_EDIT_URL: "https://images.example/edits",
+      IMAGE_GENERATION_BASE_URL: "https://images.example",
       IMAGE_GENERATION_MODEL: "gpt-image-1.5",
     },
   ])("rejects incomplete Hosted image configuration %#", (extra) => {
     expect(() =>
       parseServerConfig({ ...hostedEnvironment(), ...extra }),
     ).toThrow(
-      "IMAGE_GENERATION_API_KEY, IMAGE_GENERATION_URL, IMAGE_EDIT_URL and IMAGE_GENERATION_MODEL must be configured together",
+      "IMAGE_GENERATION_API_KEY, IMAGE_GENERATION_BASE_URL and IMAGE_GENERATION_MODEL must be configured together",
     );
   });
 
@@ -231,8 +224,7 @@ describe("server configuration", () => {
     expect(() =>
       parseServerConfig({
         IMAGE_GENERATION_API_KEY: "image-deployment-secret",
-        IMAGE_GENERATION_URL: "https://images.example/generations",
-        IMAGE_EDIT_URL: "https://images.example/edits",
+        IMAGE_GENERATION_BASE_URL: "https://images.example",
         IMAGE_GENERATION_MODEL: "gpt-image-1.5",
       }),
     ).toThrow("Hosted image generation requires");
@@ -240,22 +232,19 @@ describe("server configuration", () => {
       parseServerConfig({
         ...hostedEnvironment(),
         IMAGE_GENERATION_API_KEY: "image-deployment-secret",
-        IMAGE_GENERATION_URL:
-          "https://user:password@images.example/generations",
-        IMAGE_EDIT_URL: "https://images.example/edits",
+        IMAGE_GENERATION_BASE_URL: "https://user:password@images.example",
         IMAGE_GENERATION_MODEL: "gpt-image-1.5",
       }),
-    ).toThrow("IMAGE_GENERATION_URL cannot contain credentials");
+    ).toThrow("IMAGE_GENERATION_BASE_URL cannot contain credentials");
     expect(() =>
       parseServerConfig({
         ...hostedEnvironment(),
         NODE_ENV: "production",
         IMAGE_GENERATION_API_KEY: "image-deployment-secret",
-        IMAGE_GENERATION_URL: "http://localhost:8080/generations",
-        IMAGE_EDIT_URL: "https://images.example/edits",
+        IMAGE_GENERATION_BASE_URL: "http://localhost:8080",
         IMAGE_GENERATION_MODEL: "gpt-image-1.5",
       }),
-    ).toThrow("IMAGE_GENERATION_URL must use HTTPS");
+    ).toThrow("IMAGE_GENERATION_BASE_URL must use HTTPS");
   });
 
   it.each([

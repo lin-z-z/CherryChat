@@ -2,6 +2,8 @@ import {
   generatedBlobToProcessedImage,
   imageGenerationRequestSchema,
   imageGenerationResponseSchema,
+  imageEditUrl,
+  imageGenerationUrl,
   MAX_GENERATED_IMAGE_BYTES,
   MAX_IMAGE_GENERATION_REFERENCES,
   MAX_IMAGE_GENERATION_RESPONSE_BYTES,
@@ -64,8 +66,8 @@ export class OpenAICompatibleImageTransport {
       this.options.endpoint.mode === "hosted"
         ? "/api/image-generation"
         : hasReferences
-          ? this.options.endpoint.editUrl
-          : this.options.endpoint.generationUrl;
+          ? imageEditUrl(this.options.endpoint.baseUrl)
+          : imageGenerationUrl(this.options.endpoint.baseUrl);
     const headers = new Headers({ Accept: "application/json" });
     const outputFormat = body.output_format ?? "png";
     if (this.options.endpoint.mode === "hosted") {

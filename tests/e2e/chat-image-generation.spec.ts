@@ -20,8 +20,7 @@ import {
 
 const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
-const GENERATION_URL = "https://images.example.test/v1/images/generations";
-const EDIT_URL = "https://images.example.test/v1/images/edits";
+const BASE_URL = "https://images.example.test/v1";
 const GENERATED_IMAGE_URL = "https://images.example.test/generated.png";
 const IMAGE_MODEL = "gpt-image-2";
 
@@ -41,18 +40,11 @@ test("generates and edits persistent images without desktop or mobile overflow",
   const prompt = page.getByRole("textbox", {
     name: "Describe the image you want to create",
   });
-  await page
-    .getByRole("combobox", { name: "Resolution tier" })
-    .selectOption("2K");
-  await page
-    .getByRole("combobox", { name: "Aspect ratio" })
-    .selectOption("9:16");
-  await page
-    .getByRole("combobox", { name: "Image quality" })
-    .selectOption("high");
-  await page
-    .getByRole("combobox", { name: "Output format" })
-    .selectOption("webp");
+  await selectImageParameter(page, "Resolution tier", "2K");
+  await selectImageParameter(page, "Aspect ratio", "9:16");
+  await selectImageParameter(page, "Image quality", "High");
+  await selectImageParameter(page, "Output format", "WebP");
+  await page.getByRole("button", { name: "Compression quality: 100%" }).click();
   await page
     .getByRole("spinbutton", { name: "Compression quality" })
     .fill("82");
@@ -153,8 +145,7 @@ test("keeps Hosted image credentials and upstream targets out of the browser", a
   await selectSettingsPage(page, settings, "Image generation");
   await expect(settings.getByText("Hosted service available")).toBeVisible();
   await expect(settings.getByText("hosted-image-model")).toBeVisible();
-  await expect(settings.getByLabel("Image generation URL")).toHaveCount(0);
-  await expect(settings.getByLabel("Image edit URL")).toHaveCount(0);
+  await expect(settings.getByLabel("Provider base URL")).toHaveCount(0);
   await settings.getByRole("button", { name: "Close" }).click();
 
   await page.getByRole("button", { name: "Image", exact: true }).click();
@@ -179,7 +170,7 @@ test("keeps Hosted image credentials and upstream targets out of the browser", a
   expect(hostedHeaders["x-cherrychat-mode"]).toBe("hosted");
   const pageText = await page.locator("body").innerText();
   expect(pageText).not.toContain("IMAGE_GENERATION_API_KEY");
-  expect(pageText).not.toContain("IMAGE_GENERATION_URL");
+  expect(pageText).not.toContain("IMAGE_GENERATION_BASE_URL");
   expect(pageText).not.toContain("image-deployment-key");
   await expect(generatedImages(page)).toHaveCount(1);
 });
@@ -246,8 +237,7 @@ async function prepareByokImagePage(page: Page, mobile: boolean) {
 
 async function saveImageGenerationSettings(page: Page, settings: Locator) {
   await selectSettingsPage(page, settings, "Image generation");
-  await settings.getByLabel("Image generation URL").fill(GENERATION_URL);
-  await settings.getByLabel("Image edit URL").fill(EDIT_URL);
+  await settings.getByLabel("Provider base URL").fill(BASE_URL);
   await settings
     .getByRole("textbox", { name: "API key", exact: true })
     .fill("image-e2e-key");
@@ -260,6 +250,11 @@ async function saveImageGenerationSettings(page: Page, settings: Locator) {
   await expect(
     settings.getByText("Image generation settings saved."),
   ).toBeVisible();
+}
+
+async function selectImageParameter(page: Page, label: string, option: string) {
+  await page.getByRole("combobox", { name: label }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
 }
 
 async function openSettings(page: Page, mobile: boolean) {

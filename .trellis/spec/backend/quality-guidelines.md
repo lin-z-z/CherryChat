@@ -999,11 +999,12 @@ reference images are ordinary `AttachmentRecord` rows linked by
 - Hosted browsers call only same-origin `/api/image-generation`. The server
   resolves `profileId` from its allowlist and ignores the caller's model as a
   routing choice. `IMAGE_GENERATION_PROFILES` is a JSON array of
-  `{ id, name, apiKey, generationUrl, editUrl, model, sizeMode }` and
-  `IMAGE_GENERATION_DEFAULT_PROFILE` selects its default. The legacy Key/URL/
-  edit URL/model quartet remains an all-or-none single-Profile input and cannot
-  be combined with the JSON list. Optional timeout and request-byte env values
-  remain server bounded.
+  `{ id, name, apiKey, baseUrl, model, sizeMode }` and
+  `IMAGE_GENERATION_DEFAULT_PROFILE` selects its default. The legacy Key/base
+  URL/model quartet remains an all-or-none single-Profile input and cannot be
+  combined with the JSON list. The server derives the standard
+  `/v1/images/generations` and `/v1/images/edits` paths from `baseUrl`; optional
+  timeout and request-byte env values remain server bounded.
 - Public config exposes only safe Profile identity/capabilities, the default
   Profile ID, availability, timeout, and request-byte limit. It never exposes
   a deployment Key or upstream URL.

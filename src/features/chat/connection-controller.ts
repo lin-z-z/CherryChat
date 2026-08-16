@@ -268,13 +268,13 @@ export function parsePublicConfig(value: unknown): PublicConfig {
     Number.isInteger(record.imageGenerationTimeoutMs) &&
     record.imageGenerationTimeoutMs >= 0
       ? record.imageGenerationTimeoutMs
-      : 120_000;
+      : 300_000;
   const imageGenerationMaximumRequestBytes =
     typeof record.imageGenerationMaximumRequestBytes === "number" &&
     Number.isInteger(record.imageGenerationMaximumRequestBytes) &&
     record.imageGenerationMaximumRequestBytes > 0
       ? record.imageGenerationMaximumRequestBytes
-      : 4 * 1024 * 1024;
+      : 8 * 1024 * 1024;
   return {
     byokEnabled: record.byokEnabled,
     hostedEnabled: record.hostedEnabled,

@@ -552,8 +552,7 @@ test("supports the seven settings destinations without horizontal overflow", asy
   });
 
   await selectSettingsPage(page, settings, "Image generation");
-  await expect(settings.getByLabel("Image generation URL")).toBeVisible();
-  await expect(settings.getByLabel("Image edit URL")).toBeVisible();
+  await expect(settings.getByLabel("Provider base URL")).toBeVisible();
   await expect(
     settings.getByRole("textbox", { name: "API key", exact: true }),
   ).toBeVisible();

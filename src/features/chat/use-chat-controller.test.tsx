@@ -263,8 +263,7 @@ describe("useChatController integration", () => {
             id: "test-image-profile",
             name: "Test image",
             mode: "byok",
-            generationUrl: "https://images.example/v1/images/generations",
-            editUrl: "https://images.example/v1/images/edits",
+            baseUrl: "https://images.example/v1",
             apiKey: "image-test-key",
             modelId: "gpt-image-1.5",
             sizeMode: "fixed",
@@ -283,8 +282,7 @@ describe("useChatController integration", () => {
     });
 
     expect(result.current.imageGenerationConfig.profiles[0]).toMatchObject({
-      generationUrl: "https://images.example/v1/images/generations",
-      editUrl: "https://images.example/v1/images/edits",
+      baseUrl: "https://images.example/v1",
       apiKey: "image-test-key",
       modelId: "gpt-image-1.5",
       hasApiKey: true,

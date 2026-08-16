@@ -60,8 +60,7 @@ describe("OpenAICompatibleImageTransport", () => {
       endpoint: {
         mode: "hosted",
         apiKey: "",
-        generationUrl: "https://should-not-leak.example/generations",
-        editUrl: "https://should-not-leak.example/edits",
+        baseUrl: "https://should-not-leak.example",
       },
       fetchImplementation: fetchMock,
     });
@@ -90,8 +89,7 @@ describe("OpenAICompatibleImageTransport", () => {
       endpoint: {
         mode: "hosted",
         apiKey: "",
-        generationUrl: "https://should-not-leak.example/generations",
-        editUrl: "https://should-not-leak.example/edits",
+        baseUrl: "https://should-not-leak.example",
       },
       fetchImplementation: fetchMock,
     });
@@ -114,8 +112,7 @@ describe("OpenAICompatibleImageTransport", () => {
         endpoint: {
           mode: "byok",
           apiKey: "sk-test-image-key",
-          generationUrl: "https://images.example.test/v1/images/generations",
-          editUrl: "https://images.example.test/v1/images/edits",
+          baseUrl: "https://images.example.test/v1",
         },
       });
 
@@ -134,8 +131,7 @@ function createTransport(fetchImplementation: typeof fetch) {
     endpoint: {
       mode: "byok",
       apiKey: "sk-test-image-key",
-      generationUrl: "https://images.example.test/v1/images/generations",
-      editUrl: "https://images.example.test/v1/images/edits",
+      baseUrl: "https://images.example.test/v1",
     },
     fetchImplementation,
   });

@@ -17,8 +17,8 @@ const defaultConfig = {
     sizeMode: "auto" | "fixed" | "custom";
   }>,
   hostedImageGenerationDefaultProfileId: null as string | null,
-  imageGenerationTimeoutMs: 120_000,
-  imageGenerationMaximumRequestBytes: 4 * 1024 * 1024,
+  imageGenerationTimeoutMs: 300_000,
+  imageGenerationMaximumRequestBytes: 8 * 1024 * 1024,
   models: [] as string[],
   defaultModel: null as string | null,
   titleModel: null as string | null,

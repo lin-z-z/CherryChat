@@ -156,8 +156,7 @@ function createController(
           id: "default",
           name: "GPT Image 2",
           mode: "byok" as const,
-          generationUrl: "https://api.openai.com/v1/images/generations",
-          editUrl: "https://api.openai.com/v1/images/edits",
+          baseUrl: "https://api.openai.com",
           apiKey: "",
           modelId: "gpt-image-2",
           sizeMode: "auto" as const,
@@ -758,7 +757,6 @@ describe("ChatShell", () => {
   });
 
   it("switches to image generation and updates request options", async () => {
-    const user = userEvent.setup();
     const controller = createController();
     controller.imageGenerationConfig = {
       ...controller.imageGenerationConfig,
@@ -780,21 +778,15 @@ describe("ChatShell", () => {
     expect(
       screen.getByRole("textbox", { name: "描述你想生成的图片" }),
     ).toBeInTheDocument();
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "分辨率档位" }),
-      "1K",
-    );
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "图片比例" }),
-      "3:2",
-    );
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "图片质量" }),
-      "high",
-    );
+    fireEvent.click(screen.getByRole("combobox", { name: "分辨率档位" }));
+    fireEvent.click(screen.getByRole("option", { name: "2K" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "图片比例" }));
+    fireEvent.click(screen.getByRole("option", { name: "3:2" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "图片质量" }));
+    fireEvent.click(screen.getByRole("option", { name: "高" }));
 
     expect(controller.setImageGenerationParameters).toHaveBeenCalledWith(
-      expect.objectContaining({ resolutionTier: "1K" }),
+      expect.objectContaining({ resolutionTier: "2K" }),
     );
     expect(controller.setImageGenerationParameters).toHaveBeenCalledWith(
       expect.objectContaining({ aspectRatio: "3:2" }),

@@ -13,10 +13,9 @@ import {
   type ImageGenerationSaveInput,
 } from "@/runtime/chat/types";
 import {
-  DEFAULT_IMAGE_EDIT_URL,
+  DEFAULT_IMAGE_GENERATION_BASE_URL,
   DEFAULT_IMAGE_GENERATION_MODEL,
-  DEFAULT_IMAGE_GENERATION_URL,
-  normalizeImageEndpointUrl,
+  normalizeImageBaseUrl,
 } from "@/runtime/image-generation/image-generation-contract";
 import {
   DEFAULT_IMAGE_GENERATION_PARAMETERS,
@@ -37,8 +36,7 @@ const storedProfileSchema = z
   .object({
     id: profileIdSchema,
     name: z.string().trim().min(1).max(100),
-    generationUrl: z.string().min(1).max(2_048),
-    editUrl: z.string().min(1).max(2_048),
+    baseUrl: z.string().min(1).max(2_048),
     modelId: z.string().trim().min(1).max(512),
     sizeMode: z.enum(IMAGE_GENERATION_SIZE_MODES),
   })
@@ -55,8 +53,28 @@ const parametersSchema = z
   .strict();
 const settingsSchema = z
   .object({
-    version: z.literal(2),
+    version: z.literal(3),
     profiles: z.array(storedProfileSchema).min(1).max(32),
+    defaultProfileId: profileIdSchema,
+    activeProfileId: profileIdSchema,
+    activeHostedProfileId: profileIdSchema.nullable().default(null),
+    parametersByProfile: z.record(z.string(), parametersSchema),
+  })
+  .strict();
+const legacyStoredProfileSchema = z
+  .object({
+    id: profileIdSchema,
+    name: z.string().trim().min(1).max(100),
+    generationUrl: z.string().min(1).max(2_048),
+    editUrl: z.string().min(1).max(2_048),
+    modelId: z.string().trim().min(1).max(512),
+    sizeMode: z.enum(IMAGE_GENERATION_SIZE_MODES),
+  })
+  .strict();
+const legacySettingsV2Schema = z
+  .object({
+    version: z.literal(2),
+    profiles: z.array(legacyStoredProfileSchema).min(1).max(32),
     defaultProfileId: profileIdSchema,
     activeProfileId: profileIdSchema,
     activeHostedProfileId: profileIdSchema.nullable().default(null),
@@ -187,6 +205,26 @@ export class ImageGenerationRepository {
         credentials.success ? credentials.data.apiKeys : {},
       );
     }
+    const legacySettingsV2 = legacySettingsV2Schema.safeParse(
+      settingsRecord?.value,
+    );
+    if (legacySettingsV2.success) {
+      const migrated: StoredSettings = {
+        version: 3,
+        profiles: legacySettingsV2.data.profiles.map((profile) => ({
+          ...profile,
+          baseUrl: normalizeImageBaseUrl(profile.generationUrl),
+        })),
+        defaultProfileId: legacySettingsV2.data.defaultProfileId,
+        activeProfileId: legacySettingsV2.data.activeProfileId,
+        activeHostedProfileId: legacySettingsV2.data.activeHostedProfileId,
+        parametersByProfile: legacySettingsV2.data.parametersByProfile,
+      };
+      return hydrateConfiguration(
+        migrated,
+        credentials.success ? credentials.data.apiKeys : {},
+      );
+    }
     const legacySettings = legacySettingsSchema.safeParse(
       settingsRecord?.value,
     );
@@ -198,8 +236,7 @@ export class ImageGenerationRepository {
         id: DEFAULT_PROFILE_ID,
         name: legacySettings.data.modelId,
         mode: "byok",
-        generationUrl: legacySettings.data.generationUrl,
-        editUrl: legacySettings.data.editUrl,
+        baseUrl: normalizeImageBaseUrl(legacySettings.data.generationUrl),
         apiKey: legacyCredential.success ? legacyCredential.data.apiKey : "",
         modelId: legacySettings.data.modelId,
         sizeMode: "auto",
@@ -232,7 +269,7 @@ export class ImageGenerationRepository {
       configuration.parametersByProfile,
     );
     const stored: StoredSettings = {
-      version: 2,
+      version: 3,
       profiles: normalizedProfiles.map(toStoredProfile),
       defaultProfileId: configuration.defaultProfileId,
       activeProfileId: configuration.activeProfileId,
@@ -282,8 +319,7 @@ export function createDefaultImageGenerationConfiguration(): ImageGenerationConf
     id: DEFAULT_PROFILE_ID,
     name: "GPT Image 2",
     mode: "byok",
-    generationUrl: DEFAULT_IMAGE_GENERATION_URL,
-    editUrl: DEFAULT_IMAGE_EDIT_URL,
+    baseUrl: DEFAULT_IMAGE_GENERATION_BASE_URL,
     apiKey: "",
     modelId: DEFAULT_IMAGE_GENERATION_MODEL,
     sizeMode: "auto",
@@ -339,8 +375,7 @@ function normalizeProfile(
     id,
     name,
     mode: "byok",
-    generationUrl: normalizeImageEndpointUrl(profile.generationUrl),
-    editUrl: normalizeImageEndpointUrl(profile.editUrl),
+    baseUrl: normalizeImageBaseUrl(profile.baseUrl),
     apiKey,
     modelId,
     sizeMode: z.enum(IMAGE_GENERATION_SIZE_MODES).parse(profile.sizeMode),
@@ -352,8 +387,7 @@ function toStoredProfile(profile: ImageGenerationProfile): StoredProfile {
   return {
     id: profile.id,
     name: profile.name,
-    generationUrl: profile.generationUrl,
-    editUrl: profile.editUrl,
+    baseUrl: profile.baseUrl,
     modelId: profile.modelId,
     sizeMode: profile.sizeMode,
   };
