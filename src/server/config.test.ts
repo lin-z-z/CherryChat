@@ -66,6 +66,8 @@ describe("server configuration", () => {
       hostedWebSearchProviders: ["tavily"],
       hostedImageGenerationEnabled: false,
       hostedImageGenerationModel: null,
+      hostedImageGenerationProfiles: [],
+      hostedImageGenerationDefaultProfileId: null,
       imageGenerationTimeoutMs: 120_000,
       imageGenerationMaximumRequestBytes: 4 * 1024 * 1024,
       models: ["model-a", "model-b"],
@@ -115,6 +117,18 @@ describe("server configuration", () => {
       generationUrl: "https://images.example/v1/images/generations",
       editUrl: "https://images.example/v1/images/edits",
       model: "gpt-image-1.5",
+      profiles: [
+        {
+          id: "default-gpt-image-2",
+          name: "gpt-image-1.5",
+          apiKey: "image-deployment-secret",
+          generationUrl: "https://images.example/v1/images/generations",
+          editUrl: "https://images.example/v1/images/edits",
+          model: "gpt-image-1.5",
+          sizeMode: "auto",
+        },
+      ],
+      defaultProfileId: "default-gpt-image-2",
       timeoutMs: 45_000,
       maximumRequestBytes: 8 * 1024 * 1024,
     });
@@ -127,6 +141,63 @@ describe("server configuration", () => {
     });
     const publicText = JSON.stringify(publicConfig);
     expect(publicText).not.toContain("image-deployment-secret");
+    expect(publicText).not.toContain("images.example");
+  });
+
+  it("parses multiple Hosted image profiles and exposes only the allowlist projection", () => {
+    const config = parseServerConfig({
+      ...hostedEnvironment(),
+      IMAGE_GENERATION_PROFILES: JSON.stringify([
+        {
+          id: "standard",
+          name: "Standard",
+          apiKey: "standard-image-secret",
+          generationUrl: "https://standard.images.example/generations",
+          editUrl: "https://standard.images.example/edits",
+          model: "gpt-image-1.5",
+          sizeMode: "fixed",
+        },
+        {
+          id: "portrait",
+          name: "Portrait 4K",
+          apiKey: "portrait-image-secret",
+          generationUrl: "https://portrait.images.example/generations",
+          editUrl: "https://portrait.images.example/edits",
+          model: "gpt-image-2",
+          sizeMode: "auto",
+        },
+      ]),
+      IMAGE_GENERATION_DEFAULT_PROFILE: "portrait",
+    });
+
+    expect(config.hosted?.imageGeneration).toMatchObject({
+      defaultProfileId: "portrait",
+      model: "gpt-image-2",
+      profiles: [
+        { id: "standard", model: "gpt-image-1.5", sizeMode: "fixed" },
+        { id: "portrait", model: "gpt-image-2", sizeMode: "auto" },
+      ],
+    });
+    const publicConfig = toPublicServerConfig(config);
+    expect(publicConfig).toMatchObject({
+      hostedImageGenerationDefaultProfileId: "portrait",
+      hostedImageGenerationProfiles: [
+        {
+          id: "standard",
+          name: "Standard",
+          modelId: "gpt-image-1.5",
+          sizeMode: "fixed",
+        },
+        {
+          id: "portrait",
+          name: "Portrait 4K",
+          modelId: "gpt-image-2",
+          sizeMode: "auto",
+        },
+      ],
+    });
+    const publicText = JSON.stringify(publicConfig);
+    expect(publicText).not.toContain("image-secret");
     expect(publicText).not.toContain("images.example");
   });
 

@@ -96,6 +96,49 @@ describe("useChatController integration", () => {
     expect(requestPath(fetchMock.mock.calls[0]?.[0])).toBe("/api/config");
   });
 
+  it("uses the Hosted default image profile and restores an explicit selection", async () => {
+    const config: PublicConfig = {
+      ...hostedConfig,
+      hostedImageGenerationEnabled: true,
+      hostedImageGenerationModel: "gpt-image-2",
+      hostedImageGenerationProfiles: [
+        {
+          id: "standard",
+          name: "Standard",
+          modelId: "gpt-image-1.5",
+          sizeMode: "fixed",
+        },
+        {
+          id: "portrait",
+          name: "Portrait",
+          modelId: "gpt-image-2",
+          sizeMode: "auto",
+        },
+      ],
+      hostedImageGenerationDefaultProfileId: "portrait",
+    };
+    installFetchMock({ config });
+    const first = renderController();
+    await waitForController(first.result);
+
+    expect(first.result.current.activeImageGenerationProfile?.id).toBe(
+      "portrait",
+    );
+    await act(async () => {
+      await first.result.current.selectImageGenerationProfile("standard");
+    });
+    expect(first.result.current.activeImageGenerationProfile?.id).toBe(
+      "standard",
+    );
+    first.unmount();
+
+    const second = renderController();
+    await waitForController(second.result);
+    expect(second.result.current.activeImageGenerationProfile?.id).toBe(
+      "standard",
+    );
+  });
+
   it("rejects operations before services are ready and blank model selection", async () => {
     installFetchMock();
     const { result } = renderController();
@@ -215,25 +258,42 @@ describe("useChatController integration", () => {
 
     await act(async () => {
       await result.current.saveImageGenerationSettings({
-        generationUrl: "https://images.example/v1/images/generations",
-        editUrl: "https://images.example/v1/images/edits",
-        apiKey: "image-test-key",
-        modelId: "gpt-image-1.5",
-        size: "1024x1024",
-        quality: "high",
+        profiles: [
+          {
+            id: "test-image-profile",
+            name: "Test image",
+            mode: "byok",
+            generationUrl: "https://images.example/v1/images/generations",
+            editUrl: "https://images.example/v1/images/edits",
+            apiKey: "image-test-key",
+            modelId: "gpt-image-1.5",
+            sizeMode: "fixed",
+            hasApiKey: true,
+          },
+        ],
+        defaultProfileId: "test-image-profile",
       });
-      result.current.setImageGenerationSize("1536x1024");
-      result.current.setImageGenerationQuality("auto");
+    });
+    await act(async () => {
+      result.current.setImageGenerationParameters({
+        resolutionTier: "1K",
+        aspectRatio: "3:2",
+        quality: "auto",
+      });
     });
 
-    expect(result.current.imageGenerationConfig).toMatchObject({
+    expect(result.current.imageGenerationConfig.profiles[0]).toMatchObject({
       generationUrl: "https://images.example/v1/images/generations",
       editUrl: "https://images.example/v1/images/edits",
       apiKey: "image-test-key",
-      size: "1536x1024",
-      quality: "auto",
+      modelId: "gpt-image-1.5",
       hasApiKey: true,
     });
+    expect(
+      result.current.imageGenerationConfig.parametersByProfile[
+        "test-image-profile"
+      ],
+    ).toMatchObject({ size: "1536x1024", quality: "auto" });
 
     await act(async () => {
       await result.current.saveWebSearchSettings({

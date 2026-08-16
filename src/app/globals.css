@@ -2085,9 +2085,59 @@ button {
   flex: 0 0 auto;
 }
 
+.composer-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--secondary) 65%, transparent);
+  padding: 0.125rem;
+}
+
+.composer-mode-button {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.composer-mode-button:hover,
+.composer-mode-button:focus-visible,
+.composer-mode-button.is-active {
+  background: var(--card);
+  color: var(--foreground);
+}
+
+.composer-mode-button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--foreground) 20%, transparent);
+}
+
+.composer-mode-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .composer-toolbar-right {
   flex: 0 0 auto;
   gap: 0.25rem;
+}
+
+.composer-action-row.is-image-mode {
+  flex-wrap: wrap;
+}
+
+.composer-action-row.is-image-mode .composer-toolbar-right {
+  flex: 1 1 30rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .composer-tool-button {
@@ -2148,6 +2198,55 @@ button {
 
 .composer-compact-select:disabled {
   opacity: 0.4;
+}
+
+.composer-compact-number {
+  width: 3.25rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0 0.35rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.composer-compact-number:focus-visible {
+  outline: none;
+  background: var(--secondary);
+  color: var(--foreground);
+}
+
+.composer-compact-number:disabled {
+  opacity: 0.4;
+}
+
+.composer-image-size-hint {
+  max-width: 7rem;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-model-select {
+  min-width: 0;
+  max-width: min(18rem, 34vw);
+  height: 2.25rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: transparent;
+  padding: 0 0.5rem;
+  color: var(--foreground);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.topbar-model-select:focus-visible {
+  outline: none;
+  background: var(--secondary);
 }
 
 .reasoning-control-root {
@@ -4559,6 +4658,40 @@ textarea.text-edit-dialog-input {
   .composer-region {
     padding-inline: 0.625rem;
     padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+
+  .composer-action-row.is-image-mode {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0.35rem;
+  }
+
+  .composer-action-row.is-image-mode .composer-toolbar-left {
+    width: 100%;
+  }
+
+  .composer-action-row.is-image-mode .composer-toolbar-right {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.25rem;
+  }
+
+  .composer-action-row.is-image-mode .composer-compact-select,
+  .composer-action-row.is-image-mode .composer-compact-number {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .composer-action-row.is-image-mode .composer-image-size-hint {
+    align-self: center;
+    justify-self: center;
+  }
+
+  .composer-action-row.is-image-mode .send-button {
+    justify-self: end;
   }
 
   .settings-workspace {

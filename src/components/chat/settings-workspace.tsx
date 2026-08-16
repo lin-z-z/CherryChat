@@ -619,12 +619,8 @@ export function SettingsWorkspace({
     setImageGenerationSaving(true);
     try {
       const saved = await chat.saveImageGenerationSettings({
-        generationUrl: imageGenerationDraft.generationUrl,
-        editUrl: imageGenerationDraft.editUrl,
-        apiKey: imageGenerationDraft.apiKey,
-        modelId: imageGenerationDraft.modelId,
-        size: imageGenerationDraft.size,
-        quality: imageGenerationDraft.quality,
+        profiles: imageGenerationDraft.profiles,
+        defaultProfileId: imageGenerationDraft.defaultProfileId,
       });
       setImageGenerationDraft(saved);
       setImageGenerationBaseline(saved);
@@ -952,8 +948,8 @@ export function SettingsWorkspace({
               hostedEnabled={
                 chat.publicConfig?.hostedImageGenerationEnabled ?? false
               }
-              hostedModel={
-                chat.publicConfig?.hostedImageGenerationModel ?? null
+              hostedProfiles={
+                chat.publicConfig?.hostedImageGenerationProfiles ?? []
               }
               onChange={(next) => {
                 setImageGenerationDraft(next);

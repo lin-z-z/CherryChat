@@ -103,6 +103,8 @@ function createController(
       hostedWebSearchEnabled: false,
       hostedWebSearchProvider: null,
       hostedWebSearchProviders: [],
+      hostedImageGenerationProfiles: [],
+      hostedImageGenerationDefaultProfileId: null,
       models: ["gpt-4.1-mini"],
       defaultModel: "gpt-4.1-mini",
       titleModel: "gpt-4.1-mini",
@@ -149,13 +151,42 @@ function createController(
       hasApiKey: false,
     },
     imageGenerationConfig: {
-      generationUrl: "https://api.openai.com/v1/images/generations",
-      editUrl: "https://api.openai.com/v1/images/edits",
-      apiKey: "",
-      modelId: "gpt-image-1.5",
-      size: "1024x1024" as const,
+      profiles: [
+        {
+          id: "default",
+          name: "GPT Image 2",
+          mode: "byok" as const,
+          generationUrl: "https://api.openai.com/v1/images/generations",
+          editUrl: "https://api.openai.com/v1/images/edits",
+          apiKey: "",
+          modelId: "gpt-image-2",
+          sizeMode: "auto" as const,
+          hasApiKey: false,
+        },
+      ],
+      defaultProfileId: "default",
+      activeProfileId: "default",
+      activeHostedProfileId: null,
+      parametersByProfile: {
+        default: {
+          resolutionTier: "1K" as const,
+          aspectRatio: "1:1" as const,
+          size: "1024x1024",
+          quality: "auto" as const,
+          outputFormat: "png" as const,
+          outputCompression: null,
+        },
+      },
+    },
+    imageGenerationProfiles: [],
+    activeImageGenerationProfile: null,
+    imageGenerationParameters: {
+      resolutionTier: "1K" as const,
+      aspectRatio: "1:1" as const,
+      size: "1024x1024",
       quality: "auto" as const,
-      hasApiKey: false,
+      outputFormat: "png" as const,
+      outputCompression: null,
     },
     composerMode: "chat" as const,
     setComposerMode: vi.fn(),
@@ -213,6 +244,8 @@ function createController(
     refreshModels: vi.fn(async () => ["gpt-4.1-mini"]),
     saveWebSearchSettings: vi.fn(),
     saveImageGenerationSettings: vi.fn(),
+    selectImageGenerationProfile: vi.fn(),
+    setImageGenerationParameters: vi.fn(),
     setImageGenerationSize: vi.fn(),
     setImageGenerationQuality: vi.fn(),
     testWebSearch: vi.fn(),
@@ -729,10 +762,17 @@ describe("ChatShell", () => {
     const controller = createController();
     controller.imageGenerationConfig = {
       ...controller.imageGenerationConfig,
-      apiKey: "sk-test-image-key",
-      hasApiKey: true,
+      profiles: controller.imageGenerationConfig.profiles.map((profile) => ({
+        ...profile,
+        apiKey: "sk-test-image-key",
+        hasApiKey: true,
+      })),
     };
     controller.composerMode = "image";
+    controller.imageGenerationProfiles =
+      controller.imageGenerationConfig.profiles;
+    controller.activeImageGenerationProfile =
+      controller.imageGenerationProfiles[0] ?? null;
     vi.mocked(useChatController).mockReturnValue(controller);
 
     renderShell();
@@ -741,16 +781,27 @@ describe("ChatShell", () => {
       screen.getByRole("textbox", { name: "描述你想生成的图片" }),
     ).toBeInTheDocument();
     await user.selectOptions(
-      screen.getByRole("combobox", { name: "图片尺寸" }),
-      "1536x1024",
+      screen.getByRole("combobox", { name: "分辨率档位" }),
+      "1K",
+    );
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "图片比例" }),
+      "3:2",
     );
     await user.selectOptions(
       screen.getByRole("combobox", { name: "图片质量" }),
       "high",
     );
 
-    expect(controller.setImageGenerationSize).toHaveBeenCalledWith("1536x1024");
-    expect(controller.setImageGenerationQuality).toHaveBeenCalledWith("high");
+    expect(controller.setImageGenerationParameters).toHaveBeenCalledWith(
+      expect.objectContaining({ resolutionTier: "1K" }),
+    );
+    expect(controller.setImageGenerationParameters).toHaveBeenCalledWith(
+      expect.objectContaining({ aspectRatio: "3:2" }),
+    );
+    expect(controller.setImageGenerationParameters).toHaveBeenCalledWith(
+      expect.objectContaining({ quality: "high" }),
+    );
     expect(
       screen.queryByRole("button", { name: "为此会话启用网络搜索" }),
     ).not.toBeInTheDocument();
@@ -760,10 +811,9 @@ describe("ChatShell", () => {
     const user = userEvent.setup();
     const controller = createController();
     controller.settingsOpen = true;
-    controller.saveImageGenerationSettings = vi.fn(async (input) => ({
-      ...input,
-      hasApiKey: Boolean(input.apiKey),
-    }));
+    controller.saveImageGenerationSettings = vi.fn(
+      async () => controller.imageGenerationConfig,
+    );
     vi.mocked(useChatController).mockReturnValue(controller);
     renderShell();
 
@@ -776,12 +826,71 @@ describe("ChatShell", () => {
     await waitFor(() =>
       expect(controller.saveImageGenerationSettings).toHaveBeenCalledWith(
         expect.objectContaining({
-          apiKey: "sk-image-secret",
-          modelId: "gpt-image-custom",
+          profiles: expect.arrayContaining([
+            expect.objectContaining({
+              apiKey: "sk-image-secret",
+              modelId: "gpt-image-custom",
+            }),
+          ]),
         }),
       ),
     );
     expect(screen.getByText("图片生成设置已保存。")).toBeInTheDocument();
+  });
+
+  it("does not treat the settings profile editor selection as the active chat profile", async () => {
+    const user = userEvent.setup();
+    const controller = createController();
+    controller.settingsOpen = true;
+    const firstProfile = controller.imageGenerationConfig.profiles[0];
+    if (!firstProfile) throw new Error("Missing image profile fixture");
+    const secondProfile = {
+      ...firstProfile,
+      id: "second",
+      name: "Second profile",
+      modelId: "gpt-image-1.5",
+    };
+    controller.imageGenerationConfig = {
+      ...controller.imageGenerationConfig,
+      profiles: [...controller.imageGenerationConfig.profiles, secondProfile],
+      parametersByProfile: {
+        ...controller.imageGenerationConfig.parametersByProfile,
+        second:
+          controller.imageGenerationConfig.parametersByProfile[
+            firstProfile.id
+          ]!,
+      },
+    };
+    controller.imageGenerationProfiles = [firstProfile, secondProfile];
+    controller.activeImageGenerationProfile = firstProfile;
+    vi.mocked(useChatController).mockReturnValue(controller);
+
+    Object.defineProperties(HTMLElement.prototype, {
+      hasPointerCapture: { configurable: true, value: () => false },
+      releasePointerCapture: { configurable: true, value: vi.fn() },
+      setPointerCapture: { configurable: true, value: vi.fn() },
+    });
+    const view = renderShell();
+    await user.click(screen.getByRole("tab", { name: "图片生成" }));
+    await user.click(
+      screen.getByRole("combobox", { name: "图片模型 Profile" }),
+    );
+    await user.click(screen.getByRole("option", { name: /Second profile/u }));
+    expect(controller.selectImageGenerationProfile).not.toHaveBeenCalled();
+    expect(controller.activeImageGenerationProfile?.id).toBe(firstProfile.id);
+    await user.click(screen.getByRole("button", { name: "关闭" }));
+
+    expect(controller.setSettingsOpen).toHaveBeenCalledWith(false);
+    controller.settingsOpen = false;
+    view.rerender(
+      <Providers initialLanguage="zh-CN">
+        <ChatShell />
+      </Providers>,
+    );
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("main", { name: "设置" }),
+    ).not.toBeInTheDocument();
   });
 
   it("adds a generated image to the next reference draft", async () => {

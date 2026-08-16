@@ -53,6 +53,10 @@ export class OpenAICompatibleImageTransport {
       prompt: request.prompt,
       size: request.size,
       quality: request.quality,
+      output_format: request.outputFormat ?? "png",
+      ...(request.outputCompression == null
+        ? {}
+        : { output_compression: request.outputCompression }),
       n: 1,
     });
     const hasReferences = request.references.length > 0;
@@ -63,6 +67,7 @@ export class OpenAICompatibleImageTransport {
           ? this.options.endpoint.editUrl
           : this.options.endpoint.generationUrl;
     const headers = new Headers({ Accept: "application/json" });
+    const outputFormat = body.output_format ?? "png";
     if (this.options.endpoint.mode === "hosted") {
       headers.set("x-cherrychat-mode", "hosted");
     } else {
@@ -76,6 +81,13 @@ export class OpenAICompatibleImageTransport {
       formData.set("prompt", body.prompt);
       formData.set("size", body.size);
       formData.set("quality", body.quality);
+      formData.set("output_format", outputFormat);
+      if (body.output_compression !== undefined) {
+        formData.set("output_compression", String(body.output_compression));
+      }
+      if (this.options.endpoint.mode === "hosted" && request.profileId) {
+        formData.set("profileId", request.profileId);
+      }
       formData.set("n", "1");
       for (const [index, reference] of request.references.entries()) {
         formData.append(
@@ -87,7 +99,11 @@ export class OpenAICompatibleImageTransport {
       requestBody = formData;
     } else {
       headers.set("Content-Type", "application/json");
-      requestBody = JSON.stringify(body);
+      requestBody = JSON.stringify(
+        this.options.endpoint.mode === "hosted"
+          ? { ...body, profileId: request.profileId }
+          : body,
+      );
     }
 
     let response: Response;
@@ -152,7 +168,10 @@ export class OpenAICompatibleImageTransport {
     const images = await Promise.all(
       parsed.data.data.map(async (item) => {
         const blob = item.b64_json
-          ? decodeBase64Image(item.b64_json, parsed.data.output_format)
+          ? decodeBase64Image(
+              item.b64_json,
+              parsed.data.output_format ?? request.outputFormat,
+            )
           : item.url
             ? await this.downloadImage(item.url, signal)
             : null;

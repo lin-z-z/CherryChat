@@ -70,7 +70,78 @@ describe("hosted image generation", () => {
     expect(JSON.parse(String(init?.body))).toEqual({
       ...requestBody(),
       model: "deployment-image-model",
+      output_format: "png",
     });
+  });
+
+  it("selects only configured Hosted profiles and rejects unknown profile ids", async () => {
+    const profileConfig = withImageConfig({
+      profiles: [
+        {
+          id: "standard",
+          name: "Standard",
+          apiKey: "standard-image-key",
+          generationUrl: "https://standard.images.example/generations",
+          editUrl: "https://standard.images.example/edits",
+          model: "gpt-image-1.5",
+          sizeMode: "fixed",
+        },
+        {
+          id: "portrait",
+          name: "Portrait",
+          apiKey: "portrait-image-key",
+          generationUrl: "https://portrait.images.example/generations",
+          editUrl: "https://portrait.images.example/edits",
+          model: "gpt-image-2",
+          sizeMode: "auto",
+        },
+      ],
+      defaultProfileId: "standard",
+    });
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({ data: [{ b64_json: PNG_BASE64 }] }),
+    );
+    const response = await handleHostedImageGeneration(
+      imageRequest(
+        JSON.stringify({
+          ...requestBody(),
+          profileId: "portrait",
+          size: "1440x2560",
+          output_format: "webp",
+          output_compression: 82,
+        }),
+        "application/json",
+      ),
+      profileConfig,
+      fetchMock,
+      createGuard(),
+    );
+
+    expect(response.status).toBe(200);
+    const [target, init] = fetchMock.mock.calls[0] ?? [];
+    expect(target).toBe("https://portrait.images.example/generations");
+    expect(new Headers(init?.headers).get("authorization")).toBe(
+      "Bearer portrait-image-key",
+    );
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      model: "gpt-image-2",
+      size: "1440x2560",
+      output_format: "webp",
+      output_compression: 82,
+    });
+
+    const rejectedFetch = vi.fn<typeof fetch>();
+    const rejected = await handleHostedImageGeneration(
+      imageRequest(
+        JSON.stringify({ ...requestBody(), profileId: "unlisted" }),
+        "application/json",
+      ),
+      profileConfig,
+      rejectedFetch,
+      createGuard(),
+    );
+    expect(rejected.status).toBe(400);
+    expect(rejectedFetch).not.toHaveBeenCalled();
   });
 
   it("preserves multipart image order and overrides the browser model", async () => {

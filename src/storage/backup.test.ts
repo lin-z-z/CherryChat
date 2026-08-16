@@ -264,10 +264,16 @@ describe("backup archive", () => {
         ...assistant.parts,
         {
           type: "image_generation",
-          modelId: "gpt-image-1.5",
+          profileId: "profile-gpt-image-2",
+          profileName: "GPT Image 2",
+          modelId: "gpt-image-2",
           connectionScope: "byok:https://api.example.test",
-          size: "1024x1024",
+          resolutionTier: "4K",
+          aspectRatio: "9:16",
+          size: "2160x3840",
           quality: "high",
+          outputFormat: "webp",
+          outputCompression: 80,
           referenceAttachmentIds: ["attachment-1", "attachment-2"],
         },
       ],
@@ -299,6 +305,15 @@ describe("backup archive", () => {
     );
     expect(generation).toMatchObject({
       type: "image_generation",
+      profileId: "profile-gpt-image-2",
+      profileName: "GPT Image 2",
+      modelId: "gpt-image-2",
+      resolutionTier: "4K",
+      aspectRatio: "9:16",
+      size: "2160x3840",
+      quality: "high",
+      outputFormat: "webp",
+      outputCompression: 80,
       referenceAttachmentIds: ["image-import-5", "image-import-6"],
     });
 

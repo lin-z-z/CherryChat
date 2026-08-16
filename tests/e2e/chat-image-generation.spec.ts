@@ -14,7 +14,6 @@ import {
 } from "./chat-test-helpers";
 import {
   expectNoHorizontalOverflow,
-  selectSettingsOption,
   selectSettingsPage,
   waitForChatAppReady,
 } from "./settings-helpers";
@@ -24,7 +23,7 @@ const PNG_BASE64 =
 const GENERATION_URL = "https://images.example.test/v1/images/generations";
 const EDIT_URL = "https://images.example.test/v1/images/edits";
 const GENERATED_IMAGE_URL = "https://images.example.test/generated.png";
-const IMAGE_MODEL = "gpt-image-e2e";
+const IMAGE_MODEL = "gpt-image-2";
 
 test("generates and edits persistent images without desktop or mobile overflow", async ({
   page,
@@ -37,20 +36,31 @@ test("generates and edits persistent images without desktop or mobile overflow",
   const provider = await installImageProviderRoutes(page);
   await prepareByokImagePage(page, mobile);
 
-  await page
-    .getByRole("button", { name: "Switch to image generation" })
-    .click();
+  await page.getByRole("button", { name: "Image", exact: true }).click();
   const composer = page.locator("form.composer");
   const prompt = page.getByRole("textbox", {
     name: "Describe the image you want to create",
   });
   await page
-    .getByRole("combobox", { name: "Image size" })
-    .selectOption("1536x1024");
+    .getByRole("combobox", { name: "Resolution tier" })
+    .selectOption("2K");
+  await page
+    .getByRole("combobox", { name: "Aspect ratio" })
+    .selectOption("9:16");
   await page
     .getByRole("combobox", { name: "Image quality" })
     .selectOption("high");
+  await page
+    .getByRole("combobox", { name: "Output format" })
+    .selectOption("webp");
+  await page
+    .getByRole("spinbutton", { name: "Compression quality" })
+    .fill("82");
   await expectNoHorizontalOverflow(composer);
+  await page.screenshot({
+    path: `test-results/image-generation-composer-${test.info().project.name}.png`,
+    fullPage: true,
+  });
 
   await prompt.fill("Create a persistent cherry image");
   await page.getByRole("button", { name: "Send" }).click();
@@ -58,13 +68,15 @@ test("generates and edits persistent images without desktop or mobile overflow",
   expect(provider.generationBodies[0]).toEqual({
     model: IMAGE_MODEL,
     prompt: "Create a persistent cherry image",
-    size: "1536x1024",
+    size: "1440x2560",
     quality: "high",
+    output_format: "webp",
+    output_compression: 82,
     n: 1,
   });
   await expect(generatedImages(page)).toHaveCount(1);
   await expect(
-    page.getByText(`Image model: ${IMAGE_MODEL} · 1536x1024 · High`),
+    page.getByText(/Image model: GPT Image 2.*1440x2560.*High.*WEBP/u),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Use as reference image" }).click();
@@ -96,7 +108,7 @@ test("generates and edits persistent images without desktop or mobile overflow",
   }
   await expect(generatedImages(page)).toHaveCount(2);
   await expect(
-    page.getByText(`Image model: ${IMAGE_MODEL} · 1536x1024 · High`),
+    page.getByText(/Image model: GPT Image 2.*1440x2560.*High.*WEBP/u),
   ).toHaveCount(2);
   await expectNoHorizontalOverflow(page.locator("body"));
 });
@@ -110,6 +122,15 @@ test("keeps Hosted image credentials and upstream targets out of the browser", a
     hostedEnabled: true,
     hostedImageGenerationEnabled: true,
     hostedImageGenerationModel: "hosted-image-model",
+    hostedImageGenerationProfiles: [
+      {
+        id: "hosted-primary",
+        name: "Hosted primary",
+        modelId: "hosted-image-model",
+        sizeMode: "fixed",
+      },
+    ],
+    hostedImageGenerationDefaultProfileId: "hosted-primary",
     models: ["hosted-chat-model"],
     defaultModel: "hosted-chat-model",
     titleModel: "hosted-chat-model",
@@ -136,9 +157,7 @@ test("keeps Hosted image credentials and upstream targets out of the browser", a
   await expect(settings.getByLabel("Image edit URL")).toHaveCount(0);
   await settings.getByRole("button", { name: "Close" }).click();
 
-  await page
-    .getByRole("button", { name: "Switch to image generation" })
-    .click();
+  await page.getByRole("button", { name: "Image", exact: true }).click();
   await page
     .getByRole("textbox", {
       name: "Describe the image you want to create",
@@ -152,7 +171,9 @@ test("keeps Hosted image credentials and upstream targets out of the browser", a
     prompt: "Hosted image without browser secrets",
     size: "1024x1024",
     quality: "auto",
+    output_format: "png",
     n: 1,
+    profileId: "hosted-primary",
   });
   expect(hostedHeaders.authorization).toBeUndefined();
   expect(hostedHeaders["x-cherrychat-mode"]).toBe("hosted");
@@ -230,9 +251,9 @@ async function saveImageGenerationSettings(page: Page, settings: Locator) {
   await settings
     .getByRole("textbox", { name: "API key", exact: true })
     .fill("image-e2e-key");
-  await settings.getByLabel("Image model").fill(IMAGE_MODEL);
-  await selectSettingsOption(page, settings, "Image size", "1536 x 1024");
-  await selectSettingsOption(page, settings, "Image quality", "High");
+  await settings
+    .getByRole("textbox", { name: "Image model", exact: true })
+    .fill(IMAGE_MODEL);
   await settings
     .getByRole("button", { name: "Save image generation settings" })
     .click();
@@ -253,9 +274,7 @@ async function openSettings(page: Page, mobile: boolean) {
 }
 
 async function generateImageWithGeneratedReference(page: Page) {
-  await page
-    .getByRole("button", { name: "Switch to image generation" })
-    .click();
+  await page.getByRole("button", { name: "Image", exact: true }).click();
   const prompt = page.getByRole("textbox", {
     name: "Describe the image you want to create",
   });

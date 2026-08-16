@@ -1,18 +1,13 @@
-import { z } from "zod";
-
 import { inspectImageMetadata } from "@/runtime/attachments/image-metadata";
 import { bytesToBlob } from "@/runtime/attachments/blob-utils";
 import {
-  IMAGE_GENERATION_QUALITIES,
-  IMAGE_GENERATION_SIZES,
-} from "@/runtime/chat/types";
-import {
+  hostedImageGenerationRequestSchema,
   imageGenerationResponseSchema,
-  imageGenerationRequestSchema,
   MAX_GENERATED_IMAGE_BYTES,
   MAX_IMAGE_GENERATION_REFERENCES,
   MAX_IMAGE_GENERATION_RESPONSE_BYTES,
 } from "@/runtime/image-generation/image-generation-contract";
+import { isImageGenerationSizeSupported } from "@/runtime/image-generation/image-generation-options";
 import { redactSensitiveText } from "@/runtime/transport/chat-errors";
 import {
   ERROR_RESPONSE_MAX_BYTES,
@@ -46,16 +41,6 @@ import {
   RequestSecurityError,
 } from "@/server/security";
 
-const multipartFieldsSchema = z
-  .object({
-    model: z.string().trim().min(1).max(512),
-    prompt: z.string().trim().min(1).max(32_000),
-    size: z.enum(IMAGE_GENERATION_SIZES),
-    quality: z.enum(IMAGE_GENERATION_QUALITIES),
-    n: z.literal("1"),
-  })
-  .strict();
-
 export async function handleHostedImageGeneration(
   request: Request,
   config: ServerConfig,
@@ -74,13 +59,17 @@ export async function handleHostedImageGeneration(
         "Hosted image generation is unavailable",
       );
     }
-    lease = requestGuard.tryAcquire("image-generation");
-    if (!lease) {
-      return hostedRateLimitResponse(
-        "HOSTED_CONCURRENCY_LIMIT",
-        "Hosted image generation capacity is temporarily unavailable",
-      );
-    }
+    const profiles = imageConfig.profiles ?? [
+      {
+        id: "hosted-default",
+        name: imageConfig.model,
+        apiKey: imageConfig.apiKey,
+        generationUrl: imageConfig.generationUrl,
+        editUrl: imageConfig.editUrl,
+        model: imageConfig.model,
+        sizeMode: "auto" as const,
+      },
+    ];
     const declaredLength = Number(request.headers.get("content-length"));
     if (
       Number.isFinite(declaredLength) &&
@@ -92,10 +81,8 @@ export async function handleHostedImageGeneration(
     const contentType = request.headers.get("content-type") ?? "";
     let upstreamUrl: string;
     let upstreamBody: BodyInit;
-    const upstreamHeaders = new Headers({
-      Accept: "application/json",
-      Authorization: `Bearer ${imageConfig.apiKey}`,
-    });
+    let selectedProfile: (typeof profiles)[number];
+    const upstreamHeaders = new Headers({ Accept: "application/json" });
     if (contentType.startsWith("application/json")) {
       const text = await readRequestText(
         request,
@@ -111,7 +98,7 @@ export async function handleHostedImageGeneration(
           "Request body must be valid JSON",
         );
       }
-      const parsed = imageGenerationRequestSchema.safeParse(value);
+      const parsed = hostedImageGenerationRequestSchema.safeParse(value);
       if (!parsed.success) {
         return errorResponse(
           400,
@@ -119,11 +106,39 @@ export async function handleHostedImageGeneration(
           "Invalid image generation request",
         );
       }
-      upstreamUrl = imageConfig.generationUrl;
+      const profile = profiles.find(
+        ({ id }) =>
+          id ===
+          (parsed.data.profileId ??
+            imageConfig.defaultProfileId ??
+            profiles[0]?.id),
+      );
+      if (
+        !profile ||
+        !isImageGenerationSizeSupported(
+          { modelId: profile.model, sizeMode: profile.sizeMode },
+          parsed.data.size,
+        )
+      ) {
+        return errorResponse(
+          400,
+          "INVALID_REQUEST",
+          "Image generation profile or parameters are unavailable",
+        );
+      }
+      selectedProfile = profile;
+      upstreamUrl = profile.generationUrl;
       upstreamHeaders.set("Content-Type", "application/json");
       upstreamBody = JSON.stringify({
-        ...parsed.data,
-        model: imageConfig.model,
+        model: profile.model,
+        prompt: parsed.data.prompt,
+        size: parsed.data.size,
+        quality: parsed.data.quality,
+        output_format: parsed.data.output_format,
+        ...(parsed.data.output_compression === undefined
+          ? {}
+          : { output_compression: parsed.data.output_compression }),
+        n: 1,
       });
     } else if (contentType.startsWith("multipart/form-data")) {
       const body = await readRequestBytes(
@@ -133,12 +148,20 @@ export async function handleHostedImageGeneration(
       const form = await new Response(bytesToBlob(body, contentType), {
         headers: { "Content-Type": contentType },
       }).formData();
-      const parsed = multipartFieldsSchema.safeParse({
+      const compressionValue = form.get("output_compression");
+      const profileIdValue = form.get("profileId");
+      const outputFormatValue = form.get("output_format");
+      const parsed = hostedImageGenerationRequestSchema.safeParse({
+        profileId: profileIdValue ?? undefined,
         model: form.get("model"),
         prompt: form.get("prompt"),
         size: form.get("size"),
         quality: form.get("quality"),
-        n: form.get("n"),
+        output_format: outputFormatValue ?? undefined,
+        ...(compressionValue === null
+          ? {}
+          : { output_compression: Number(compressionValue) }),
+        n: form.get("n") === "1" ? 1 : form.get("n"),
       });
       const values = form.getAll("image[]");
       if (
@@ -153,6 +176,27 @@ export async function handleHostedImageGeneration(
           "Invalid image edit request",
         );
       }
+      const profile = profiles.find(
+        ({ id }) =>
+          id ===
+          (parsed.data.profileId ??
+            imageConfig.defaultProfileId ??
+            profiles[0]?.id),
+      );
+      if (
+        !profile ||
+        !isImageGenerationSizeSupported(
+          { modelId: profile.model, sizeMode: profile.sizeMode },
+          parsed.data.size,
+        )
+      ) {
+        return errorResponse(
+          400,
+          "INVALID_REQUEST",
+          "Image generation profile or parameters are unavailable",
+        );
+      }
+      selectedProfile = profile;
       const images = values as File[];
       for (const image of images) {
         try {
@@ -177,15 +221,22 @@ export async function handleHostedImageGeneration(
         }
       }
       const rebuilt = new FormData();
-      rebuilt.set("model", imageConfig.model);
+      rebuilt.set("model", profile.model);
       rebuilt.set("prompt", parsed.data.prompt);
       rebuilt.set("size", parsed.data.size);
       rebuilt.set("quality", parsed.data.quality);
+      rebuilt.set("output_format", parsed.data.output_format);
+      if (parsed.data.output_compression !== undefined) {
+        rebuilt.set(
+          "output_compression",
+          String(parsed.data.output_compression),
+        );
+      }
       rebuilt.set("n", "1");
       for (const image of images) {
         rebuilt.append("image[]", image, image.name);
       }
-      upstreamUrl = imageConfig.editUrl;
+      upstreamUrl = profile.editUrl;
       upstreamBody = rebuilt;
     } else {
       return errorResponse(
@@ -194,6 +245,15 @@ export async function handleHostedImageGeneration(
         "Unsupported request content type",
       );
     }
+
+    lease = requestGuard.tryAcquire("image-generation");
+    if (!lease) {
+      return hostedRateLimitResponse(
+        "HOSTED_CONCURRENCY_LIMIT",
+        "Hosted image generation capacity is temporarily unavailable",
+      );
+    }
+    upstreamHeaders.set("Authorization", `Bearer ${selectedProfile.apiKey}`);
 
     const upstream = await fetchWithRequestTimeouts(
       upstreamUrl,
@@ -216,7 +276,7 @@ export async function handleHostedImageGeneration(
     if (!upstream.ok) {
       const detail = redactSensitiveText(
         await readLimitedResponseText(upstream, ERROR_RESPONSE_MAX_BYTES),
-      ).replaceAll(imageConfig.apiKey, "[REDACTED]");
+      ).replaceAll(selectedProfile.apiKey, "[REDACTED]");
       return errorResponse(
         mapStatus(upstream.status),
         mapCode(upstream.status),

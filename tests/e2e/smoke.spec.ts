@@ -557,7 +557,9 @@ test("supports the seven settings destinations without horizontal overflow", asy
   await expect(
     settings.getByRole("textbox", { name: "API key", exact: true }),
   ).toBeVisible();
-  await expect(settings.getByLabel("Image model")).toBeVisible();
+  await expect(
+    settings.getByRole("textbox", { name: "Image model", exact: true }),
+  ).toBeVisible();
   await expectNoHorizontalOverflow(settings);
   await page.screenshot({
     path: `test-results/settings-image-generation-${test.info().project.name}-light.png`,

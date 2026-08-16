@@ -144,7 +144,29 @@ export const IMAGE_GENERATION_SIZES = [
   "1536x1024",
   "1024x1536",
 ] as const;
-export type ImageGenerationSize = (typeof IMAGE_GENERATION_SIZES)[number];
+export type ImageGenerationSize = string;
+
+export const IMAGE_GENERATION_RESOLUTION_TIERS = [
+  "auto",
+  "1K",
+  "2K",
+  "4K",
+] as const;
+export type ImageGenerationResolutionTier =
+  (typeof IMAGE_GENERATION_RESOLUTION_TIERS)[number];
+
+export const IMAGE_GENERATION_ASPECT_RATIOS = [
+  "1:1",
+  "3:2",
+  "2:3",
+  "16:9",
+  "9:16",
+  "4:3",
+  "3:4",
+  "21:9",
+] as const;
+export type ImageGenerationAspectRatio =
+  (typeof IMAGE_GENERATION_ASPECT_RATIOS)[number];
 
 export const IMAGE_GENERATION_QUALITIES = [
   "auto",
@@ -155,12 +177,47 @@ export const IMAGE_GENERATION_QUALITIES = [
 export type ImageGenerationQuality =
   (typeof IMAGE_GENERATION_QUALITIES)[number];
 
+export const IMAGE_GENERATION_OUTPUT_FORMATS = ["png", "jpeg", "webp"] as const;
+export type ImageGenerationOutputFormat =
+  (typeof IMAGE_GENERATION_OUTPUT_FORMATS)[number];
+
+export const IMAGE_GENERATION_SIZE_MODES = ["auto", "fixed", "custom"] as const;
+export type ImageGenerationSizeMode =
+  (typeof IMAGE_GENERATION_SIZE_MODES)[number];
+
+export interface ImageGenerationParameters {
+  resolutionTier: ImageGenerationResolutionTier;
+  aspectRatio: ImageGenerationAspectRatio;
+  size: ImageGenerationSize;
+  quality: ImageGenerationQuality;
+  outputFormat: ImageGenerationOutputFormat;
+  outputCompression: number | null;
+}
+
+export interface ImageGenerationProfile {
+  id: string;
+  name: string;
+  mode: "byok" | "hosted";
+  generationUrl: string;
+  editUrl: string;
+  apiKey: string;
+  modelId: string;
+  sizeMode: ImageGenerationSizeMode;
+  hasApiKey: boolean;
+}
+
 export interface ImageGenerationPart {
   type: "image_generation";
   modelId: string;
   connectionScope: string;
   size: ImageGenerationSize;
   quality: ImageGenerationQuality;
+  profileId?: string | undefined;
+  profileName?: string | undefined;
+  resolutionTier?: ImageGenerationResolutionTier | undefined;
+  aspectRatio?: ImageGenerationAspectRatio | undefined;
+  outputFormat?: ImageGenerationOutputFormat | undefined;
+  outputCompression?: number | null | undefined;
   referenceAttachmentIds: string[];
 }
 
@@ -285,22 +342,16 @@ export type MessagePart =
   | ProviderContextPart;
 
 export interface ImageGenerationConfiguration {
-  generationUrl: string;
-  editUrl: string;
-  apiKey: string;
-  modelId: string;
-  size: ImageGenerationSize;
-  quality: ImageGenerationQuality;
-  hasApiKey: boolean;
+  profiles: ImageGenerationProfile[];
+  defaultProfileId: string;
+  activeProfileId: string;
+  activeHostedProfileId: string | null;
+  parametersByProfile: Record<string, ImageGenerationParameters>;
 }
 
 export interface ImageGenerationSaveInput {
-  generationUrl: string;
-  editUrl: string;
-  apiKey: string;
-  modelId: string;
-  size: ImageGenerationSize;
-  quality: ImageGenerationQuality;
+  profiles: ImageGenerationProfile[];
+  defaultProfileId: string;
 }
 
 export interface TokenUsage {
