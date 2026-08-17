@@ -93,33 +93,80 @@ npm run dev
 `.env.example` 复制为 `.env.local`。不要把真实值写入 Git、日志、截图、Issue 或
 浏览器测试产物。
 
+## 最小部署配置
+
+根据部署目标选择最小配置。示例中的 `replace-with-...` 只是填写提示，不是凭据。
+
+### 仅 BYOK
+
+这是首次部署时推荐的方式。保持部署环境变量为空，用户在设置中填写自己的 Provider
+凭据。部署方不会承担聊天、搜索或生图用量费用。
+
+### 托管聊天
+
+如果部署方提供一个固定的 OpenAI-compatible 聊天上游，配置下面这一组变量：
+
+```env
+OPENAI_API_KEY=replace-with-provider-key
+MODELS=gpt-4.1-mini
+ACCESS_CODE=replace-with-a-long-random-access-code
+AUTH_SECRET=replace-with-at-least-32-random-bytes
+```
+
+`BASE_URL` 默认是 `https://api.openai.com`。`DEFAULT_MODEL` 默认取 `MODELS` 的第一项，
+`TITLE_MODEL` 默认取 `DEFAULT_MODEL`，`DISABLE_BYOK` 默认是 `false`。只有在不允许访客
+使用自己的 Key 时，才设置 `DISABLE_BYOK=true`。
+
+如果需要托管网络搜索，保留上面的托管聊天配置，再添加一个 Provider Key，例如
+`TAVILY_API_KEY`。Provider Base URL 和默认 Provider 见下面的参数表。
+
+### 托管图片生成
+
+如果需要由部署方承担生图费用，再完整添加下面这一组变量：
+
+```env
+IMAGE_GENERATION_API_KEY=replace-with-image-provider-key
+IMAGE_GENERATION_BASE_URL=https://api.openai.com
+IMAGE_GENERATION_MODEL=gpt-image-2
+```
+
+这三个旧版图片变量必须同时配置；不配置时没有运行时回退值。需要多个图片 Provider
+时，改用 `IMAGE_GENERATION_PROFILES`，未指定默认 ID 时使用数组第一项。
+
 ## 环境变量
 
-| 变量                              | 是否必需 | 用途                                                               |
-| --------------------------------- | -------- | ------------------------------------------------------------------ |
-| `BASE_URL`                        | 否       | 固定 OpenAI-compatible 上游；默认为 `https://api.openai.com`。     |
-| `ALLOW_INSECURE_LOCAL_UPSTREAM`   | 否       | 精确设为 `true` 时，允许非生产环境使用 Loopback HTTP。             |
-| `OPENAI_API_KEY`                  | 托管访问 | 部署方持有的上游 Key。                                             |
-| `MODELS`                          | 托管访问 | 逗号分隔的托管模型白名单。                                         |
-| `DEFAULT_MODEL`                   | 否       | 托管默认模型；必须存在于 `MODELS` 中。                             |
-| `TITLE_MODEL`                     | 否       | 部署端标题模型；必须存在于 `MODELS` 中。                           |
-| `ACCESS_CODE`                     | 托管访问 | 逗号分隔的访客访问码，每个最多 256 UTF-8 Byte。                    |
-| `AUTH_SECRET`                     | 托管访问 | 至少 32 UTF-8 Byte 的 HMAC/Session Secret。                        |
-| `WEB_SEARCH_PROVIDER`             | 否       | 默认 Hosted Provider：`tavily`、`exa` 或 `grok`，默认为 `tavily`。 |
-| `WEB_SEARCH_ALLOWED_PROVIDERS`    | 否       | 访问码用户可选的有序列表；未配置时只允许默认 Provider。            |
-| `TAVILY_API_KEY`                  | 否       | 选择 Tavily 时使用的部署方 Key。                                   |
-| `TAVILY_BASE_URL`                 | 否       | 托管 Tavily-compatible Base；默认为 `https://api.tavily.com`。     |
-| `EXA_API_KEY`                     | 否       | 选择 Exa 时使用的部署方 Key。                                      |
-| `EXA_BASE_URL`                    | 否       | 托管 Exa-compatible Base；默认为 `https://api.exa.ai`。            |
-| `GROK_API_KEY`                    | 否       | 选择 Grok 时使用的部署方 xAI-compatible Key。                      |
-| `GROK_RESPONSES_URL`              | 否       | 完整 Grok Responses 地址，默认使用 xAI 官方地址。                  |
-| `GROK_MODEL`                      | 否       | Hosted Grok 模型，默认为 `grok-4.5`。                              |
-| `GROK_X_SEARCH`                   | 否       | 精确为 `true` 时额外启用 X Search，默认为 `false`。                |
-| `DISABLE_BYOK`                    | 否       | 精确设为 `true` 时只开放托管访问。                                 |
-| `MODEL_LIST_TIMEOUT_SECONDS`      | 否       | 模型列表时限；默认 30 秒。                                         |
-| `CHAT_FIRST_BYTE_TIMEOUT_SECONDS` | 否       | 等待 Response Header 的时限；默认 300 秒。                         |
-| `CHAT_IDLE_TIMEOUT_SECONDS`       | 否       | Body Chunk 之间的最大空闲时间；默认 300 秒。                       |
-| `CHAT_TOTAL_TIMEOUT_SECONDS`      | 否       | 整个聊天请求时限；默认 1800 秒。                                   |
+| 变量                               | 是否必需 | 默认值                          | 用途                                                   |
+| ---------------------------------- | -------- | ------------------------------- | ------------------------------------------------------ |
+| `BASE_URL`                         | 否       | `https://api.openai.com`        | 固定 OpenAI-compatible 上游。                          |
+| `ALLOW_INSECURE_LOCAL_UPSTREAM`    | 否       | `false`                         | 精确为 `true` 时允许非生产环境使用 Loopback HTTP。     |
+| `OPENAI_API_KEY`                   | 托管访问 | 无                              | 部署方持有的聊天上游 Key。                             |
+| `MODELS`                           | 托管访问 | 空                              | 逗号分隔的托管模型白名单。                             |
+| `DEFAULT_MODEL`                    | 否       | `MODELS` 第一项                 | 托管默认模型，必须存在于 `MODELS` 中。                 |
+| `TITLE_MODEL`                      | 否       | `DEFAULT_MODEL`                 | 部署端标题模型，必须存在于 `MODELS` 中。               |
+| `ACCESS_CODE`                      | 托管访问 | 无                              | 逗号分隔的访客访问码，每个最多 256 UTF-8 Byte。        |
+| `AUTH_SECRET`                      | 托管访问 | 无                              | 至少 32 UTF-8 Byte 的 HMAC/Session Secret。            |
+| `WEB_SEARCH_PROVIDER`              | 否       | `tavily`                        | 默认 Hosted Provider：`tavily`、`exa` 或 `grok`。      |
+| `WEB_SEARCH_ALLOWED_PROVIDERS`     | 否       | 仅默认 Provider                 | 访问码用户可选的有序 Provider 列表。                   |
+| `TAVILY_API_KEY`                   | 否       | 无                              | 选择 Tavily 时使用的部署方 Key。                       |
+| `TAVILY_BASE_URL`                  | 否       | `https://api.tavily.com`        | 托管 Tavily-compatible Base。                          |
+| `EXA_API_KEY`                      | 否       | 无                              | 选择 Exa 时使用的部署方 Key。                          |
+| `EXA_BASE_URL`                     | 否       | `https://api.exa.ai`            | 托管 Exa-compatible Base。                             |
+| `GROK_API_KEY`                     | 否       | 无                              | 选择 Grok 时使用的部署方 xAI-compatible Key。          |
+| `GROK_RESPONSES_URL`               | 否       | `https://api.x.ai/v1/responses` | 完整 Grok Responses 地址。                             |
+| `GROK_MODEL`                       | 否       | `grok-4.5`                      | Hosted Grok 模型。                                     |
+| `GROK_X_SEARCH`                    | 否       | `false`                         | 精确为 `true` 时额外启用 X Search。                    |
+| `IMAGE_GENERATION_API_KEY`         | 托管图片 | 无                              | 部署方持有的图片 Provider Key。                        |
+| `IMAGE_GENERATION_BASE_URL`        | 托管图片 | 无                              | Provider Base；服务端自动派生 generations/edits 路径。 |
+| `IMAGE_GENERATION_MODEL`           | 托管图片 | 无                              | 图片模型 ID，例如 `gpt-image-2`。                      |
+| `IMAGE_GENERATION_PROFILES`        | 托管图片 | 无                              | Profile JSON 数组，不能与旧版三变量混用。              |
+| `IMAGE_GENERATION_DEFAULT_PROFILE` | 否       | 第一项 Profile ID               | 使用 Profiles 时的默认 Profile。                       |
+| `IMAGE_GENERATION_TIMEOUT_SECONDS` | 否       | `300`                           | 图片上游超时；`0` 关闭该 Timer。                       |
+| `IMAGE_GENERATION_MAX_REQUEST_MB`  | 否       | `8`                             | 图片请求体上限，使用整数 MiB。                         |
+| `DISABLE_BYOK`                     | 否       | `false`                         | 精确为 `true` 时只开放托管访问。                       |
+| `MODEL_LIST_TIMEOUT_SECONDS`       | 否       | `30`                            | 模型列表超时秒数。                                     |
+| `CHAT_FIRST_BYTE_TIMEOUT_SECONDS`  | 否       | `300`                           | 等待 Response Header 的秒数。                          |
+| `CHAT_IDLE_TIMEOUT_SECONDS`        | 否       | `300`                           | Body Chunk 之间的最大空闲秒数。                        |
+| `CHAT_TOTAL_TIMEOUT_SECONDS`       | 否       | `1800`                          | 整个聊天请求的超时秒数。                               |
 
 `OPENAI_API_KEY`、`ACCESS_CODE` 和 `AUTH_SECRET` 必须同时配置，托管访问还要求
 至少一个 `MODELS` 条目。托管配置不完整时会 Fail Closed。
@@ -133,6 +180,19 @@ Timer 在 Streaming 期间不会重置；Idle Timer 会在收到每个 Body Chun
 
 生产环境 OpenAI、Tavily、Exa 和 Grok 上游必须使用 HTTPS。Insecure-local 例外只允许非生产
 环境的 Loopback Host，不允许 LAN 或普通远程 HTTP 目标。
+
+## 图片生成默认参数
+
+下面是浏览器端生图参数的默认值，与 Hosted 图片环境变量相互独立：
+
+| UI 参数    | 默认值 | 行为                                             |
+| ---------- | ------ | ------------------------------------------------ |
+| 分辨率     | `1K`   | 配合默认 `1:1` 比例解析为 `1024x1024`。          |
+| 图像比例   | `1:1`  | 所选 Profile 支持自定义尺寸时可以选择其他比例。  |
+| 质量       | `auto` | 原样传给所选的 OpenAI-compatible 图片 Provider。 |
+| 输出格式   | `png`  | PNG 不发送压缩率字段。                           |
+| 输出压缩率 | 无     | JPEG/WebP 可以设置 `0` 到 `100` 的整数。         |
+| 参考图     | 无     | 图片编辑最多接收 `16` 张有序参考图。             |
 
 ## 部署到 Vercel
 
