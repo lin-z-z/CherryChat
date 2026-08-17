@@ -24,9 +24,7 @@ const canaries = {
   GROK_RESPONSES_URL: "https://grok-ci-upstream.example/v1/responses",
   GROK_MODEL: "grok-ci-canary-4-5",
   IMAGE_GENERATION_API_KEY: "image-ci-f55ac84fdc314eef",
-  IMAGE_GENERATION_URL:
-    "https://image-ci-upstream.example/v1/images/generations",
-  IMAGE_EDIT_URL: "https://image-ci-upstream.example/v1/images/edits",
+  IMAGE_GENERATION_BASE_URL: "https://image-ci-upstream.example/v1",
   IMAGE_GENERATION_MODEL: "image-ci-canary-model",
 };
 

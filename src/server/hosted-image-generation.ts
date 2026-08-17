@@ -3,6 +3,8 @@ import { bytesToBlob } from "@/runtime/attachments/blob-utils";
 import {
   hostedImageGenerationRequestSchema,
   imageGenerationResponseSchema,
+  imageEditUrl,
+  imageGenerationUrl,
   MAX_GENERATED_IMAGE_BYTES,
   MAX_IMAGE_GENERATION_REFERENCES,
   MAX_IMAGE_GENERATION_RESPONSE_BYTES,
@@ -64,8 +66,7 @@ export async function handleHostedImageGeneration(
         id: "hosted-default",
         name: imageConfig.model,
         apiKey: imageConfig.apiKey,
-        generationUrl: imageConfig.generationUrl,
-        editUrl: imageConfig.editUrl,
+        baseUrl: imageConfig.baseUrl,
         model: imageConfig.model,
         sizeMode: "auto" as const,
       },
@@ -127,7 +128,7 @@ export async function handleHostedImageGeneration(
         );
       }
       selectedProfile = profile;
-      upstreamUrl = profile.generationUrl;
+      upstreamUrl = imageGenerationUrl(profile.baseUrl);
       upstreamHeaders.set("Content-Type", "application/json");
       upstreamBody = JSON.stringify({
         model: profile.model,
@@ -236,7 +237,7 @@ export async function handleHostedImageGeneration(
       for (const image of images) {
         rebuilt.append("image[]", image, image.name);
       }
-      upstreamUrl = profile.editUrl;
+      upstreamUrl = imageEditUrl(profile.baseUrl);
       upstreamBody = rebuilt;
     } else {
       return errorResponse(

@@ -17,9 +17,9 @@ import { ChatTransportError } from "@/runtime/transport/chat-errors";
 export const MAX_IMAGE_GENERATION_REFERENCES = 16;
 export const MAX_GENERATED_IMAGE_BYTES = 20 * 1024 * 1024;
 export const MAX_IMAGE_GENERATION_RESPONSE_BYTES = 32 * 1024 * 1024;
-export const DEFAULT_IMAGE_GENERATION_URL =
-  "https://api.openai.com/v1/images/generations";
-export const DEFAULT_IMAGE_EDIT_URL = "https://api.openai.com/v1/images/edits";
+export const DEFAULT_IMAGE_GENERATION_BASE_URL = "https://api.openai.com";
+export const IMAGE_GENERATION_PATH = "/v1/images/generations";
+export const IMAGE_EDIT_PATH = "/v1/images/edits";
 export const DEFAULT_IMAGE_GENERATION_MODEL = "gpt-image-2";
 
 export interface ImageGenerationRequest {
@@ -39,8 +39,7 @@ export interface ImageGenerationResult {
 }
 
 export interface ImageGenerationEndpoint {
-  generationUrl: string;
-  editUrl: string;
+  baseUrl: string;
   apiKey: string;
   mode: "byok" | "hosted";
 }
@@ -85,32 +84,63 @@ export const imageGenerationResponseSchema = z
   })
   .passthrough();
 
-export function normalizeImageEndpointUrl(value: string): string {
+export function normalizeImageBaseUrl(value: string): string {
   let url: URL;
   try {
     url = new URL(value.trim());
   } catch {
     throw new ChatTransportError(
       "INVALID_REQUEST",
-      "Image API URL must be absolute",
+      "Image API base URL must be absolute",
       null,
     );
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new ChatTransportError(
       "INVALID_REQUEST",
-      "Image API URL must use HTTP or HTTPS",
+      "Image API base URL must use HTTP or HTTPS",
       null,
     );
   }
   if (url.username || url.password || url.search || url.hash) {
     throw new ChatTransportError(
       "INVALID_REQUEST",
-      "Image API URL cannot contain credentials, query parameters or fragments",
+      "Image API base URL cannot contain credentials, query parameters or fragments",
       null,
     );
   }
-  url.pathname = url.pathname.replace(/\/+$/u, "");
+  let pathname = url.pathname.replace(/\/+$/u, "");
+  for (const suffix of [
+    "/v1/images/generations",
+    "/v1/images/edits",
+    "/images/generations",
+    "/images/edits",
+  ]) {
+    if (pathname.endsWith(suffix)) {
+      pathname = pathname.slice(0, -suffix.length).replace(/\/+$/u, "");
+      break;
+    }
+  }
+  url.pathname = pathname || "/";
+  return url.toString().replace(/\/$/u, "");
+}
+
+export function imageGenerationUrl(baseUrl: string): string {
+  return deriveImageEndpoint(baseUrl, IMAGE_GENERATION_PATH);
+}
+
+export function imageEditUrl(baseUrl: string): string {
+  return deriveImageEndpoint(baseUrl, IMAGE_EDIT_PATH);
+}
+
+function deriveImageEndpoint(baseUrl: string, path: string): string {
+  const normalized = normalizeImageBaseUrl(baseUrl);
+  const url = new URL(normalized);
+  const basePath = url.pathname.replace(/\/+$/u, "");
+  const versionedPath = basePath.endsWith("/v1")
+    ? `${basePath}${path.slice(3)}`
+    : `${basePath}${path}`;
+  url.pathname = versionedPath || "/";
   return url.toString().replace(/\/$/u, "");
 }
 

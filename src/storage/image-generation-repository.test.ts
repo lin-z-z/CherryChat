@@ -49,8 +49,8 @@ describe("ImageGenerationRepository", () => {
     await database.settings.put({
       key: IMAGE_GENERATION_SETTINGS_KEY,
       value: {
-        generationUrl: "https://images.example.test/generations",
-        editUrl: "https://images.example.test/edits",
+        generationUrl: "https://images.example.test/v1/images/generations",
+        editUrl: "https://images.example.test/v1/images/edits",
         modelId: "gpt-image-1.5",
         size: "1536x1024",
         quality: "high",
@@ -123,8 +123,7 @@ function profile(
     id,
     name: id,
     mode: "byok" as const,
-    generationUrl: "https://images.example.test/v1/images/generations/",
-    editUrl: "https://images.example.test/v1/images/edits/",
+    baseUrl: "https://images.example.test/v1",
     apiKey,
     modelId,
     sizeMode,

@@ -230,9 +230,8 @@ export const resources = {
       imageGenerationCompression: "压缩质量",
       imageGenerationUrls: "接口地址",
       imageGenerationUrlsDescription:
-        "两个地址分别处理无参考图和带参考图的请求。",
-      imageGenerationUrl: "图片生成 URL",
-      imageEditUrl: "图片编辑 URL",
+        "填写供应商基础地址，程序会自动使用标准的图片生成和编辑路径。",
+      imageGenerationBaseUrl: "供应商基础 URL",
       imageGenerationCredential: "凭据与模型",
       imageGenerationCredentialDescription:
         "API Key 仅保存在当前浏览器，不会进入备份。",
@@ -853,9 +852,8 @@ export const resources = {
       imageGenerationCompression: "Compression quality",
       imageGenerationUrls: "Endpoint URLs",
       imageGenerationUrlsDescription:
-        "Use separate endpoints for requests without and with reference images.",
-      imageGenerationUrl: "Image generation URL",
-      imageEditUrl: "Image edit URL",
+        "Enter the provider base URL. Standard generation and edit paths are added automatically.",
+      imageGenerationBaseUrl: "Provider base URL",
       imageGenerationCredential: "Credential and model",
       imageGenerationCredentialDescription:
         "The API key stays in this browser and is excluded from backups.",

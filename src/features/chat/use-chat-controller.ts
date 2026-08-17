@@ -1652,7 +1652,7 @@ export function useChatController() {
         conversationId: conversationRecord.id,
         assistantMessageId: assistant.id,
       });
-      const timeoutMs = publicConfig?.imageGenerationTimeoutMs ?? 120_000;
+      const timeoutMs = publicConfig?.imageGenerationTimeoutMs ?? 300_000;
       let timedOut = false;
       const timeout = window.setTimeout(() => {
         timedOut = true;
@@ -1663,8 +1663,7 @@ export function useChatController() {
         const transport = new OpenAICompatibleImageTransport({
           endpoint: {
             mode,
-            generationUrl: profile.generationUrl,
-            editUrl: profile.editUrl,
+            baseUrl: profile.baseUrl,
             apiKey: profile.apiKey,
           },
         });
@@ -2788,8 +2787,7 @@ function resolveImageGenerationProfiles(
     id: profile.id,
     name: profile.name,
     mode: "hosted" as const,
-    generationUrl: "",
-    editUrl: "",
+    baseUrl: "",
     apiKey: "",
     modelId: profile.modelId,
     sizeMode: profile.sizeMode,
@@ -2817,7 +2815,7 @@ function imageGenerationConnectionScope(
 ): string {
   return mode === "hosted"
     ? "image:hosted:same-origin"
-    : `image:byok:${profile.id}\n${profile.generationUrl}\n${profile.editUrl}`;
+    : `image:byok:${profile.id}\n${profile.baseUrl}`;
 }
 
 function imageGenerationMaximumRequestBytes(
@@ -2825,7 +2823,7 @@ function imageGenerationMaximumRequestBytes(
   config: PublicConfig | null,
 ): number {
   return mode === "hosted"
-    ? (config?.imageGenerationMaximumRequestBytes ?? 4 * 1024 * 1024)
+    ? (config?.imageGenerationMaximumRequestBytes ?? 8 * 1024 * 1024)
     : DEFAULT_IMAGE_REFERENCE_MAX_REQUEST_BYTES;
 }
 

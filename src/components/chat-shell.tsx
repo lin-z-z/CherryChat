@@ -28,6 +28,11 @@ import { AssistantSelector } from "@/components/chat/assistant-selector";
 import { PrintView } from "@/components/chat/chat-print-view";
 import { SearchDialog } from "@/components/chat/chat-search-dialog";
 import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
+import {
+  ImageGenerationCompressionControl,
+  ImageGenerationParameterControl,
+} from "@/components/chat/image-generation-parameter-control";
+import { ImageGenerationProfileSelector } from "@/components/chat/image-generation-profile-selector";
 import { MessageView } from "@/components/chat/message-view";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ReasoningEffortControl } from "@/components/chat/reasoning-effort-control";
@@ -278,17 +283,15 @@ export function ChatShell() {
             disabled={!chat.ready || generationBusy}
           />
           {imageMode ? (
-            <select
-              aria-label={t("imageGenerationProfile")}
-              className="topbar-model-select"
+            <ImageGenerationProfileSelector
               disabled={
                 !chat.ready ||
                 generationBusy ||
                 chat.imageGenerationProfiles.length === 0
               }
-              onChange={(event) =>
+              onValueChange={(profileId) =>
                 void chat
-                  .selectImageGenerationProfile(event.target.value)
+                  .selectImageGenerationProfile(profileId)
                   .catch((cause: unknown) =>
                     notify({
                       message: formatUserFacingError(cause, t),
@@ -296,14 +299,9 @@ export function ChatShell() {
                     }),
                   )
               }
+              profiles={chat.imageGenerationProfiles}
               value={chat.activeImageGenerationProfile?.id ?? ""}
-            >
-              {chat.imageGenerationProfiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name} · {profile.modelId}
-                </option>
-              ))}
-            </select>
+            />
           ) : (
             <ModelSelector
               disabled={!chat.ready || generationBusy}
@@ -744,108 +742,81 @@ export function ChatShell() {
                   <div className="composer-toolbar-right">
                     {imageMode ? (
                       <>
-                        <select
-                          aria-label={t("imageGenerationResolution")}
-                          className="composer-compact-select"
+                        <ImageGenerationParameterControl
+                          ariaLabel={t("imageGenerationResolution")}
                           disabled={generationBusy}
-                          onChange={(event) =>
+                          onValueChange={(value) =>
                             chat.setImageGenerationParameters({
-                              resolutionTier: event.target.value as
+                              resolutionTier: value as
                                 "auto" | "1K" | "2K" | "4K",
                             })
                           }
-                          value={chat.imageGenerationParameters.resolutionTier}
-                        >
-                          {chat.activeImageGenerationProfile
-                            ? resolveResolutionOptions(
-                                chat.activeImageGenerationProfile,
-                              ).map((value) => (
-                                <option key={value} value={value}>
-                                  {value}
-                                </option>
-                              ))
-                            : null}
-                        </select>
-                        <select
-                          aria-label={t("imageGenerationAspectRatio")}
-                          className="composer-compact-select"
-                          disabled={generationBusy}
-                          onChange={(event) =>
-                            chat.setImageGenerationParameters({
-                              aspectRatio: event.target
-                                .value as typeof chat.imageGenerationParameters.aspectRatio,
-                            })
-                          }
-                          value={chat.imageGenerationParameters.aspectRatio}
-                        >
-                          {resolveAspectRatioOptions(
+                          options={resolveResolutionOptions(
                             chat.activeImageGenerationProfile,
-                          ).map((value) => (
-                            <option key={value} value={value}>
-                              {value}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          aria-label={t("imageGenerationQuality")}
-                          className="composer-compact-select"
+                          ).map((value) => ({ value, label: value }))}
+                          value={chat.imageGenerationParameters.resolutionTier}
+                        />
+                        <ImageGenerationParameterControl
+                          ariaLabel={t("imageGenerationAspectRatio")}
                           disabled={generationBusy}
-                          onChange={(event) =>
+                          onValueChange={(value) =>
                             chat.setImageGenerationParameters({
-                              quality: event.target
-                                .value as typeof chat.imageGenerationParameters.quality,
+                              aspectRatio:
+                                value as typeof chat.imageGenerationParameters.aspectRatio,
                             })
                           }
-                          value={chat.imageGenerationParameters.quality}
-                        >
-                          <option value="auto">{t("imageQualityAuto")}</option>
-                          <option value="low">{t("imageQualityLow")}</option>
-                          <option value="medium">
-                            {t("imageQualityMedium")}
-                          </option>
-                          <option value="high">{t("imageQualityHigh")}</option>
-                        </select>
-                        <select
-                          aria-label={t("imageGenerationOutputFormat")}
-                          className="composer-compact-select"
+                          options={resolveAspectRatioOptions(
+                            chat.activeImageGenerationProfile,
+                          ).map((value) => ({ value, label: value }))}
+                          value={chat.imageGenerationParameters.aspectRatio}
+                        />
+                        <ImageGenerationParameterControl
+                          ariaLabel={t("imageGenerationQuality")}
                           disabled={generationBusy}
-                          onChange={(event) =>
+                          onValueChange={(value) =>
                             chat.setImageGenerationParameters({
-                              outputFormat: event.target.value as
-                                "png" | "jpeg" | "webp",
+                              quality:
+                                value as typeof chat.imageGenerationParameters.quality,
+                            })
+                          }
+                          options={[
+                            { value: "auto", label: t("imageQualityAuto") },
+                            { value: "low", label: t("imageQualityLow") },
+                            { value: "medium", label: t("imageQualityMedium") },
+                            { value: "high", label: t("imageQualityHigh") },
+                          ]}
+                          value={chat.imageGenerationParameters.quality}
+                        />
+                        <ImageGenerationParameterControl
+                          ariaLabel={t("imageGenerationOutputFormat")}
+                          disabled={generationBusy}
+                          onValueChange={(value) =>
+                            chat.setImageGenerationParameters({
+                              outputFormat: value as "png" | "jpeg" | "webp",
                               outputCompression:
-                                event.target.value === "png"
+                                value === "png"
                                   ? null
                                   : (chat.imageGenerationParameters
                                       .outputCompression ?? 100),
                             })
                           }
+                          options={[
+                            { value: "png", label: "PNG" },
+                            { value: "jpeg", label: "JPEG" },
+                            { value: "webp", label: "WebP" },
+                          ]}
                           value={chat.imageGenerationParameters.outputFormat}
-                        >
-                          <option value="png">PNG</option>
-                          <option value="jpeg">JPEG</option>
-                          <option value="webp">WebP</option>
-                        </select>
+                        />
                         {chat.imageGenerationParameters.outputFormat !==
                         "png" ? (
-                          <input
-                            aria-label={t("imageGenerationCompression")}
-                            className="composer-compact-number"
+                          <ImageGenerationCompressionControl
+                            ariaLabel={t("imageGenerationCompression")}
                             disabled={generationBusy}
-                            max={100}
-                            min={0}
-                            onChange={(event) => {
-                              const value = event.currentTarget.valueAsNumber;
-                              if (Number.isFinite(value)) {
-                                chat.setImageGenerationParameters({
-                                  outputCompression: Math.min(
-                                    100,
-                                    Math.max(0, value),
-                                  ),
-                                });
-                              }
-                            }}
-                            type="number"
+                            onValueChange={(value) =>
+                              chat.setImageGenerationParameters({
+                                outputCompression: value,
+                              })
+                            }
                             value={
                               chat.imageGenerationParameters
                                 .outputCompression ?? 100
@@ -913,9 +884,11 @@ function imageUploadError(cause: unknown, t: TFunction): string {
 }
 
 function resolveResolutionOptions(
-  profile: ImageGenerationProfile,
+  profile: ImageGenerationProfile | null,
 ): readonly string[] {
-  return resolveImageGenerationCapabilities(profile).resolutionTiers;
+  return profile
+    ? resolveImageGenerationCapabilities(profile).resolutionTiers
+    : ["1K"];
 }
 
 function resolveAspectRatioOptions(

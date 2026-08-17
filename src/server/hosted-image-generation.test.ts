@@ -35,8 +35,7 @@ const config: ServerConfig = {
     webSearch: null,
     imageGeneration: {
       apiKey: "image-deployment-key",
-      generationUrl: "https://images.example/v1/images/generations",
-      editUrl: "https://images.example/v1/images/edits",
+      baseUrl: "https://images.example/v1",
       model: "deployment-image-model",
       timeoutMs: 5_000,
       maximumRequestBytes: 4 * 1024 * 1024,
@@ -81,8 +80,7 @@ describe("hosted image generation", () => {
           id: "standard",
           name: "Standard",
           apiKey: "standard-image-key",
-          generationUrl: "https://standard.images.example/generations",
-          editUrl: "https://standard.images.example/edits",
+          baseUrl: "https://standard.images.example",
           model: "gpt-image-1.5",
           sizeMode: "fixed",
         },
@@ -90,8 +88,7 @@ describe("hosted image generation", () => {
           id: "portrait",
           name: "Portrait",
           apiKey: "portrait-image-key",
-          generationUrl: "https://portrait.images.example/generations",
-          editUrl: "https://portrait.images.example/edits",
+          baseUrl: "https://portrait.images.example",
           model: "gpt-image-2",
           sizeMode: "auto",
         },
@@ -119,7 +116,9 @@ describe("hosted image generation", () => {
 
     expect(response.status).toBe(200);
     const [target, init] = fetchMock.mock.calls[0] ?? [];
-    expect(target).toBe("https://portrait.images.example/generations");
+    expect(target).toBe(
+      "https://portrait.images.example/v1/images/generations",
+    );
     expect(new Headers(init?.headers).get("authorization")).toBe(
       "Bearer portrait-image-key",
     );

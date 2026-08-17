@@ -74,11 +74,7 @@ export function ImageGenerationPage({
       id,
       name: t("imageGenerationNewProfile"),
       mode: "byok",
-      generationUrl:
-        selectedProfile?.generationUrl ??
-        "https://api.openai.com/v1/images/generations",
-      editUrl:
-        selectedProfile?.editUrl ?? "https://api.openai.com/v1/images/edits",
+      baseUrl: selectedProfile?.baseUrl ?? "https://api.openai.com",
       apiKey: "",
       modelId: "gpt-image-2",
       sizeMode: "auto",
@@ -194,22 +190,13 @@ export function ImageGenerationPage({
               >
                 <div className="settings-field-stack">
                   <TextField
-                    id="image-generation-url"
-                    label={t("imageGenerationUrl")}
+                    id="image-generation-base-url"
+                    label={t("imageGenerationBaseUrl")}
                     onChange={(event) =>
-                      updateProfile({ generationUrl: event.target.value })
+                      updateProfile({ baseUrl: event.target.value })
                     }
                     spellCheck={false}
-                    value={selectedProfile.generationUrl}
-                  />
-                  <TextField
-                    id="image-edit-url"
-                    label={t("imageEditUrl")}
-                    onChange={(event) =>
-                      updateProfile({ editUrl: event.target.value })
-                    }
-                    spellCheck={false}
-                    value={selectedProfile.editUrl}
+                    value={selectedProfile.baseUrl}
                   />
                 </div>
               </SettingsRow>

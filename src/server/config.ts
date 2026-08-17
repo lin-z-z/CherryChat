@@ -25,6 +25,7 @@ import {
   type ImageGenerationSizeMode,
   type WebSearchProviderId,
 } from "@/runtime/chat/types";
+import { normalizeImageBaseUrl } from "@/runtime/image-generation/image-generation-contract";
 
 const booleanStringSchema = z
   .enum(["true", "false"])
@@ -50,8 +51,7 @@ const rawEnvironmentSchema = z.object({
   GROK_MODEL: z.string().optional(),
   GROK_X_SEARCH: booleanStringSchema,
   IMAGE_GENERATION_API_KEY: z.string().optional(),
-  IMAGE_GENERATION_URL: z.string().optional(),
-  IMAGE_EDIT_URL: z.string().optional(),
+  IMAGE_GENERATION_BASE_URL: z.string().optional(),
   IMAGE_GENERATION_MODEL: z.string().optional(),
   IMAGE_GENERATION_PROFILES: z.string().optional(),
   IMAGE_GENERATION_DEFAULT_PROFILE: z.string().optional(),
@@ -92,8 +92,7 @@ export interface HostedServerConfig {
 
 export interface HostedImageGenerationConfig {
   apiKey: string;
-  generationUrl: string;
-  editUrl: string;
+  baseUrl: string;
   model: string;
   profiles?: HostedImageGenerationProfileConfig[];
   defaultProfileId?: string;
@@ -105,8 +104,7 @@ export interface HostedImageGenerationProfileConfig {
   id: string;
   name: string;
   apiKey: string;
-  generationUrl: string;
-  editUrl: string;
+  baseUrl: string;
   model: string;
   sizeMode: ImageGenerationSizeMode;
 }
@@ -168,8 +166,7 @@ export function parseServerConfig(
   const rawGrokResponsesUrl = nonEmpty(raw.GROK_RESPONSES_URL?.trim());
   const grokModel = nonEmpty(raw.GROK_MODEL?.trim()) ?? DEFAULT_GROK_MODEL;
   const imageApiKey = nonEmpty(raw.IMAGE_GENERATION_API_KEY?.trim());
-  const rawImageGenerationUrl = nonEmpty(raw.IMAGE_GENERATION_URL?.trim());
-  const rawImageEditUrl = nonEmpty(raw.IMAGE_EDIT_URL?.trim());
+  const rawImageBaseUrl = nonEmpty(raw.IMAGE_GENERATION_BASE_URL?.trim());
   const imageModel = nonEmpty(raw.IMAGE_GENERATION_MODEL?.trim());
   const rawImageProfiles = nonEmpty(raw.IMAGE_GENERATION_PROFILES?.trim());
   const rawImageDefaultProfile = nonEmpty(
@@ -178,12 +175,12 @@ export function parseServerConfig(
   const imageGenerationTimeoutMs = parseTimeoutMilliseconds(
     "IMAGE_GENERATION_TIMEOUT_SECONDS",
     raw.IMAGE_GENERATION_TIMEOUT_SECONDS,
-    120_000,
+    300_000,
   );
   const imageGenerationMaximumRequestBytes = parseMegabytes(
     "IMAGE_GENERATION_MAX_REQUEST_MB",
     raw.IMAGE_GENERATION_MAX_REQUEST_MB,
-    4,
+    8,
   );
   const requestTimeouts = {
     modelListMs: parseTimeoutMilliseconds(
@@ -257,20 +254,17 @@ export function parseServerConfig(
   validateSearchApiKey(tavilyApiKey, "TAVILY_API_KEY", hostedFieldCount);
   validateSearchApiKey(exaApiKey, "EXA_API_KEY", hostedFieldCount);
   validateSearchApiKey(grokApiKey, "GROK_API_KEY", hostedFieldCount);
-  const imageFieldCount = [
-    imageApiKey,
-    rawImageGenerationUrl,
-    rawImageEditUrl,
-    imageModel,
-  ].filter(Boolean).length;
+  const imageFieldCount = [imageApiKey, rawImageBaseUrl, imageModel].filter(
+    Boolean,
+  ).length;
   if (rawImageProfiles && imageFieldCount > 0) {
     throw new ServerConfigurationError(
       "IMAGE_GENERATION_PROFILES cannot be combined with legacy image environment variables",
     );
   }
-  if (!rawImageProfiles && imageFieldCount !== 0 && imageFieldCount !== 4) {
+  if (!rawImageProfiles && imageFieldCount !== 0 && imageFieldCount !== 3) {
     throw new ServerConfigurationError(
-      "IMAGE_GENERATION_API_KEY, IMAGE_GENERATION_URL, IMAGE_EDIT_URL and IMAGE_GENERATION_MODEL must be configured together",
+      "IMAGE_GENERATION_API_KEY, IMAGE_GENERATION_BASE_URL and IMAGE_GENERATION_MODEL must be configured together",
     );
   }
   if ((imageFieldCount > 0 || rawImageProfiles) && hostedFieldCount !== 3) {
@@ -316,24 +310,17 @@ export function parseServerConfig(
     grokModel,
     grokXSearch: raw.GROK_X_SEARCH,
   });
-  const imageGenerationUrl = rawImageGenerationUrl
-    ? normalizeServerImageEndpoint(
-        rawImageGenerationUrl,
-        "IMAGE_GENERATION_URL",
-      )
-    : null;
-  const imageEditUrl = rawImageEditUrl
-    ? normalizeServerImageEndpoint(rawImageEditUrl, "IMAGE_EDIT_URL")
+  const imageBaseUrl = rawImageBaseUrl
+    ? normalizeServerImageBaseUrl(rawImageBaseUrl, "IMAGE_GENERATION_BASE_URL")
     : null;
   const imageProfiles = buildHostedImageGenerationProfiles({
     rawProfiles: rawImageProfiles,
     defaultProfileId: rawImageDefaultProfile,
     legacy:
-      imageApiKey && imageGenerationUrl && imageEditUrl && imageModel
+      imageApiKey && imageBaseUrl && imageModel
         ? {
             apiKey: imageApiKey,
-            generationUrl: imageGenerationUrl,
-            editUrl: imageEditUrl,
+            baseUrl: imageBaseUrl,
             model: imageModel,
           }
         : null,
@@ -371,14 +358,8 @@ export function parseServerConfig(
     }
     for (const profile of imageProfiles?.profiles ?? []) {
       assertHostedUpstreamSecurity(
-        profile.generationUrl,
-        "IMAGE_GENERATION_URL",
-        raw.NODE_ENV === "production",
-        raw.ALLOW_INSECURE_LOCAL_UPSTREAM,
-      );
-      assertHostedUpstreamSecurity(
-        profile.editUrl,
-        "IMAGE_EDIT_URL",
+        profile.baseUrl,
+        "IMAGE_GENERATION_BASE_URL",
         raw.NODE_ENV === "production",
         raw.ALLOW_INSECURE_LOCAL_UPSTREAM,
       );
@@ -404,8 +385,7 @@ export function parseServerConfig(
             imageGeneration: imageProfiles
               ? {
                   apiKey: defaultImageProfile?.apiKey ?? "",
-                  generationUrl: defaultImageProfile?.generationUrl ?? "",
-                  editUrl: defaultImageProfile?.editUrl ?? "",
+                  baseUrl: defaultImageProfile?.baseUrl ?? "",
                   model: defaultImageProfile?.model ?? "",
                   profiles: imageProfiles.profiles,
                   defaultProfileId: imageProfiles.defaultProfileId,
@@ -445,9 +425,9 @@ export function toPublicServerConfig(config: ServerConfig): PublicServerConfig {
     hostedImageGenerationDefaultProfileId:
       config.hosted?.imageGeneration?.defaultProfileId ?? null,
     imageGenerationTimeoutMs:
-      config.hosted?.imageGeneration?.timeoutMs ?? 120_000,
+      config.hosted?.imageGeneration?.timeoutMs ?? 300_000,
     imageGenerationMaximumRequestBytes:
-      config.hosted?.imageGeneration?.maximumRequestBytes ?? 4 * 1024 * 1024,
+      config.hosted?.imageGeneration?.maximumRequestBytes ?? 8 * 1024 * 1024,
     models: config.hosted ? [...config.models] : [],
     defaultModel: config.hosted ? config.defaultModel : null,
     titleModel: config.hosted ? config.titleModel : null,
@@ -511,23 +491,15 @@ function normalizeServerGrokResponsesUrl(value: string): string {
   }
 }
 
-function normalizeServerImageEndpoint(value: string, name: string): string {
-  let url: URL;
+function normalizeServerImageBaseUrl(value: string, name: string): string {
   try {
-    url = new URL(value);
-  } catch {
-    throw new ServerConfigurationError(`${name} must be an absolute URL`);
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new ServerConfigurationError(`${name} must use HTTP or HTTPS`);
-  }
-  if (url.username || url.password || url.search || url.hash) {
+    return normalizeImageBaseUrl(value);
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "Invalid URL";
     throw new ServerConfigurationError(
-      `${name} cannot contain credentials, query parameters or fragments`,
+      message.replace("Image API base URL", name),
     );
   }
-  url.pathname = url.pathname.replace(/\/+$/u, "");
-  return url.toString().replace(/\/$/u, "");
 }
 
 function buildHostedImageGenerationProfiles(input: {
@@ -535,8 +507,7 @@ function buildHostedImageGenerationProfiles(input: {
   defaultProfileId: string | undefined;
   legacy: {
     apiKey: string;
-    generationUrl: string;
-    editUrl: string;
+    baseUrl: string;
     model: string;
   } | null;
 }): {
@@ -551,8 +522,7 @@ function buildHostedImageGenerationProfiles(input: {
           id: "default-gpt-image-2",
           name: input.legacy?.model ?? "GPT Image 2",
           apiKey: input.legacy?.apiKey ?? "",
-          generationUrl: input.legacy?.generationUrl ?? "",
-          editUrl: input.legacy?.editUrl ?? "",
+          baseUrl: input.legacy?.baseUrl ?? "",
           model: input.legacy?.model ?? "",
           sizeMode: "auto" as const,
         },
@@ -595,11 +565,10 @@ function buildHostedImageGenerationProfiles(input: {
       id,
       name,
       apiKey,
-      generationUrl: normalizeServerImageEndpoint(
-        profile.generationUrl,
-        "IMAGE_GENERATION_URL",
+      baseUrl: normalizeServerImageBaseUrl(
+        profile.baseUrl,
+        "IMAGE_GENERATION_BASE_URL",
       ),
-      editUrl: normalizeServerImageEndpoint(profile.editUrl, "IMAGE_EDIT_URL"),
       model,
       sizeMode: profile.sizeMode,
     } satisfies HostedImageGenerationProfileConfig;
@@ -626,8 +595,7 @@ function parseImageGenerationProfilesJson(value: string): Array<{
   id: string;
   name: string;
   apiKey: string;
-  generationUrl: string;
-  editUrl: string;
+  baseUrl: string;
   model: string;
   sizeMode: ImageGenerationSizeMode;
 }> {
@@ -645,8 +613,7 @@ function parseImageGenerationProfilesJson(value: string): Array<{
         id: z.string(),
         name: z.string(),
         apiKey: z.string(),
-        generationUrl: z.string(),
-        editUrl: z.string(),
+        baseUrl: z.string(),
         model: z.string(),
         sizeMode: z.enum(IMAGE_GENERATION_SIZE_MODES).default("auto"),
       })
@@ -668,8 +635,7 @@ function assertHostedUpstreamSecurity(
     | "TAVILY_BASE_URL"
     | "EXA_BASE_URL"
     | "GROK_RESPONSES_URL"
-    | "IMAGE_GENERATION_URL"
-    | "IMAGE_EDIT_URL"
+    | "IMAGE_GENERATION_BASE_URL"
     | string,
   production: boolean,
   allowInsecureLocalUpstream: boolean,

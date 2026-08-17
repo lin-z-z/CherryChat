@@ -198,8 +198,7 @@ export interface ImageGenerationProfile {
   id: string;
   name: string;
   mode: "byok" | "hosted";
-  generationUrl: string;
-  editUrl: string;
+  baseUrl: string;
   apiKey: string;
   modelId: string;
   sizeMode: ImageGenerationSizeMode;
