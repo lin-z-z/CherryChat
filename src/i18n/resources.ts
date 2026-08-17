@@ -211,6 +211,8 @@ export const resources = {
       imageGenerationConnection: "图片生成连接",
       imageGenerationConnectionDescription:
         "使用部署服务，或连接兼容 OpenAI 图片接口的自定义服务。",
+      imageGenerationConnectionMethodDescription:
+        "图片生成沿用模型服务中已保存的连接方式。",
       imageGenerationProfile: "图片模型",
       imageGenerationResolution: "分辨率档位",
       imageGenerationAspectRatio: "图片比例",
@@ -833,6 +835,8 @@ export const resources = {
       imageGenerationConnection: "Image generation connection",
       imageGenerationConnectionDescription:
         "Use the hosted service or connect a custom OpenAI-compatible image service.",
+      imageGenerationConnectionMethodDescription:
+        "Image generation uses the saved connection method from Model service.",
       imageGenerationProfile: "Image model",
       imageGenerationResolution: "Resolution tier",
       imageGenerationAspectRatio: "Aspect ratio",

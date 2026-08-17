@@ -974,6 +974,7 @@ export function SettingsWorkspace({
                 setImageGenerationError(null);
                 setImageGenerationStatus(null);
               }}
+              onOpenModelService={() => setCategory("service")}
               onSave={() => void saveImageGeneration()}
               saving={imageGenerationSaving}
               status={imageGenerationStatus}
