@@ -1,8 +1,9 @@
 "use client";
 
-import { Image, KeyRound, Link2, Save } from "lucide-react";
+import { ArrowRight, Cable, Image, KeyRound, Link2, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { imageProfileLabel } from "@/components/chat/image-generation-profile-label";
 import {
   SettingsRow,
   SettingsSection,
@@ -21,6 +22,20 @@ export interface ImageGenerationConnectionDraft {
   hasApiKey: boolean;
 }
 
+interface ImageGenerationPageProps {
+  connectionMode: "byok" | "hosted";
+  dirty: boolean;
+  draft: ImageGenerationConnectionDraft;
+  error: string | null;
+  hostedEnabled: boolean;
+  hostedProfiles: readonly PublicImageGenerationProfile[];
+  onChange: (next: ImageGenerationConnectionDraft) => void;
+  onOpenModelService: () => void;
+  onSave: () => void;
+  saving: boolean;
+  status: string | null;
+}
+
 export function ImageGenerationPage({
   connectionMode,
   dirty,
@@ -29,21 +44,11 @@ export function ImageGenerationPage({
   hostedEnabled,
   hostedProfiles,
   onChange,
+  onOpenModelService,
   onSave,
   saving,
   status,
-}: {
-  connectionMode: "byok" | "hosted";
-  dirty: boolean;
-  draft: ImageGenerationConnectionDraft;
-  error: string | null;
-  hostedEnabled: boolean;
-  hostedProfiles: PublicImageGenerationProfile[];
-  onChange: (next: ImageGenerationConnectionDraft) => void;
-  onSave: () => void;
-  saving: boolean;
-  status: string | null;
-}) {
+}: ImageGenerationPageProps) {
   const { t } = useTranslation();
   const hosted = connectionMode === "hosted";
 
@@ -55,6 +60,21 @@ export function ImageGenerationPage({
         title={t("imageGenerationConnection")}
       >
         <div className="settings-ui-panel settings-connection-form">
+          <SettingsRow
+            description={t("imageGenerationConnectionMethodDescription")}
+            icon={Cable}
+            title={t("connectionMethod")}
+          >
+            <div className="settings-action-group">
+              <span className="settings-inline-value">
+                {hosted ? t("useAccessCode") : t("customApi")}
+              </span>
+              <SettingsButton onClick={onOpenModelService} type="button">
+                {t("settingsService")}
+                <ArrowRight aria-hidden="true" size={16} />
+              </SettingsButton>
+            </div>
+          </SettingsRow>
           {hosted ? (
             <SettingsRow
               description={
@@ -72,7 +92,7 @@ export function ImageGenerationPage({
               <div className="settings-field-stack">
                 {hostedProfiles.map((profile) => (
                   <span className="settings-inline-value" key={profile.id}>
-                    {profile.name} · {profile.modelId}
+                    {imageProfileLabel(profile.name, profile.modelId)}
                   </span>
                 ))}
                 {hostedProfiles.length === 0 ? (

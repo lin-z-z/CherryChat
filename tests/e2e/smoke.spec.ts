@@ -552,6 +552,14 @@ test("supports the seven settings destinations without horizontal overflow", asy
   });
 
   await selectSettingsPage(page, settings, "Image generation");
+  await expect(settings.getByText("Custom API", { exact: true })).toBeVisible();
+  await settings
+    .getByRole("button", { name: "Model service", exact: true })
+    .click();
+  await expect(
+    settings.getByRole("heading", { name: "Connection setup", exact: true }),
+  ).toBeVisible();
+  await selectSettingsPage(page, settings, "Image generation");
   await expect(settings.getByLabel("Service URL")).toBeVisible();
   await expect(
     settings.getByRole("textbox", { name: "API key", exact: true }),

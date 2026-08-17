@@ -130,7 +130,7 @@ test("keeps Hosted image credentials and upstream targets out of the browser", a
     hostedImageGenerationProfiles: [
       {
         id: "hosted-primary",
-        name: "Hosted primary",
+        name: "hosted-image-model",
         modelId: "hosted-image-model",
         sizeMode: "fixed",
       },
@@ -156,8 +156,21 @@ test("keeps Hosted image credentials and upstream targets out of the browser", a
 
   const settings = await openSettings(page, false);
   await selectSettingsPage(page, settings, "Image generation");
+  await expect(
+    settings.getByText("Use an access code", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    settings.getByRole("button", { name: "Model service", exact: true }),
+  ).toBeVisible();
   await expect(settings.getByText("Hosted service available")).toBeVisible();
-  await expect(settings.getByText("hosted-image-model")).toBeVisible();
+  await expect(
+    settings.getByText("hosted-image-model", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    settings.getByText("hosted-image-model · hosted-image-model", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
   await expect(settings.getByLabel("Service URL")).toHaveCount(0);
   await settings.getByRole("button", { name: "Close" }).click();
 

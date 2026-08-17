@@ -7,6 +7,10 @@ import {
   ModelSelector,
   type ModelSelectorItem,
 } from "@/components/chat/model-selector";
+import {
+  imageProfileLabel,
+  sameImageProfileLabel,
+} from "@/components/chat/image-generation-profile-label";
 import type { ImageGenerationProfile } from "@/runtime/chat/types";
 
 export interface ImageGenerationProfileSelectorProps {
@@ -30,7 +34,7 @@ export function ImageGenerationProfileSelector({
         value: profile.id,
         label: profile.name,
         modelId: profile.modelId,
-        ...(sameModelLabel(profile.name, profile.modelId)
+        ...(sameImageProfileLabel(profile.name, profile.modelId)
           ? {}
           : { description: profile.modelId }),
         ariaLabel: imageProfileLabel(profile.name, profile.modelId),
@@ -56,15 +60,4 @@ export function ImageGenerationProfileSelector({
       value={value}
     />
   );
-}
-
-function sameModelLabel(name: string, modelId: string): boolean {
-  return (
-    name.normalize("NFKC").trim().toLocaleLowerCase() ===
-    modelId.normalize("NFKC").trim().toLocaleLowerCase()
-  );
-}
-
-function imageProfileLabel(name: string, modelId: string): string {
-  return sameModelLabel(name, modelId) ? name : `${name} \u00b7 ${modelId}`;
 }
