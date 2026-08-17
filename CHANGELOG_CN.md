@@ -5,6 +5,24 @@
 本文记录 CherryChat 的可追溯发布版本。英文版本是 Release notes 的基准；简体中文
 版本必须保持相同的能力与限制边界。
 
+## [Unreleased]
+
+### 新增
+
+- 新增独立图片生成模式，内置 `gpt-image-2` BYOK 连接、可配置尺寸与输出参数，并可
+  为兼容的编辑 Endpoint 添加最多 16 张有序参考图。
+- 新增由部署方付费的 Hosted 图片生成，可使用单组旧版配置或服务端 Profile 白名单，
+  且不会向访问码用户暴露上游凭据或 URL。
+- 图片生成消息会保存生成快照与本地生成图片附件，并支持 Backup v2 往返恢复以及
+  JSON/Markdown 导出。
+
+### 变更
+
+- 浏览器 BYOK 图片设置简化为一个服务 URL 和 API Key，模型固定为 `gpt-image-2`；
+  多 Profile 仍仅属于 Hosted 部署能力。
+- 图片服务 Root 与 `/v1` Base 会规范化为标准 `/v1/images/generations` 和
+  `/v1/images/edits` Endpoint，并增加有界图片响应和更严格的 Hosted URL 校验。
+
 ## [1.0.0] - 2026-08-12
 
 ### 摘要

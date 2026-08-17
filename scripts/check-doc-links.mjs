@@ -18,6 +18,7 @@ const SCREENSHOT_PATHS = [
   "docs/images/cherrychat-desktop.png",
   "docs/images/cherrychat-settings.png",
   "docs/images/cherrychat-mobile.png",
+  "docs/images/cherrychat-image-generation.png",
 ];
 
 const SCREENSHOT_MAX_BYTES = 1_500_000;
@@ -29,6 +30,7 @@ const DOCUMENTATION_PAIRS = [
   ["docs/MODEL_COMPATIBILITY.md", "docs/MODEL_COMPATIBILITY_CN.md"],
   ["docs/SECURITY.md", "docs/SECURITY_CN.md"],
   ["docs/DATA.md", "docs/DATA_CN.md"],
+  ["docs/IMAGE_GENERATION.md", "docs/IMAGE_GENERATION_CN.md"],
   ["docs/ROADMAP.md", "docs/ROADMAP_CN.md"],
   ["docs/RELEASES.md", "docs/RELEASES_CN.md"],
 ];
@@ -65,6 +67,7 @@ const REQUIRED_FILE_TOKENS = {
     "Self-hosting",
     "./docs/README.md",
     "./docs/DEPLOYMENT.md",
+    "./docs/IMAGE_GENERATION.md",
     "./docs/SECURITY.md",
     "./docs/RELEASES.md",
     "./CHANGELOG.md",
@@ -80,6 +83,7 @@ const REQUIRED_FILE_TOKENS = {
     "自托管（Self-hosting）",
     "./docs/README_CN.md",
     "./docs/DEPLOYMENT_CN.md",
+    "./docs/IMAGE_GENERATION_CN.md",
     "./docs/SECURITY_CN.md",
     "./docs/RELEASES_CN.md",
     "./CHANGELOG_CN.md",
@@ -93,6 +97,8 @@ const REQUIRED_FILE_TOKENS = {
     "Self-hosting",
     "Who supplies the provider key",
     "Who pays the provider",
+    "./IMAGE_GENERATION.md",
+    "IMAGE_GENERATION_PROFILES",
   ],
   "docs/DEPLOYMENT_CN.md": [
     "自带 API Key（BYOK",
@@ -100,10 +106,23 @@ const REQUIRED_FILE_TOKENS = {
     "自托管（Self-hosting）",
     "谁提供 Provider Key",
     "谁承担 Provider 费用",
+    "./IMAGE_GENERATION_CN.md",
+    "IMAGE_GENERATION_PROFILES",
   ],
-  "docs/README.md": ["v1.0.0", "./RELEASES.md", "../CHANGELOG.md"],
-  "docs/README_CN.md": ["v1.0.0", "./RELEASES_CN.md", "../CHANGELOG_CN.md"],
+  "docs/README.md": [
+    "v1.0.0",
+    "./IMAGE_GENERATION.md",
+    "./RELEASES.md",
+    "../CHANGELOG.md",
+  ],
+  "docs/README_CN.md": [
+    "v1.0.0",
+    "./IMAGE_GENERATION_CN.md",
+    "./RELEASES_CN.md",
+    "../CHANGELOG_CN.md",
+  ],
   "CHANGELOG.md": [
+    "## [Unreleased]",
     "## [1.0.0]",
     "### Known limitations",
     "Backup v2",
@@ -112,12 +131,31 @@ const REQUIRED_FILE_TOKENS = {
     "./docs/RELEASES.md",
   ],
   "CHANGELOG_CN.md": [
+    "## [Unreleased]",
     "## [1.0.0]",
     "### 已知限制",
     "Backup v2",
     "./docs/DEPLOYMENT_CN.md",
     "./docs/SECURITY_CN.md",
     "./docs/RELEASES_CN.md",
+  ],
+  "docs/IMAGE_GENERATION.md": [
+    "./IMAGE_GENERATION_CN.md",
+    "gpt-image-2",
+    "/v1/images/generations",
+    "/v1/images/edits",
+    "/api/image-generation",
+    "IMAGE_GENERATION_PROFILES",
+    "Backup v2",
+  ],
+  "docs/IMAGE_GENERATION_CN.md": [
+    "./IMAGE_GENERATION.md",
+    "gpt-image-2",
+    "/v1/images/generations",
+    "/v1/images/edits",
+    "/api/image-generation",
+    "IMAGE_GENERATION_PROFILES",
+    "Backup v2",
   ],
   "docs/RELEASES.md": [
     "vMAJOR.MINOR.PATCH",

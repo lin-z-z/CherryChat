@@ -50,9 +50,9 @@ deployment guarantees.
 - **Multiple protocol adapters** — OpenAI Chat Completions, OpenAI Responses,
   native Anthropic, native Gemini, New API endpoint metadata, and generic
   OpenAI-compatible chat endpoints.
-- **Useful chat workflows** — streaming, reasoning display, image input, Tavily,
-  Exa, and Grok web search, message branches, local search, assistants, backup, import, export,
-  print, and an installable Web App manifest.
+- **Useful chat workflows** — streaming, reasoning display, image input and
+  generation, Tavily, Exa, and Grok web search, message branches, local search,
+  assistants, backup, import, export, print, and an installable Web App manifest.
 - **English and Simplified Chinese** — the interface follows browser language on
   first use and keeps the selected language locally.
 
@@ -86,6 +86,13 @@ Configure the API type, base URL, credential, discovered models, default model,
 and model-aware controls from one settings workspace.
 
 ![CherryChat connection and model settings](./docs/images/cherrychat-settings.png)
+
+### Image generation
+
+Create images from prompts or ordered references through a browser-local BYOK
+connection or deployment-controlled Hosted profiles.
+
+![CherryChat image generation](./docs/images/cherrychat-image-generation.png)
 
 ### Responsive mobile workspace
 
@@ -134,7 +141,9 @@ requires the complete `OPENAI_API_KEY`, `MODELS`, `ACCESS_CODE`, and
 `WEB_SEARCH_PROVIDER` and its matching provider credentials. Deployments may
 optionally expose several configured providers with
 `WEB_SEARCH_ALLOWED_PROVIDERS`; the default still comes only from
-`WEB_SEARCH_PROVIDER`.
+`WEB_SEARCH_PROVIDER`. Deployment-funded image generation is also optional and
+uses either the complete legacy image variable group or
+`IMAGE_GENERATION_PROFILES`.
 
 Before sharing a Hosted deployment, configure an upstream spending limit and a
 Vercel Firewall rate-limit rule for `POST /api/auth`. CherryChat's process-local
@@ -148,6 +157,7 @@ direct CLI deployments.
 
 - [Documentation index](./docs/README.md)
 - [Deployment and connection modes](./docs/DEPLOYMENT.md)
+- [Image generation](./docs/IMAGE_GENERATION.md)
 - [Model and protocol compatibility](./docs/MODEL_COMPATIBILITY.md)
 - [Security model and vulnerability reporting](./docs/SECURITY.md)
 - [Data storage, deletion, backup, and export](./docs/DATA.md)

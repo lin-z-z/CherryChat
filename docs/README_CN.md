@@ -14,6 +14,8 @@ CherryChat 是面向个人用户和小型团队的轻量、隐私优先、可自
 
 - [部署与连接模式](./DEPLOYMENT_CN.md) —— 通俗解释 BYOK、托管访问和自托管，并
   说明本地运行、环境变量、Vercel 部署和发布检查。
+- [图片生成](./IMAGE_GENERATION_CN.md) —— BYOK 与 Hosted 配置、提示词、参考图、
+  Profile、参数、兼容性、安全和本地数据。
 - [模型和协议兼容性](./MODEL_COMPATIBILITY_CN.md) —— 端点路由、Provider 适配、
   模型推理控制和兼容性限制。
 - [安全策略与模型](./SECURITY_CN.md) —— 凭据边界、公开部署风险、内容安全和漏洞

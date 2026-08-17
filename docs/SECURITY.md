@@ -3,7 +3,8 @@
 **English** · [简体中文](./SECURITY_CN.md)
 
 [Documentation](./README.md) · [Deployment](./DEPLOYMENT.md) ·
-[Data behavior](./DATA.md) · [Project home](../README.md)
+[Data behavior](./DATA.md) · [Image generation](./IMAGE_GENERATION.md) ·
+[Project home](../README.md)
 
 ## Reporting a vulnerability
 
@@ -39,9 +40,9 @@ Primary trust boundaries are:
 
 ## Browser credentials and local data
 
-BYOK API keys, access-code input, and optional personal Tavily, Exa, or Grok
-credentials are stored locally for convenience. They are not encrypted at rest
-by CherryChat.
+BYOK model and image API keys, access-code input, and optional personal Tavily,
+Exa, or Grok credentials are stored locally for convenience. They are not
+encrypted at rest by CherryChat.
 A malicious extension, compromised dependency, injected same-origin script, or
 person with access to the browser profile may read them.
 
@@ -76,7 +77,7 @@ plan.
 
 ## Network boundary
 
-CherryChat has three relevant paths:
+Chat requests use three relevant paths:
 
 1. An absolute BYOK Base URL is called directly by the browser and requires
    provider CORS.
@@ -95,6 +96,22 @@ Hosted session, accepts only a bounded query and result count, and calls the
 validated deployment URL for the server-selected Tavily, Exa, or Grok provider
 with the deployment credential. The browser cannot supply a server target,
 provider, model, or credential for this route.
+
+Image generation adds two explicit paths:
+
+1. Browser BYOK calls the configured OpenAI-compatible image service directly,
+   sends the browser-owned image API Key, and requires provider CORS. Requests
+   use `/v1/images/generations` without references and `/v1/images/edits` with
+   references; CherryChat does not fall back to a server proxy after CORS fails.
+2. Hosted image generation sends a bounded same-origin request to
+   `POST /api/image-generation`. It requires a valid signed Session, and the
+   server selects the complete allowlisted Profile, fixed upstream, model, and
+   deployment credential from validated configuration.
+
+Hosted generated-image URLs must share the configured upstream Origin and may
+not contain credentials or fragments. CherryChat downloads them without
+credentials or redirects, then validates the image type and size before storing
+the result locally.
 
 Production Hosted upstreams require HTTPS. The explicit insecure-local option
 works only outside production and only for loopback hosts; it does not permit
@@ -124,6 +141,11 @@ payloads, model-list responses, JSON completions, upstream error details, and
 OpenAI-compatible SSE events. Timeouts and cancellation are propagated through
 the transport. Exceeding a bound becomes a stable error rather than allowing
 unbounded buffering.
+
+Image generation accepts at most 16 ordered references. A generated image is
+limited to 20 MiB and the provider JSON response to 32 MiB. Hosted image request
+bodies default to 8 MiB, the upstream timeout defaults to 300 seconds, and the
+process-local image-generation concurrency limit is 2.
 
 Limits reduce accidental or opportunistic abuse; they do not replace provider
 quotas or a deployment-wide budget.
@@ -163,6 +185,9 @@ assigning a stable alias or domain.
 - Use synthetic secrets for bundle scans and test-only credentials for browser
   flows.
 - Verify BYOK-only and Hosted configurations separately.
+- Verify browser-direct and Hosted image generation separately, including CORS,
+  `/api/image-generation`, the public Profile projection, and response-image
+  validation.
 - Publish the Vercel Firewall rule and upstream spending limit separately from
   application deployment.
 - Inspect `/api/config`, browser network paths, Function logs, and client bundle
@@ -179,5 +204,7 @@ assigning a stable alias or domain.
   that provider.
 - Third-party OpenAI-compatible and Responses gateways can differ from the
   reviewed request and stream contracts.
+- Third-party OpenAI-compatible image services can reject supported sizes,
+  reference edits, output formats, or response shapes.
 - The project does not currently provide cloud backup, centralized audit,
   organization roles, or billing controls.

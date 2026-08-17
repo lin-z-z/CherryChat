@@ -45,7 +45,9 @@ added as an untested switch in the current Chat Completions runtime.
 
 OpenAI Chat Completions, OpenAI Responses, native Anthropic and Gemini
 transports, and the bounded built-in Tavily, Exa, and Grok web-search providers
-are current product capabilities rather than deferred roadmap items.
+are current product capabilities rather than deferred roadmap items. The same
+is true of OpenAI-compatible image generation, including ordered reference-image
+editing through compatible endpoints.
 
 ## Product boundary
 

@@ -3,7 +3,8 @@
 [English](./MODEL_COMPATIBILITY.md) · **简体中文**
 
 [文档索引](./README_CN.md) · [部署指南](./DEPLOYMENT_CN.md) ·
-[安全策略](./SECURITY_CN.md) · [项目首页](../README_CN.md)
+[安全策略](./SECURITY_CN.md) · [图片生成](./IMAGE_GENERATION_CN.md) ·
+[项目首页](../README_CN.md)
 
 CherryChat 将选中的连接协议与模型能力分开处理。只有当前模型和 Endpoint 都能编码
 某项能力时，界面才会显示对应控件。系统不会根据 Provider 名称或 Base URL 主机名
@@ -11,14 +12,15 @@ CherryChat 将选中的连接协议与模型能力分开处理。只有当前模
 
 ## 协议适配器
 
-| API 类型                | 主要操作                                                             | 可用范围                                    |
-| ----------------------- | -------------------------------------------------------------------- | ------------------------------------------- |
-| OpenAI Chat Completions | `POST /v1/chat/completions`                                          | BYOK 直连、同源固定代理和托管访问。         |
-| OpenAI Responses        | `POST /v1/responses`                                                 | BYOK 直连和 New API Metadata Routing。      |
-| Anthropic               | `POST /v1/messages`                                                  | 原生 BYOK 直连和 New API Metadata Routing。 |
-| Gemini                  | `POST /v1beta/models/{model}:streamGenerateContent` 或 Generate 操作 | 原生 BYOK 直连和 New API Metadata Routing。 |
-| New API                 | `GET /v1/models`，然后按模型选择 Endpoint                            | 仅 BYOK。                                   |
-| OpenAI-compatible       | `POST /v1/chat/completions`                                          | BYOK 直连或同源固定代理。                   |
+| API 类型                 | 主要操作                                                             | 可用范围                                    |
+| ------------------------ | -------------------------------------------------------------------- | ------------------------------------------- |
+| OpenAI Chat Completions  | `POST /v1/chat/completions`                                          | BYOK 直连、同源固定代理和托管访问。         |
+| OpenAI Responses         | `POST /v1/responses`                                                 | BYOK 直连和 New API Metadata Routing。      |
+| Anthropic                | `POST /v1/messages`                                                  | 原生 BYOK 直连和 New API Metadata Routing。 |
+| Gemini                   | `POST /v1beta/models/{model}:streamGenerateContent` 或 Generate 操作 | 原生 BYOK 直连和 New API Metadata Routing。 |
+| New API                  | `GET /v1/models`，然后按模型选择 Endpoint                            | 仅 BYOK。                                   |
+| OpenAI-compatible        | `POST /v1/chat/completions`                                          | BYOK 直连或同源固定代理。                   |
+| OpenAI-compatible Images | `POST /v1/images/generations` 或 `/v1/images/edits`                  | BYOK 直连或有界 Hosted 路由。               |
 
 无论浏览器最后保存的 API 类型是什么，托管访问始终使用固定的 OpenAI-compatible
 Chat Completions Adapter。
@@ -31,10 +33,22 @@ Chat Completions Adapter。
 - Gemini 会规范化为 Google-compatible API Root，然后构建模型操作路径。
 - OpenAI Chat 和通用 Compatible Adapter 会按需追加 `/v1/models` 和
   `/v1/chat/completions`。
+- 图片生成在无参考图时追加 `/v1/images/generations`，有参考图时追加
+  `/v1/images/edits`。
 - Base URL 留空仅对固定同源 OpenAI-compatible BYOK 路径有意义。
 
 不同 Provider 和 Gateway 可能采用不同 URL 约定。模型列表请求成功并不能证明聊天
 路径正确，请先检查浏览器最终发出的请求。
+
+## OpenAI-compatible Images 边界
+
+图片生成使用独立服务配置，不跟随所选聊天 Adapter。浏览器 BYOK 当前只开放一个内置
+`gpt-image-2` 配置，用户填写服务 URL 与 API Key。Hosted 部署可以通过有界同源
+`/api/image-generation` 路由公开一个或多个由服务端配置的 Profile。
+
+不同 Compatible Provider 的请求结构、支持尺寸、参考图编辑、质量值、输出格式和
+Response 字段可能不同。服务必须支持收到的 Endpoint 与参数；聊天或模型列表 Endpoint
+兼容不能证明 Images 兼容。准确工作流与限制见[图片生成指南](./IMAGE_GENERATION_CN.md)。
 
 ## New API Endpoint Metadata
 

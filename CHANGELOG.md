@@ -6,6 +6,28 @@ This file records tracked CherryChat releases. The English version is the
 release-note baseline; the Simplified Chinese version must preserve the same
 capabilities and limitations.
 
+## [Unreleased]
+
+### Added
+
+- A dedicated image-generation mode with a built-in `gpt-image-2` BYOK
+  connection, configurable size and output controls, and up to 16 ordered
+  reference images for compatible edit endpoints.
+- Deployment-owned Hosted image generation through one legacy configuration or
+  an allowlisted set of server-side Profiles, without exposing upstream
+  credentials or URLs to access-code users.
+- Persisted generation snapshots, local generated-image attachments, Backup v2
+  round trips, and JSON/Markdown export support for image-generation messages.
+
+### Changed
+
+- Simplified browser BYOK image settings to one service URL and API Key while
+  keeping the model fixed to `gpt-image-2`; multiple Profiles remain a Hosted
+  deployment capability.
+- Normalized image service roots and `/v1` bases to the standard
+  `/v1/images/generations` and `/v1/images/edits` endpoints, with bounded image
+  responses and stricter Hosted URL validation.
+
 ## [1.0.0] - 2026-08-12
 
 ### Summary

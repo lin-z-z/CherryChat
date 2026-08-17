@@ -44,8 +44,8 @@ Production 不会扩大 CherryChat 文档承诺的支持或部署保证。
 - **多协议适配** —— 支持 OpenAI Chat Completions、OpenAI Responses、原生
   Anthropic、原生 Gemini、New API endpoint metadata 和通用 OpenAI-compatible
   Chat 接口。
-- **实用对话工作流** —— 流式输出、推理展示、图片输入、Tavily、Exa 和 Grok 搜索、消息分支、
-  本地搜索、助手、备份、导入导出、打印和可安装的 Web App manifest。
+- **实用对话工作流** —— 流式输出、推理展示、图片输入与生成、Tavily、Exa 和 Grok
+  搜索、消息分支、本地搜索、助手、备份、导入导出、打印和可安装的 Web App manifest。
 - **英文与简体中文** —— 首次进入时跟随浏览器语言，之后在本地保存你的选择。
 
 ## BYOK、托管访问与自托管
@@ -75,6 +75,13 @@ Production 不会扩大 CherryChat 文档承诺的支持或部署保证。
 模型感知参数。
 
 ![CherryChat 连接与模型设置](./docs/images/cherrychat-settings.png)
+
+### 图片生成
+
+通过浏览器本地 BYOK 连接或部署方控制的 Hosted Profile，根据提示词或有序参考图
+生成图片。
+
+![CherryChat 图片生成](./docs/images/cherrychat-image-generation.png)
 
 ### 响应式移动端
 
@@ -116,7 +123,8 @@ npm run dev
 
 BYOK-only 部署不需要在 Vercel 中配置模型服务凭据。Hosted access 必须完整配置
 `OPENAI_API_KEY`、`MODELS`、`ACCESS_CODE` 和 `AUTH_SECRET`；如需由部署端提供
-搜索，再配置 `WEB_SEARCH_PROVIDER` 及对应 Provider 的凭据。
+搜索，再配置 `WEB_SEARCH_PROVIDER` 及对应 Provider 的凭据。部署方付费的图片生成
+同样是可选能力，可使用完整旧版图片变量组或 `IMAGE_GENERATION_PROFILES`。
 
 公开分享 Hosted 部署前，请同时设置上游消费限额，并为 `POST /api/auth` 配置
 Vercel Firewall 限流规则。CherryChat 的进程内保护只是纵深防御，不是全局配额或
@@ -129,6 +137,7 @@ Vercel Firewall 限流规则。CherryChat 的进程内保护只是纵深防御�
 
 - [中文文档索引](./docs/README_CN.md)
 - [部署与连接模式](./docs/DEPLOYMENT_CN.md)
+- [图片生成](./docs/IMAGE_GENERATION_CN.md)
 - [模型和协议兼容性](./docs/MODEL_COMPATIBILITY_CN.md)
 - [安全模型与漏洞报告](./docs/SECURITY_CN.md)
 - [数据存储、删除、备份与导出](./docs/DATA_CN.md)

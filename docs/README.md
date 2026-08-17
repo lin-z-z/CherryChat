@@ -15,6 +15,8 @@ that would make the main README too dense.
 - [Deployment and connection modes](./DEPLOYMENT.md) — plain-language BYOK,
   Hosted access, and self-hosting definitions, plus local setup, environment
   variables, Vercel, and release checks.
+- [Image generation](./IMAGE_GENERATION.md) — BYOK and Hosted setup, prompts,
+  references, profiles, parameters, compatibility, security, and local data.
 - [Model and protocol compatibility](./MODEL_COMPATIBILITY.md) — endpoint
   routing, provider adapters, model-aware reasoning controls, and compatibility
   limits.
