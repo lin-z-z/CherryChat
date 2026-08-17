@@ -6,6 +6,7 @@ import {
   Globe2,
   Image as ImageIcon,
   Menu,
+  MessageCircle,
   Plus,
   Square,
   X,
@@ -31,6 +32,7 @@ import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
 import {
   ImageGenerationCompressionControl,
   ImageGenerationParameterControl,
+  ImageGenerationSizeControl,
 } from "@/components/chat/image-generation-parameter-control";
 import { ImageGenerationProfileSelector } from "@/components/chat/image-generation-profile-selector";
 import { MessageView } from "@/components/chat/message-view";
@@ -50,7 +52,6 @@ import { cn } from "@/lib/cn";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import type { ConversationExportProjection } from "@/runtime/chat/export-projection";
 import { summarizeBranchUsage } from "@/runtime/chat/projections";
-import type { ImageGenerationProfile } from "@/runtime/chat/types";
 import { resolveImageGenerationCapabilities } from "@/runtime/image-generation/image-generation-options";
 
 const AUTO_FOLLOW_THRESHOLD_PX = 96;
@@ -662,6 +663,7 @@ export function ChatShell() {
                         onClick={() => chat.setComposerMode("chat")}
                         type="button"
                       >
+                        <MessageCircle aria-hidden="true" className="size-4" />
                         {t("chatMode")}
                       </button>
                       <button
@@ -741,92 +743,88 @@ export function ChatShell() {
                   </div>
                   <div className="composer-toolbar-right">
                     {imageMode ? (
-                      <>
-                        <ImageGenerationParameterControl
-                          ariaLabel={t("imageGenerationResolution")}
-                          disabled={generationBusy}
-                          onValueChange={(value) =>
-                            chat.setImageGenerationParameters({
-                              resolutionTier: value as
-                                "auto" | "1K" | "2K" | "4K",
-                            })
-                          }
-                          options={resolveResolutionOptions(
-                            chat.activeImageGenerationProfile,
-                          ).map((value) => ({ value, label: value }))}
-                          value={chat.imageGenerationParameters.resolutionTier}
-                        />
-                        <ImageGenerationParameterControl
-                          ariaLabel={t("imageGenerationAspectRatio")}
-                          disabled={generationBusy}
-                          onValueChange={(value) =>
-                            chat.setImageGenerationParameters({
-                              aspectRatio:
-                                value as typeof chat.imageGenerationParameters.aspectRatio,
-                            })
-                          }
-                          options={resolveAspectRatioOptions(
-                            chat.activeImageGenerationProfile,
-                          ).map((value) => ({ value, label: value }))}
-                          value={chat.imageGenerationParameters.aspectRatio}
-                        />
-                        <ImageGenerationParameterControl
-                          ariaLabel={t("imageGenerationQuality")}
-                          disabled={generationBusy}
-                          onValueChange={(value) =>
-                            chat.setImageGenerationParameters({
-                              quality:
-                                value as typeof chat.imageGenerationParameters.quality,
-                            })
-                          }
-                          options={[
-                            { value: "auto", label: t("imageQualityAuto") },
-                            { value: "low", label: t("imageQualityLow") },
-                            { value: "medium", label: t("imageQualityMedium") },
-                            { value: "high", label: t("imageQualityHigh") },
-                          ]}
-                          value={chat.imageGenerationParameters.quality}
-                        />
-                        <ImageGenerationParameterControl
-                          ariaLabel={t("imageGenerationOutputFormat")}
-                          disabled={generationBusy}
-                          onValueChange={(value) =>
-                            chat.setImageGenerationParameters({
-                              outputFormat: value as "png" | "jpeg" | "webp",
-                              outputCompression:
-                                value === "png"
-                                  ? null
-                                  : (chat.imageGenerationParameters
-                                      .outputCompression ?? 100),
-                            })
-                          }
-                          options={[
-                            { value: "png", label: "PNG" },
-                            { value: "jpeg", label: "JPEG" },
-                            { value: "webp", label: "WebP" },
-                          ]}
-                          value={chat.imageGenerationParameters.outputFormat}
-                        />
-                        {chat.imageGenerationParameters.outputFormat !==
-                        "png" ? (
-                          <ImageGenerationCompressionControl
-                            ariaLabel={t("imageGenerationCompression")}
+                      <div className="image-generation-parameter-bar">
+                        <div className="image-generation-parameter-field image-generation-size-field">
+                          <span>{t("imageGenerationSize")}</span>
+                          <ImageGenerationSizeControl
+                            ariaLabel={t("imageGenerationSize")}
+                            capabilities={resolveImageGenerationCapabilities(
+                              chat.activeImageGenerationProfile ?? {
+                                modelId: "",
+                                sizeMode: "fixed",
+                              },
+                            )}
+                            disabled={generationBusy}
+                            onSelectSize={chat.setImageGenerationSize}
+                            parameters={chat.imageGenerationParameters}
+                          />
+                        </div>
+                        <div className="image-generation-parameter-field">
+                          <span>{t("imageGenerationQuality")}</span>
+                          <ImageGenerationParameterControl
+                            ariaLabel={t("imageGenerationQuality")}
                             disabled={generationBusy}
                             onValueChange={(value) =>
                               chat.setImageGenerationParameters({
-                                outputCompression: value,
+                                quality:
+                                  value as typeof chat.imageGenerationParameters.quality,
                               })
                             }
-                            value={
-                              chat.imageGenerationParameters
-                                .outputCompression ?? 100
-                            }
+                            options={[
+                              { value: "auto", label: t("imageQualityAuto") },
+                              { value: "low", label: t("imageQualityLow") },
+                              {
+                                value: "medium",
+                                label: t("imageQualityMedium"),
+                              },
+                              { value: "high", label: t("imageQualityHigh") },
+                            ]}
+                            value={chat.imageGenerationParameters.quality}
                           />
+                        </div>
+                        <div className="image-generation-parameter-field">
+                          <span>{t("imageGenerationOutputFormat")}</span>
+                          <ImageGenerationParameterControl
+                            ariaLabel={t("imageGenerationOutputFormat")}
+                            disabled={generationBusy}
+                            onValueChange={(value) =>
+                              chat.setImageGenerationParameters({
+                                outputFormat: value as "png" | "jpeg" | "webp",
+                                outputCompression:
+                                  value === "png"
+                                    ? null
+                                    : (chat.imageGenerationParameters
+                                        .outputCompression ?? 100),
+                              })
+                            }
+                            options={[
+                              { value: "png", label: "PNG" },
+                              { value: "jpeg", label: "JPEG" },
+                              { value: "webp", label: "WebP" },
+                            ]}
+                            value={chat.imageGenerationParameters.outputFormat}
+                          />
+                        </div>
+                        {chat.imageGenerationParameters.outputFormat !==
+                        "png" ? (
+                          <div className="image-generation-parameter-field image-generation-compression-field">
+                            <span>{t("imageGenerationCompressionShort")}</span>
+                            <ImageGenerationCompressionControl
+                              ariaLabel={t("imageGenerationCompression")}
+                              disabled={generationBusy}
+                              onValueChange={(value) =>
+                                chat.setImageGenerationParameters({
+                                  outputCompression: value,
+                                })
+                              }
+                              value={
+                                chat.imageGenerationParameters
+                                  .outputCompression ?? 100
+                              }
+                            />
+                          </div>
                         ) : null}
-                        <span className="composer-image-size-hint">
-                          {chat.imageGenerationParameters.size}
-                        </span>
-                      </>
+                      </div>
                     ) : (
                       <ReasoningEffortControl
                         capability={chat.capability}
@@ -881,20 +879,4 @@ export function ChatShell() {
 
 function imageUploadError(cause: unknown, t: TFunction): string {
   return formatUserFacingError(cause, t, "imageError");
-}
-
-function resolveResolutionOptions(
-  profile: ImageGenerationProfile | null,
-): readonly string[] {
-  return profile
-    ? resolveImageGenerationCapabilities(profile).resolutionTiers
-    : ["1K"];
-}
-
-function resolveAspectRatioOptions(
-  profile: ImageGenerationProfile | null,
-): readonly string[] {
-  return profile
-    ? resolveImageGenerationCapabilities(profile).aspectRatios
-    : ["1:1"];
 }

@@ -30,13 +30,15 @@ export function ImageGenerationProfileSelector({
         value: profile.id,
         label: profile.name,
         modelId: profile.modelId,
-        description: profile.modelId,
-        ariaLabel: `${profile.name} \u00b7 ${profile.modelId}`,
+        ...(sameModelLabel(profile.name, profile.modelId)
+          ? {}
+          : { description: profile.modelId }),
+        ariaLabel: imageProfileLabel(profile.name, profile.modelId),
       })),
     [profiles],
   );
   const triggerLabel = selectedProfile
-    ? `${selectedProfile.name} \u00b7 ${selectedProfile.modelId}`
+    ? selectedProfile.name
     : t("imageGenerationProfile");
 
   return (
@@ -54,4 +56,15 @@ export function ImageGenerationProfileSelector({
       value={value}
     />
   );
+}
+
+function sameModelLabel(name: string, modelId: string): boolean {
+  return (
+    name.normalize("NFKC").trim().toLocaleLowerCase() ===
+    modelId.normalize("NFKC").trim().toLocaleLowerCase()
+  );
+}
+
+function imageProfileLabel(name: string, modelId: string): string {
+  return sameModelLabel(name, modelId) ? name : `${name} \u00b7 ${modelId}`;
 }

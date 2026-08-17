@@ -34,7 +34,10 @@ import { AboutPage } from "@/components/chat/settings-pages/about-page";
 import { AppearancePage } from "@/components/chat/settings-pages/appearance-page";
 import { DataPage } from "@/components/chat/settings-pages/data-page";
 import { ModelManagementPage } from "@/components/chat/settings-pages/model-management-page";
-import { ImageGenerationPage } from "@/components/chat/settings-pages/image-generation-page";
+import {
+  ImageGenerationPage,
+  type ImageGenerationConnectionDraft,
+} from "@/components/chat/settings-pages/image-generation-page";
 import { ModelServicePage } from "@/components/chat/settings-pages/model-service-page";
 import { WebSearchPage } from "@/components/chat/settings-pages/web-search-page";
 import {
@@ -72,6 +75,17 @@ interface SettingsWorkspaceProps {
   onApplyGeneral: (language: AppLanguage, theme: AppTheme) => Promise<void>;
   onClose: () => void;
   onPrint: (projection: ConversationExportProjection) => void;
+}
+
+function projectImageGenerationConnection(
+  configuration: ChatController["imageGenerationConfig"],
+): ImageGenerationConnectionDraft {
+  const profile = configuration.profiles[0];
+  return {
+    baseUrl: profile?.baseUrl ?? "",
+    apiKey: profile?.apiKey ?? "",
+    hasApiKey: profile?.hasApiKey ?? false,
+  };
 }
 
 const categories = [
@@ -215,11 +229,14 @@ export function SettingsWorkspace({
   const [webSearchTesting, setWebSearchTesting] = useState(false);
   const [webSearchError, setWebSearchError] = useState<string | null>(null);
   const [webSearchStatus, setWebSearchStatus] = useState<string | null>(null);
-  const [imageGenerationDraft, setImageGenerationDraft] = useState(
+  const initialImageGenerationConnection = projectImageGenerationConnection(
     chat.imageGenerationConfig,
   );
+  const [imageGenerationDraft, setImageGenerationDraft] = useState(
+    initialImageGenerationConnection,
+  );
   const [imageGenerationBaseline, setImageGenerationBaseline] = useState(
-    chat.imageGenerationConfig,
+    initialImageGenerationConnection,
   );
   const [imageGenerationSaving, setImageGenerationSaving] = useState(false);
   const [imageGenerationError, setImageGenerationError] = useState<
@@ -619,11 +636,12 @@ export function SettingsWorkspace({
     setImageGenerationSaving(true);
     try {
       const saved = await chat.saveImageGenerationSettings({
-        profiles: imageGenerationDraft.profiles,
-        defaultProfileId: imageGenerationDraft.defaultProfileId,
+        baseUrl: imageGenerationDraft.baseUrl,
+        apiKey: imageGenerationDraft.apiKey,
       });
-      setImageGenerationDraft(saved);
-      setImageGenerationBaseline(saved);
+      const savedConnection = projectImageGenerationConnection(saved);
+      setImageGenerationDraft(savedConnection);
+      setImageGenerationBaseline(savedConnection);
       setImageGenerationStatus(t("imageGenerationSaved"));
     } catch (cause) {
       setImageGenerationError(

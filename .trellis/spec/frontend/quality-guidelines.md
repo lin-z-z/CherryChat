@@ -262,7 +262,11 @@ stop();
   original model, parameters, connection scope, and reference order.
 - Generated output is displayed from local `image_ref` attachments. “Use as
   reference” reuses the existing attachment record and never copies its blob.
-- BYOK settings expose URL/Key/model fields. Hosted shows server-derived
+- BYOK settings expose only the custom service URL and API Key. The browser
+  uses the built-in image model configuration; profile management, model IDs,
+  and capability declarations are not user settings. Browser storage accepts
+  only the current single-connection v4 record; legacy local profiles and
+  credentials are ignored rather than migrated. Hosted shows server-derived
   capability only and never places deployment credentials or upstream URLs in
   React state.
 

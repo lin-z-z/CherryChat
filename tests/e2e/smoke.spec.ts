@@ -552,13 +552,15 @@ test("supports the seven settings destinations without horizontal overflow", asy
   });
 
   await selectSettingsPage(page, settings, "Image generation");
-  await expect(settings.getByLabel("Provider base URL")).toBeVisible();
+  await expect(settings.getByLabel("Service URL")).toBeVisible();
   await expect(
     settings.getByRole("textbox", { name: "API key", exact: true }),
   ).toBeVisible();
+  await expect(settings.getByLabel("Image model")).toHaveCount(0);
+  await expect(settings.getByLabel("Size capability")).toHaveCount(0);
   await expect(
-    settings.getByRole("textbox", { name: "Image model", exact: true }),
-  ).toBeVisible();
+    settings.getByRole("button", { name: "Add profile" }),
+  ).toHaveCount(0);
   await expectNoHorizontalOverflow(settings);
   await page.screenshot({
     path: `test-results/settings-image-generation-${test.info().project.name}-light.png`,

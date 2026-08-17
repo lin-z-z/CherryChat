@@ -74,6 +74,47 @@ export const DEFAULT_IMAGE_GENERATION_PARAMETERS: ImageGenerationParameters = {
   outputCompression: null,
 };
 
+/**
+ * 将自定义尺寸规整到图片接口可接受的边界。
+ * GPT Image 要求 16px 倍数、最大边长和总像素数都在固定范围内。
+ */
+export function normalizeImageGenerationSize(value: string): string {
+  if (value === "auto") return value;
+  const match = SIZE_PATTERN.exec(value.trim());
+  if (!match) return value.trim();
+
+  let width = roundToMultiple(Number(match[1]), 16);
+  let height = roundToMultiple(Number(match[2]), 16);
+  const scaleToFit = (scale: number) => {
+    width = Math.max(16, Math.floor((width * scale) / 16) * 16);
+    height = Math.max(16, Math.floor((height * scale) / 16) * 16);
+  };
+  const scaleToFill = (scale: number) => {
+    width = Math.max(16, Math.ceil((width * scale) / 16) * 16);
+    height = Math.max(16, Math.ceil((height * scale) / 16) * 16);
+  };
+
+  for (let iteration = 0; iteration < 4; iteration += 1) {
+    const maxEdge = Math.max(width, height);
+    if (maxEdge > MAX_EDGE) scaleToFit(MAX_EDGE / maxEdge);
+
+    if (width / height > MAX_ASPECT_RATIO) {
+      width = Math.max(16, Math.floor((height * MAX_ASPECT_RATIO) / 16) * 16);
+    } else if (height / width > MAX_ASPECT_RATIO) {
+      height = Math.max(16, Math.floor((width * MAX_ASPECT_RATIO) / 16) * 16);
+    }
+
+    const pixels = width * height;
+    if (pixels > MAX_PIXELS) {
+      scaleToFit(Math.sqrt(MAX_PIXELS / pixels));
+    } else if (pixels < MIN_PIXELS) {
+      scaleToFill(Math.sqrt(MIN_PIXELS / pixels));
+    }
+  }
+
+  return `${width}x${height}`;
+}
+
 export function resolveImageGenerationCapabilities(
   profile: Pick<ImageGenerationProfile, "modelId" | "sizeMode">,
 ): EffectiveImageGenerationCapabilities {
@@ -123,10 +164,25 @@ export function normalizeImageGenerationParameters(
   const outputFormat = isOutputFormat(value?.outputFormat)
     ? value.outputFormat
     : DEFAULT_IMAGE_GENERATION_PARAMETERS.outputFormat;
+  const requestedSize =
+    typeof value?.size === "string" && value.size !== "auto"
+      ? normalizeImageGenerationSize(value.size)
+      : value?.size;
+  const customSize =
+    capabilities.customSizes &&
+    typeof requestedSize === "string" &&
+    requestedSize !== "auto" &&
+    isValidImageGenerationSize(requestedSize)
+      ? requestedSize
+      : null;
   return {
     resolutionTier,
     aspectRatio,
-    size: calculateImageGenerationSize(resolutionTier, aspectRatio),
+    size:
+      customSize ??
+      (resolutionTier === "auto"
+        ? "auto"
+        : calculateImageGenerationSize(resolutionTier, aspectRatio)),
     quality,
     outputFormat,
     outputCompression:
@@ -161,7 +217,19 @@ export function parametersFromLegacySize(
       }
     }
   }
-  return { ...DEFAULT_IMAGE_GENERATION_PARAMETERS, quality };
+  const normalized = normalizeImageGenerationSize(size);
+  return isValidImageGenerationSize(normalized)
+    ? {
+        ...DEFAULT_IMAGE_GENERATION_PARAMETERS,
+        resolutionTier: "auto",
+        size: normalized,
+        quality,
+      }
+    : { ...DEFAULT_IMAGE_GENERATION_PARAMETERS, quality };
+}
+
+function roundToMultiple(value: number, multiple: number): number {
+  return Math.max(multiple, Math.round(value / multiple) * multiple);
 }
 
 export function isValidImageGenerationSize(value: unknown): value is string {

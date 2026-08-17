@@ -27,12 +27,12 @@ describe("ImageGenerationProfileSelector", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "Image model profile: GPT Image 2 · gpt-image-2",
+        name: "Image model: GPT Image 2",
       }),
     ).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Image model profile: GPT Image 2 · gpt-image-2",
+        name: "Image model: GPT Image 2",
       }),
     );
     expect(
@@ -42,5 +42,26 @@ describe("ImageGenerationProfileSelector", () => {
       screen.getByRole("option", { name: "Portrait · portrait-model" }),
     );
     expect(onValueChange).toHaveBeenCalledWith("custom");
+  });
+
+  it("does not repeat the model id when it is also the profile name", () => {
+    render(
+      <Providers initialLanguage="en">
+        <ImageGenerationProfileSelector
+          disabled={false}
+          onValueChange={vi.fn()}
+          profiles={[
+            { id: "same", name: "gpt-image-2", modelId: "gpt-image-2" },
+          ]}
+          value="same"
+        />
+      </Providers>,
+    );
+
+    const trigger = screen.getByRole("button", {
+      name: "Image model: gpt-image-2",
+    });
+    expect(trigger).toHaveTextContent("gpt-image-2");
+    expect(trigger).not.toHaveTextContent("gpt-image-2 · gpt-image-2");
   });
 });
