@@ -5,7 +5,8 @@
 [文档索引](./README_CN.md) ·
 [在线 Demo](https://cherrychat-xi.vercel.app) ·
 [安全策略](./SECURITY_CN.md) ·
-[模型兼容性](./MODEL_COMPATIBILITY_CN.md) · [项目首页](../README_CN.md)
+[模型兼容性](./MODEL_COMPATIBILITY_CN.md) ·
+[图片生成](./IMAGE_GENERATION_CN.md) · [项目首页](../README_CN.md)
 
 CherryChat 作为一个 Next.js 应用运行。BYOK-only 部署不需要 Postgres、Redis、
 对象存储或部署方持有的模型凭据。托管访问会增加一个固定的服务端
@@ -89,7 +90,7 @@ npm run dev
 
 打开 `http://127.0.0.1:3000`。本地 BYOK-only 运行不需要环境变量文件。
 
-只有在测试同源 BYOK、托管访问或由部署方付费的网络搜索时，才把
+只有在测试同源 BYOK、托管访问、由部署方付费的网络搜索或图片生成时，才把
 `.env.example` 复制为 `.env.local`。不要把真实值写入 Git、日志、截图、Issue 或
 浏览器测试产物。
 
@@ -132,6 +133,9 @@ IMAGE_GENERATION_MODEL=gpt-image-2
 
 这三个旧版图片变量必须同时配置；不配置时没有运行时回退值。需要多个图片 Provider
 时，改用 `IMAGE_GENERATION_PROFILES`，未指定默认 ID 时使用数组第一项。
+
+图片配置还要求上面的 Hosted access 变量组完整。Profile JSON、浏览器 BYOK 设置、
+参数和 Endpoint 兼容性见[图片生成指南](./IMAGE_GENERATION_CN.md)。
 
 ## 环境变量
 
@@ -217,7 +221,7 @@ Timer 在 Streaming 期间不会重置；Idle Timer 会在收到每个 Body Chun
 [https://cherrychat-xi.vercel.app](https://cherrychat-xi.vercel.app)。虽然
 该地址运行 CherryChat `v1.0.0`，并使用稳定的 Vercel Production Alias。
 验证时项目没有任何环境变量，`/api/config` 报告 BYOK 已启用、托管访问已禁用、
-托管网络搜索已禁用，并且没有部署模型。
+托管网络搜索已禁用，并且没有部署模型；当时也没有由部署方付费的图片生成能力。
 
 BYOK-only Demo 不得设置：
 
@@ -227,10 +231,14 @@ BYOK-only Demo 不得设置：
 - `TAVILY_API_KEY`
 - `EXA_API_KEY`
 - `GROK_API_KEY`
+- `IMAGE_GENERATION_API_KEY`
+- `IMAGE_GENERATION_BASE_URL`
+- `IMAGE_GENERATION_MODEL`
+- `IMAGE_GENERATION_PROFILES`
 
-这会让 Demo 始终使用由用户付费的 BYOK 路径，防止匿名访客消耗项目所有者的模型
-或搜索额度。当前 Demo URL 只有在部署源文件列表、环境变量名称、`/api/config`、
-浏览器本地 BYOK 设置流程和客户端 Bundle 边界均验证后才公开。
+这会让 Demo 始终使用由用户付费的 BYOK 路径，防止匿名访客消耗项目所有者的模型、
+搜索或图片生成额度。当前 Demo URL 只有在部署源文件列表、环境变量名称、
+`/api/config`、浏览器本地 BYOK 设置流程和客户端 Bundle 边界均验证后才公开。
 
 如果运维方以后增加托管变量或自定义域名，应重新执行托管发布检查，并更新公开 Demo
 说明。只要配置了项目方持有的凭据，即使 BYOK 仍然开放，该部署也不再是 BYOK-only。
@@ -252,7 +260,7 @@ BYOK-only Demo 不得设置：
 
 ### BYOK-only
 
-- 未配置部署方持有的 OpenAI、托管访问或网络搜索凭据。
+- 未配置部署方持有的 OpenAI、托管访问、网络搜索或图片生成凭据。
 - `/api/config` 报告 BYOK 已启用且托管访问已禁用。
 - Provider 直连请求只发送到用户选择的绝对 URL。
 - 同源 BYOK 只能访问部署固定的 `BASE_URL`。
@@ -264,7 +272,7 @@ BYOK-only Demo 不得设置：
 - 错误、正确、已删除和已轮换访问码场景均已验证。
 - Session Cookie 在 HTTPS 下使用 HttpOnly、SameSite Strict 和 Secure。
 - Vercel Firewall 与上游消费控制分别发布。
-- 托管聊天和搜索从不接受浏览器选择的服务端目标。
+- 托管聊天、搜索和图片生成从不接受浏览器选择的服务端目标。
 - `WEB_SEARCH_PROVIDER` 决定默认的 Tavily、Exa 或 Grok；未配置
   `WEB_SEARCH_ALLOWED_PROVIDERS` 时仍锁定该 Provider。
 - 显式允许列表必须非空、包含默认 Provider，且每一项都具有完整的部署方配置；
@@ -273,6 +281,10 @@ BYOK-only Demo 不得设置：
   模型或 X Search 设置。
 - Grok 始终提供 Web Search；X Search 是独立开关，默认关闭，开启后可能增加
   xAI 模型和搜索工具费用。
+- Hosted 图片生成只公开白名单 Profile 元数据。发布前确认默认 Profile、同源
+  Session 要求、请求体与超时策略，以及固定的 generations/edits 上游。
+- 生成图片 URL 只能来自配置的上游 Origin；服务端不携带凭据、不跟随重定向，且会
+  把结果作为有大小上限的图片重新校验。
 - Function 日志和客户端 Bundle 不包含任何已配置 Secret 值。
 
 本地测试不能证明这些 Vercel 设置正确。请分别记录本地、Preview 和 Production

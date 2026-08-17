@@ -4,7 +4,8 @@
 
 [Documentation](./README.md) · [Live demo](https://cherrychat-xi.vercel.app) ·
 [Security](./SECURITY.md) ·
-[Model compatibility](./MODEL_COMPATIBILITY.md) · [Project home](../README.md)
+[Model compatibility](./MODEL_COMPATIBILITY.md) ·
+[Image generation](./IMAGE_GENERATION.md) · [Project home](../README.md)
 
 CherryChat runs as one Next.js application. A BYOK-only deployment does not
 need Postgres, Redis, object storage, or a deployment-owned model credential.
@@ -102,8 +103,9 @@ Open `http://127.0.0.1:3000`. No environment file is required for a BYOK-only
 local run.
 
 Copy `.env.example` to `.env.local` only when you need to test same-origin BYOK,
-Hosted access, or deployment-funded web search. Keep real values out of Git,
-logs, screenshots, Issues, and browser test artifacts.
+Hosted access, deployment-funded web search, or deployment-funded image
+generation. Keep real values out of Git, logs, screenshots, Issues, and browser
+test artifacts.
 
 ## Minimal deployment recipes
 
@@ -151,6 +153,10 @@ The three legacy image variables are all-or-nothing. They have no runtime
 fallback when omitted. For multiple providers, use `IMAGE_GENERATION_PROFILES`
 instead and select the first profile by default unless
 `IMAGE_GENERATION_DEFAULT_PROFILE` is set.
+
+The image configuration requires the complete Hosted access group above. See
+the [image generation guide](./IMAGE_GENERATION.md) for Profile JSON, browser
+BYOK setup, supported parameters, and endpoint compatibility.
 
 ## Environment variables
 
@@ -244,7 +250,8 @@ The verified public demo is
 stable Vercel Production alias for the CherryChat `v1.0.0` application.
 At the time of verification, the project had no environment variables and
 `/api/config` reported BYOK enabled, Hosted access disabled, Hosted web search
-disabled, and no deployment models.
+disabled, and no deployment models. No deployment-funded image generation was
+available.
 
 A BYOK-only demo must not set:
 
@@ -254,12 +261,16 @@ A BYOK-only demo must not set:
 - `TAVILY_API_KEY`
 - `EXA_API_KEY`
 - `GROK_API_KEY`
+- `IMAGE_GENERATION_API_KEY`
+- `IMAGE_GENERATION_BASE_URL`
+- `IMAGE_GENERATION_MODEL`
+- `IMAGE_GENERATION_PROFILES`
 
 This keeps the demo on user-funded BYOK paths and prevents anonymous visitors
-from consuming project-owner model or search credit. The current Demo URL was
-published only after the deployed source list, environment names,
-`/api/config`, browser-local BYOK settings flow, and client bundle boundary had
-been verified.
+from consuming project-owner model, search, or image-generation credit. The
+current Demo URL was published only after the deployed source list, environment
+names, `/api/config`, browser-local BYOK settings flow, and client bundle
+boundary had been verified.
 
 If the operator later adds Hosted variables or a custom domain, repeat the
 Hosted release checklist and update the public Demo description. A deployment
@@ -288,7 +299,8 @@ guards. Treat them as defense in depth only.
 
 ### BYOK-only
 
-- No deployment-owned OpenAI, Hosted access, or web-search credential is configured.
+- No deployment-owned OpenAI, Hosted access, web-search, or image-generation
+  credential is configured.
 - `/api/config` reports BYOK enabled and Hosted access disabled.
 - Direct provider requests go only to the user-selected absolute URL.
 - Same-origin BYOK can reach only the deployment-fixed `BASE_URL`.
@@ -300,7 +312,8 @@ guards. Treat them as defense in depth only.
 - Wrong, correct, removed, and rotated access-code scenarios are verified.
 - The session cookie is HttpOnly, SameSite Strict, and Secure on HTTPS.
 - Vercel Firewall and upstream spending controls are published separately.
-- Hosted chat and search never accept browser-selected server targets.
+- Hosted chat, search, and image generation never accept browser-selected
+  server targets.
 - `WEB_SEARCH_PROVIDER` selects the default Tavily, Exa, or Grok provider. When
   `WEB_SEARCH_ALLOWED_PROVIDERS` is omitted, that provider remains locked.
 - An explicit `WEB_SEARCH_ALLOWED_PROVIDERS` list must be non-empty, include the
@@ -311,6 +324,11 @@ guards. Treat them as defense in depth only.
   URLs, the Grok model, and X Search remain deployment-controlled.
 - Grok always supplies Web Search. X Search is separate, disabled by default, and
   may add xAI model/tool charges when enabled.
+- Hosted image generation exposes only allowlisted Profile metadata. Confirm the
+  default Profile, same-origin Session requirement, request-size and timeout
+  policy, and the fixed generations/edits upstream before release.
+- Generated-image URLs are accepted only from the configured upstream Origin,
+  fetched without credentials or redirects, and validated as bounded images.
 - Function logs and the client bundle contain no configured secret values.
 
 Local tests cannot prove these Vercel settings. Record local, Preview, and

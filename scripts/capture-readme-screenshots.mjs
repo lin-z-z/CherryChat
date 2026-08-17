@@ -15,12 +15,21 @@ const screenshotPaths = {
   desktop: resolve(imageDirectory, "cherrychat-desktop.png"),
   settings: resolve(imageDirectory, "cherrychat-settings.png"),
   mobile: resolve(imageDirectory, "cherrychat-mobile.png"),
+  imageGeneration: resolve(imageDirectory, "cherrychat-image-generation.png"),
 };
 
 const publicConfig = {
   byokEnabled: true,
   hostedEnabled: false,
   hostedWebSearchEnabled: false,
+  hostedWebSearchProvider: null,
+  hostedWebSearchProviders: [],
+  hostedImageGenerationEnabled: false,
+  hostedImageGenerationModel: null,
+  hostedImageGenerationProfiles: [],
+  hostedImageGenerationDefaultProfileId: null,
+  imageGenerationTimeoutMs: 300_000,
+  imageGenerationMaximumRequestBytes: 8 * 1024 * 1024,
   models: [],
   defaultModel: null,
   titleModel: null,
@@ -58,8 +67,9 @@ try {
   const baseUrl = externalBaseUrl ?? (await startLocalServer());
   const browser = await launchBrowser();
   try {
-    await captureDesktop(browser, baseUrl);
-    await captureMobile(browser, baseUrl);
+    const generatedImageBase64 = await createMockGeneratedImage(browser);
+    await captureDesktop(browser, baseUrl, generatedImageBase64);
+    await captureMobile(browser, baseUrl, generatedImageBase64);
   } finally {
     await browser.close();
   }
@@ -70,38 +80,56 @@ try {
   await stopLocalServer();
 }
 
-async function captureDesktop(browser, baseUrl) {
+async function captureDesktop(browser, baseUrl, generatedImageBase64) {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 960 },
     deviceScaleFactor: 1,
     colorScheme: "light",
+    reducedMotion: "reduce",
   });
   try {
-    const { page, unexpectedRequests } = await preparePage(context, baseUrl, {
-      mobile: false,
-    });
+    const { page, unexpectedRequests } = await preparePage(
+      context,
+      baseUrl,
+      {
+        mobile: false,
+      },
+      generatedImageBase64,
+    );
+    await stabilizePage(page);
     await page.screenshot({ path: screenshotPaths.desktop });
 
     await openSettings(page, false);
+    await stabilizePage(page);
     await page.screenshot({ path: screenshotPaths.settings });
+    await captureImageGeneration(page);
+    await stabilizePage(page);
+    await page.screenshot({ path: screenshotPaths.imageGeneration });
     assertNoUnexpectedRequests(unexpectedRequests);
   } finally {
     await context.close();
   }
 }
 
-async function captureMobile(browser, baseUrl) {
+async function captureMobile(browser, baseUrl, generatedImageBase64) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 1,
     isMobile: true,
     hasTouch: true,
     colorScheme: "light",
+    reducedMotion: "reduce",
   });
   try {
-    const { page, unexpectedRequests } = await preparePage(context, baseUrl, {
-      mobile: true,
-    });
+    const { page, unexpectedRequests } = await preparePage(
+      context,
+      baseUrl,
+      {
+        mobile: true,
+      },
+      generatedImageBase64,
+    );
+    await stabilizePage(page);
     await page.screenshot({ path: screenshotPaths.mobile });
     assertNoUnexpectedRequests(unexpectedRequests);
   } finally {
@@ -109,7 +137,7 @@ async function captureMobile(browser, baseUrl) {
   }
 }
 
-async function preparePage(context, baseUrl, { mobile }) {
+async function preparePage(context, baseUrl, { mobile }, generatedImageBase64) {
   const baseOrigin = new URL(baseUrl).origin;
   const unexpectedRequests = [];
   await context.addInitScript(() => {
@@ -174,17 +202,62 @@ async function preparePage(context, baseUrl, { mobile }) {
       return;
     }
 
+    if (
+      requestUrl.origin === "https://api.openai.com" &&
+      requestUrl.pathname === "/v1/images/generations"
+    ) {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({
+          status: 204,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "authorization,content-type",
+            "Access-Control-Allow-Methods": "POST,OPTIONS",
+          },
+        });
+        return;
+      }
+      const authorization = await route.request().headerValue("authorization");
+      const requestBody = route.request().postDataJSON();
+      if (
+        authorization !== "Bearer screenshot-image-key" ||
+        requestBody?.model !== "gpt-image-2" ||
+        requestBody?.prompt !== "A quiet reading corner with cherry-red accents"
+      ) {
+        throw new Error(
+          "Screenshot image request did not match the mock contract",
+        );
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({
+          data: [
+            {
+              b64_json: generatedImageBase64,
+              revised_prompt:
+                "A quiet modern reading corner with cherry-red accents",
+            },
+          ],
+          output_format: "png",
+        }),
+      });
+      return;
+    }
+
     unexpectedRequests.push(route.request().url());
     await route.abort("blockedbyclient");
   });
 
   const page = await context.newPage();
-  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await page.goto(baseUrl, { waitUntil: "load", timeout: 120_000 });
   if (mobile) {
     await page.getByRole("button", { name: "Open sidebar" }).waitFor();
   } else {
     await page.locator("[data-settings-trigger]:visible").waitFor();
   }
+  await page.waitForLoadState("load");
+  await page.waitForTimeout(250);
   await configureDemoConnection(page, mobile);
 
   const composer = page.getByRole("textbox", { name: "Message CherryChat" });
@@ -207,6 +280,34 @@ async function configureDemoConnection(page, mobile) {
   await settings.getByText("gpt-4.1-mini", { exact: true }).first().waitFor();
   await settings.getByRole("button", { name: "Close" }).click();
   await settings.waitFor({ state: "hidden" });
+}
+
+async function captureImageGeneration(page) {
+  const settings = page.getByRole("main", { name: "Settings" });
+  await selectSettingsPage(page, settings, "Image generation");
+  await settings.getByLabel("Service URL").fill("https://api.openai.com");
+  await settings
+    .getByRole("textbox", { name: "API key", exact: true })
+    .fill("screenshot-image-key");
+  await settings
+    .getByRole("button", { name: "Save image generation settings" })
+    .click();
+  await settings.getByText("Image generation settings saved.").waitFor();
+  await settings.getByRole("button", { name: "Close" }).click();
+  await settings.waitFor({ state: "hidden" });
+
+  await page.getByRole("button", { name: "Image", exact: true }).click();
+  const prompt = page.getByRole("textbox", {
+    name: "Describe the image you want to create",
+  });
+  await prompt.fill("A quiet reading corner with cherry-red accents");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page
+    .locator("article.message-assistant")
+    .getByAltText("Attached image")
+    .waitFor();
+  await page.evaluate(async () => document.fonts.ready);
+  await page.waitForTimeout(300);
 }
 
 async function openSettings(page, mobile) {
@@ -237,6 +338,97 @@ async function openSettings(page, mobile) {
   return settings;
 }
 
+async function selectSettingsPage(page, settings, name) {
+  const tab = settings.getByRole("tab", { name, exact: true });
+  if (await tab.isVisible()) {
+    await tab.click();
+  } else {
+    await settings.locator(".settings-mobile-nav-trigger").click();
+    await page.getByRole("menuitem", { name, exact: true }).click();
+  }
+}
+
+async function stabilizePage(page) {
+  if ((await page.locator("style[data-screenshot-stability]").count()) === 0) {
+    await page.addStyleTag({
+      content: `
+        *, *::before, *::after {
+          animation: none !important;
+          caret-color: transparent !important;
+          transition: none !important;
+        }
+      `,
+    });
+    await page
+      .locator("style")
+      .last()
+      .evaluate((element) =>
+        element.setAttribute("data-screenshot-stability", "true"),
+      );
+  }
+  await page.evaluate(async () => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    await document.fonts.ready;
+  });
+  await page.waitForTimeout(50);
+}
+
+async function createMockGeneratedImage(browser) {
+  const context = await browser.newContext({
+    viewport: { width: 1024, height: 1024 },
+    deviceScaleFactor: 1,
+    colorScheme: "light",
+    reducedMotion: "reduce",
+  });
+  try {
+    const page = await context.newPage();
+    await page.setContent(`
+      <style>
+        * { box-sizing: border-box; }
+        html, body { margin: 0; width: 1024px; height: 1024px; overflow: hidden; }
+        #art { position: relative; width: 1024px; height: 1024px; background: #f2eee7; }
+        .wall { position: absolute; inset: 0 0 300px; background: #e8dfd2; }
+        .window { position: absolute; left: 116px; top: 112px; width: 388px; height: 408px; border: 30px solid #314a52; background: #b9d9df; }
+        .window::before { content: ""; position: absolute; left: 149px; top: 0; width: 24px; height: 348px; background: #314a52; }
+        .window::after { content: ""; position: absolute; left: 0; top: 152px; width: 328px; height: 24px; background: #314a52; }
+        .sun { position: absolute; right: 58px; top: 48px; width: 78px; height: 78px; border-radius: 50%; background: #f1c45a; }
+        .shelf { position: absolute; right: 82px; top: 154px; width: 338px; height: 32px; background: #5a4637; box-shadow: 0 186px 0 #5a4637; }
+        .book { position: absolute; width: 44px; bottom: 32px; background: #c8443c; }
+        .book.one { left: 34px; height: 116px; }
+        .book.two { left: 84px; height: 146px; background: #365f58; }
+        .book.three { left: 134px; height: 128px; background: #e0a445; }
+        .book.four { left: 236px; height: 148px; background: #476b85; }
+        .floor { position: absolute; inset: 724px 0 0; background: #9a7355; }
+        .rug { position: absolute; left: 176px; bottom: 62px; width: 680px; height: 220px; border-radius: 50%; background: #d7c7b5; }
+        .chair { position: absolute; left: 484px; top: 482px; width: 330px; height: 310px; border-radius: 88px 88px 48px 48px; background: #b52f38; }
+        .chair::before { content: ""; position: absolute; left: 38px; top: 38px; width: 254px; height: 144px; border-radius: 58px; background: #d94a4e; }
+        .chair::after { content: ""; position: absolute; left: 80px; bottom: -116px; width: 26px; height: 138px; background: #3f342e; box-shadow: 152px 0 0 #3f342e; }
+        .table { position: absolute; left: 230px; top: 660px; width: 260px; height: 32px; border-radius: 6px; background: #4e3a30; }
+        .table::after { content: ""; position: absolute; left: 112px; top: 30px; width: 34px; height: 194px; background: #4e3a30; }
+        .bowl { position: absolute; left: 296px; top: 611px; width: 130px; height: 58px; border-radius: 12px 12px 64px 64px; background: #315b54; }
+        .cherry { position: absolute; width: 42px; height: 42px; border-radius: 50%; background: #c72f3b; }
+        .cherry.a { left: 302px; top: 580px; }
+        .cherry.b { left: 342px; top: 564px; }
+        .cherry.c { left: 382px; top: 583px; }
+        .plant { position: absolute; right: 60px; bottom: 120px; width: 130px; height: 174px; border-radius: 50% 10% 50% 10%; background: #47715d; transform: rotate(-18deg); }
+      </style>
+      <main id="art" aria-label="Mock generated reading corner">
+        <div class="wall"></div><div class="window"><div class="sun"></div></div>
+        <div class="shelf"><i class="book one"></i><i class="book two"></i><i class="book three"></i><i class="book four"></i></div>
+        <div class="floor"></div><div class="rug"></div><div class="chair"></div>
+        <div class="table"></div><div class="bowl"></div>
+        <i class="cherry a"></i><i class="cherry b"></i><i class="cherry c"></i><div class="plant"></div>
+      </main>
+    `);
+    const image = await page.locator("#art").screenshot({ type: "png" });
+    return image.toString("base64");
+  } finally {
+    await context.close();
+  }
+}
+
 function assertNoUnexpectedRequests(requests) {
   if (requests.length === 0) return;
   throw new Error(
@@ -265,7 +457,15 @@ async function startLocalServer() {
   const nextCli = resolve(repositoryRoot, "node_modules/next/dist/bin/next");
   serverProcess = spawn(
     process.execPath,
-    [nextCli, "dev", "--hostname", "127.0.0.1", "--port", String(port)],
+    [
+      nextCli,
+      "dev",
+      "--webpack",
+      "--hostname",
+      "127.0.0.1",
+      "--port",
+      String(port),
+    ],
     {
       cwd: repositoryRoot,
       env: {

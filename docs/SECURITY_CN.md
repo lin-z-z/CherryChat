@@ -3,7 +3,8 @@
 [English](./SECURITY.md) · **简体中文**
 
 [文档索引](./README_CN.md) · [部署指南](./DEPLOYMENT_CN.md) ·
-[数据行为](./DATA_CN.md) · [项目首页](../README_CN.md)
+[数据行为](./DATA_CN.md) · [图片生成](./IMAGE_GENERATION_CN.md) ·
+[项目首页](../README_CN.md)
 
 ## 报告安全漏洞
 
@@ -34,9 +35,9 @@ CherryChat 是带有可选 Vercel Route Handler 的浏览器本地 AI 客户端�
 
 ## 浏览器凭据与本地数据
 
-BYOK API Key、访问码输入和可选个人 Tavily、Exa 或 Grok 凭据会保存在本地以便使用。CherryChat
-不会对它们进行静态加密。恶意扩展、受入侵的依赖、注入的同源脚本，或能够访问
-浏览器 Profile 的人员，都可能读取这些数据。
+BYOK 模型与图片 API Key、访问码输入和可选个人 Tavily、Exa 或 Grok 凭据会保存在
+本地以便使用。CherryChat 不会对它们进行静态加密。恶意扩展、受入侵的依赖、注入的
+同源脚本，或能够访问浏览器 Profile 的人员，都可能读取这些数据。
 
 凭据保存在独立连接记录中，完整备份、对话导出、搜索、打印输出和公开配置不会
 包含它们。清除全部本地数据会删除 CherryChat IndexedDB 数据、以
@@ -63,7 +64,7 @@ HttpOnly、Secure 和 SameSite Strict。托管模型 ID 必须属于部署白名
 
 ## 网络边界
 
-CherryChat 有三条相关路径：
+聊天请求使用三条相关路径：
 
 1. 绝对 BYOK Base URL 由浏览器直接请求，要求 Provider 支持 CORS。
 2. OpenAI-compatible BYOK Base URL 留空时，使用同源路由，并且只能转发到经过校验
@@ -77,6 +78,19 @@ CherryChat 有三条相关路径：
 托管网络搜索使用独立的同源 POST 路由。它要求有效托管 Session，只接受有界
 Query 和结果数，并使用部署端固定的 Tavily、Exa 或 Grok 目标及凭据。浏览器不能为
 此路由提供 Provider、模型、服务端目标或凭据。
+
+图片生成另外使用两条明确路径：
+
+1. 浏览器 BYOK 直接调用配置的 OpenAI-compatible 图片服务，发送浏览器用户持有的
+   图片 API Key，并要求 Provider 支持 CORS。无参考图时使用
+   `/v1/images/generations`，有参考图时使用 `/v1/images/edits`；CORS 失败后不会
+   静默回退到服务端代理。
+2. Hosted 图片生成向同源 `POST /api/image-generation` 发送有界请求。它要求有效的
+   签名 Session；服务端从经过校验的配置中选择完整白名单 Profile、固定上游、模型
+   和部署凭据。
+
+Hosted 生成图片 URL 必须与配置的上游同 Origin，且不能包含凭据或 Fragment。
+CherryChat 下载时不携带凭据、不跟随重定向，并在本地保存前重新校验图片类型与大小。
 
 生产环境托管上游必须使用 HTTPS。明确的 Insecure-local 选项只在非生产环境、且
 目标为 Loopback Host 时生效；它不允许 LAN、私有地址、元数据地址或普通远程 HTTP
@@ -101,6 +115,10 @@ Query 和结果数，并使用部署端固定的 Tavily、Exa 或 Grok 目标及
 服务端和浏览器 Transport 会限制 Request Body、文本、图片数据、Tool Payload、
 模型列表响应、JSON Completion、上游错误详情和 OpenAI-compatible SSE Event。
 Timeout 与取消信号会沿 Transport 传播。超出限制时会返回稳定错误，而不是无限缓冲。
+
+图片生成最多接受 16 张有序参考图；单张生成图片上限为 20 MiB，Provider JSON
+响应上限为 32 MiB。Hosted 图片请求体默认上限为 8 MiB，上游默认超时为 300 秒，
+进程内图片生成并发上限为 2。
 
 这些限制可以降低意外或机会性滥用，但不能替代 Provider 配额或部署级预算。
 
@@ -132,6 +150,8 @@ Preview Deployment 或生产 API。
 - 同时运行生产依赖和完整依赖审计，不要强制修复出不兼容的依赖树。
 - Bundle 扫描使用合成 Secret，浏览器流程使用测试专用凭据。
 - 分别验证 BYOK-only 和托管访问配置。
+- 分别验证浏览器直连与 Hosted 图片生成，包括 CORS、`/api/image-generation`、公开
+  Profile 投影和返回图片校验。
 - Vercel Firewall 规则和上游消费限额应与应用部署分别发布。
 - 在真实 Preview 上检查 `/api/config`、浏览器网络路径、Function 日志和客户端
   Bundle 内容。
@@ -145,4 +165,6 @@ Preview Deployment 或生产 API。
 - 浏览器直连绝对 Provider URL 会向该 Provider 暴露浏览器 IP 和请求。
 - 第三方 OpenAI-compatible 与 Responses Gateway 可能与审查过的请求和 Stream
   Contract 不同。
+- 第三方 OpenAI-compatible 图片服务可能拒绝已支持的尺寸、参考图编辑、输出格式或
+  Response Shape。
 - 项目当前不提供云备份、集中审计、组织角色或计费控制。

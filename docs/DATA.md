@@ -3,19 +3,22 @@
 **English** · [简体中文](./DATA_CN.md)
 
 [Documentation](./README.md) · [Security](./SECURITY.md) ·
-[Deployment](./DEPLOYMENT.md) · [Project home](../README.md)
+[Deployment](./DEPLOYMENT.md) · [Image generation](./IMAGE_GENERATION.md) ·
+[Project home](../README.md)
 
 ## Browser storage
 
 IndexedDB is the source of truth for conversations, message branches,
 attachments, non-sensitive settings, model capability overrides, and metadata.
-Connection credentials are stored in separate connection/credential records so
-ordinary search, export, and backup paths do not read them.
+Model, search, and image-generation credentials are stored in separate
+credential records so ordinary search, export, and backup paths do not read
+them.
 
 The current browser schema is version 7. Its migration removes the retired
 per-conversation `contextMessageLimit` and `advancedSettings` properties while
 preserving conversation identity, Assistant snapshots, active-model state,
-messages, branches, attachments, and web-search state.
+messages, branches, attachments, web-search state, and image-generation message
+parts.
 
 If IndexedDB cannot open, CherryChat creates an in-page memory database for chat
 history and uses localStorage only for the current connection bundle. A visible
@@ -44,6 +47,13 @@ and credential digests. New archives omit the retired conversation properties;
 existing version 2 archives that contain them remain readable and the importer
 discards those properties after validating their legacy shape.
 
+Image-generation messages retain a snapshot of the model, connection Scope,
+size, quality, output format, compression, and ordered reference attachment IDs.
+Backup v2 includes those snapshots plus referenced and generated image
+attachments. Import remaps reference attachment IDs together with the other
+message and attachment references; image API Keys remain excluded and must be
+entered again.
+
 Full backups also retain validated provider continuation context required for
 stateless replay, including separately owned DeepSeek, GLM, Qwen, and Kimi Chat
 `reasoning_content`. GLM context is created only for explicit retained thinking;
@@ -65,11 +75,11 @@ again.
 
 ## Single-chat export
 
-- JSON preserves all message branches, roles, models, usage, and attachment
-  metadata.
+- JSON preserves all message branches, roles, models, usage, image-generation
+  snapshots, and attachment metadata.
 - Markdown exports the current branch. Chats with images produce a ZIP whose
-  Markdown uses relative image paths rather than IndexedDB URLs or large Base64
-  values.
+  Markdown uses relative paths for referenced and generated image attachments
+  rather than IndexedDB URLs or large Base64 values.
 - Print preview renders the current branch with PDF-friendly styles.
 
 All three export paths use the same reasoning projection. Reasoning is excluded

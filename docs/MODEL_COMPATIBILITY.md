@@ -3,7 +3,8 @@
 **English** · [简体中文](./MODEL_COMPATIBILITY_CN.md)
 
 [Documentation](./README.md) · [Deployment](./DEPLOYMENT.md) ·
-[Security](./SECURITY.md) · [Project home](../README.md)
+[Security](./SECURITY.md) · [Image generation](./IMAGE_GENERATION.md) ·
+[Project home](../README.md)
 
 CherryChat separates the selected connection protocol from model capability.
 An interface control is shown only when the active model and endpoint can encode
@@ -12,14 +13,15 @@ different wire protocol.
 
 ## Protocol adapters
 
-| API type                | Primary operation                                                         | Availability                                             |
-| ----------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
-| OpenAI Chat Completions | `POST /v1/chat/completions`                                               | BYOK direct, same-origin fixed proxy, and Hosted access. |
-| OpenAI Responses        | `POST /v1/responses`                                                      | BYOK direct and New API metadata routing.                |
-| Anthropic               | `POST /v1/messages`                                                       | Native BYOK direct and New API metadata routing.         |
-| Gemini                  | `POST /v1beta/models/{model}:streamGenerateContent` or generate operation | Native BYOK direct and New API metadata routing.         |
-| New API                 | `GET /v1/models`, then per-model endpoint routing                         | BYOK only.                                               |
-| OpenAI-compatible       | `POST /v1/chat/completions`                                               | BYOK direct or same-origin fixed proxy.                  |
+| API type                 | Primary operation                                                         | Availability                                             |
+| ------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------- |
+| OpenAI Chat Completions  | `POST /v1/chat/completions`                                               | BYOK direct, same-origin fixed proxy, and Hosted access. |
+| OpenAI Responses         | `POST /v1/responses`                                                      | BYOK direct and New API metadata routing.                |
+| Anthropic                | `POST /v1/messages`                                                       | Native BYOK direct and New API metadata routing.         |
+| Gemini                   | `POST /v1beta/models/{model}:streamGenerateContent` or generate operation | Native BYOK direct and New API metadata routing.         |
+| New API                  | `GET /v1/models`, then per-model endpoint routing                         | BYOK only.                                               |
+| OpenAI-compatible        | `POST /v1/chat/completions`                                               | BYOK direct or same-origin fixed proxy.                  |
+| OpenAI-compatible Images | `POST /v1/images/generations` or `/v1/images/edits`                       | BYOK direct or bounded Hosted route.                     |
 
 Hosted access always uses the fixed OpenAI-compatible Chat Completions adapter,
 regardless of the API type last saved in the browser.
@@ -33,12 +35,29 @@ regardless of the API type last saved in the browser.
   operation path.
 - OpenAI Chat and generic compatible adapters append `/v1/models` and
   `/v1/chat/completions` as needed.
+- Image generation appends `/v1/images/generations` without references and
+  `/v1/images/edits` with references.
 - An empty Base URL is meaningful only for the fixed same-origin
   OpenAI-compatible BYOK path.
 
 Providers and gateways can expose different URL conventions. Verify the final
 browser request before assuming that a successful model-list request proves the
 chat path is correct.
+
+## OpenAI-compatible Images boundary
+
+Image generation uses an independent service configuration rather than the
+selected chat adapter. Browser BYOK currently exposes one built-in
+`gpt-image-2` configuration with a service URL and API Key. Hosted deployments
+may publish one or more server-configured Profiles through the bounded
+same-origin `/api/image-generation` route.
+
+The request shape, supported sizes, reference edits, quality values, output
+formats, and response fields can differ across compatible providers. A service
+must support the endpoint and parameters it receives; a compatible chat or
+model-list endpoint does not establish Images compatibility. See the
+[image generation guide](./IMAGE_GENERATION.md) for the exact workflow and
+limits.
 
 ## New API endpoint metadata
 

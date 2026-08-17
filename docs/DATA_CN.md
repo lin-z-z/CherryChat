@@ -3,16 +3,18 @@
 [English](./DATA.md) · **简体中文**
 
 [文档索引](./README_CN.md) · [安全策略](./SECURITY_CN.md) ·
-[部署指南](./DEPLOYMENT_CN.md) · [项目首页](../README_CN.md)
+[部署指南](./DEPLOYMENT_CN.md) · [图片生成](./IMAGE_GENERATION_CN.md) ·
+[项目首页](../README_CN.md)
 
 ## 浏览器存储
 
 IndexedDB 是对话、消息分支、附件、非敏感设置、模型能力覆盖项和元数据的事实来源。
-连接凭据保存在独立的连接/凭据记录中，因此普通搜索、导出和备份流程不会读取它们。
+模型、搜索和图片生成凭据保存在独立凭据记录中，因此普通搜索、导出和备份流程不会
+读取它们。
 
 当前浏览器 Schema 版本为 7。迁移会删除已废弃的对话级
 `contextMessageLimit` 和 `advancedSettings` 属性，同时保留对话标识、Assistant
-快照、当前模型状态、消息、分支、附件和网络搜索状态。
+快照、当前模型状态、消息、分支、附件、网络搜索状态和图片生成消息 Part。
 
 如果 IndexedDB 无法打开，CherryChat 会为聊天历史创建页面内存数据库，并且只用
 localStorage 保存当前连接 Bundle。界面会显示警告，说明刷新或关闭后聊天会消失。
@@ -36,6 +38,11 @@ localStorage 保存当前连接 Bundle。界面会显示警告，说明刷新或
 新归档不再写入已废弃的对话属性；包含这些属性的既有 v2 归档仍可读取，Importer
 会先校验其旧格式，再丢弃这些属性。
 
+图片生成消息会保留模型、连接 Scope、尺寸、质量、输出格式、压缩率和有序参考附件
+ID 的快照。Backup v2 会包含这些快照以及引用和生成的图片附件；导入时会与其他消息
+及附件引用一起重新映射参考附件 ID。这些快照确保刷新、重试和分支重新生成继续使用
+原始参数与参考图顺序。图片 API Key 仍被排除，导入后必须重新填写。
+
 完整备份还会保留 Stateless Replay 所需、经过校验的 Provider Continuation
 Context，其中包括分别归属 DeepSeek、GLM、Qwen 和 Kimi Chat 的
 `reasoning_content`。GLM Context 只在明确启用保留推理时创建；Qwen Context 只在
@@ -53,9 +60,9 @@ ID 会重新映射，Merge 在一个 Dexie Transaction 中完成，因此无效�
 
 ## 单对话导出
 
-- JSON 保留全部消息分支、角色、模型、用量和附件元数据。
+- JSON 保留全部消息分支、角色、模型、用量、图片生成快照和附件元数据。
 - Markdown 导出当前分支。包含图片的对话会生成 ZIP，其中 Markdown 使用相对图片
-  路径，而不是 IndexedDB URL 或大型 Base64 值。
+  路径引用参考图和生成图片附件，而不是 IndexedDB URL 或大型 Base64 值。
 - 打印预览使用适合 PDF 的样式渲染当前分支。
 
 三种导出路径使用同一套推理投影。默认不导出推理，只有用户启用导出选项后才会

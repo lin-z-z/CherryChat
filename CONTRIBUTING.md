@@ -108,7 +108,7 @@ npm run docs:screenshots
 ```
 
 The script uses English, light theme, fictional data, and blocks unexpected
-external requests. Review all three resulting files under `docs/images/`
+external requests. Review all four resulting files under `docs/images/`
 visually before committing them. Do not commit Playwright reports, traces, test
 screenshots, or temporary server output.
 
