@@ -120,6 +120,7 @@ import {
   ImageGenerationRepository,
 } from "@/storage/image-generation-repository";
 import {
+  calculateImageGenerationSize,
   DEFAULT_IMAGE_GENERATION_PARAMETERS,
   normalizeImageGenerationParameters,
   parametersFromLegacySize,
@@ -1041,7 +1042,7 @@ export function useChatController() {
           ? await requireServices().imageGeneration.selectHostedProfile(
               profileId,
             )
-          : await requireServices().imageGeneration.selectProfile(profileId);
+          : imageGenerationConfig;
       setImageGenerationConfig(saved);
       return saved;
     },
@@ -1055,8 +1056,18 @@ export function useChatController() {
         const currentParameters =
           current.parametersByProfile[activeImageGenerationProfile.id] ??
           DEFAULT_IMAGE_GENERATION_PARAMETERS;
+        const requestedParameters = { ...currentParameters, ...patch };
+        if (
+          !("size" in patch) &&
+          ("resolutionTier" in patch || "aspectRatio" in patch)
+        ) {
+          requestedParameters.size = calculateImageGenerationSize(
+            requestedParameters.resolutionTier,
+            requestedParameters.aspectRatio,
+          );
+        }
         const parameters = normalizeImageGenerationParameters(
-          { ...currentParameters, ...patch },
+          requestedParameters,
           activeImageGenerationProfile,
         );
         return {
@@ -1074,9 +1085,15 @@ export function useChatController() {
   const setImageGenerationSize = useCallback(
     (size: ImageGenerationParameters["size"]) => {
       if (!activeImageGenerationProfile) return;
-      updateImageGenerationParameters(
-        parametersFromLegacySize(size, activeImageGenerationParameters.quality),
+      const resolved = parametersFromLegacySize(
+        size,
+        activeImageGenerationParameters.quality,
       );
+      updateImageGenerationParameters({
+        resolutionTier: resolved.resolutionTier,
+        aspectRatio: resolved.aspectRatio,
+        size: resolved.size,
+      });
     },
     [
       activeImageGenerationParameters.quality,

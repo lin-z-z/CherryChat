@@ -4,6 +4,7 @@ import type { ImageGenerationProfile } from "@/runtime/chat/types";
 import {
   isValidImageGenerationSize,
   normalizeImageGenerationParameters,
+  normalizeImageGenerationSize,
   parametersFromLegacySize,
   resolveImageGenerationCapabilities,
 } from "@/runtime/image-generation/image-generation-options";
@@ -72,6 +73,38 @@ describe("image generation options", () => {
         profile("gpt-image-2", "auto"),
       ).outputCompression,
     ).toBe(100);
+  });
+
+  it("normalizes and preserves custom GPT Image sizes", () => {
+    expect(normalizeImageGenerationSize("1300x700")).toBe("1296x704");
+    expect(
+      normalizeImageGenerationParameters(
+        {
+          size: "1300x700",
+          resolutionTier: "auto",
+          quality: "high",
+        },
+        profile("gpt-image-2", "auto"),
+      ),
+    ).toMatchObject({
+      size: "1296x704",
+      resolutionTier: "auto",
+      quality: "high",
+    });
+    expect(parametersFromLegacySize("1300x700", "medium")).toMatchObject({
+      size: "1296x704",
+      resolutionTier: "auto",
+      quality: "medium",
+    });
+  });
+
+  it("does not expose arbitrary custom sizes to fixed-size profiles", () => {
+    expect(
+      normalizeImageGenerationParameters(
+        { size: "1296x704", resolutionTier: "1K", aspectRatio: "1:1" },
+        profile("gpt-image-1.5", "fixed"),
+      ).size,
+    ).toBe("1024x1024");
   });
 });
 

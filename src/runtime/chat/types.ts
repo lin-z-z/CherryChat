@@ -349,8 +349,8 @@ export interface ImageGenerationConfiguration {
 }
 
 export interface ImageGenerationSaveInput {
-  profiles: ImageGenerationProfile[];
-  defaultProfileId: string;
+  baseUrl: string;
+  apiKey: string;
 }
 
 export interface TokenUsage {

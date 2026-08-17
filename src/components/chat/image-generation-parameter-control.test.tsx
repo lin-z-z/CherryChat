@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ImageGenerationCompressionControl,
   ImageGenerationParameterControl,
+  ImageGenerationSizeControl,
 } from "@/components/chat/image-generation-parameter-control";
 import { Providers } from "@/components/providers";
 
@@ -78,5 +79,85 @@ describe("ImageGenerationParameterControl", () => {
     );
 
     expect(onValueChange).toHaveBeenLastCalledWith(82);
+  });
+
+  it("applies a resolution and ratio together from the size dialog", () => {
+    const onSelectSize = vi.fn();
+    render(
+      <Providers initialLanguage="en">
+        <ImageGenerationSizeControl
+          ariaLabel="Image size"
+          capabilities={{
+            customSizes: true,
+            resolutionTiers: ["auto", "1K", "2K", "4K"],
+            aspectRatios: ["1:1", "3:2", "2:3", "9:16"],
+          }}
+          disabled={false}
+          onSelectSize={onSelectSize}
+          parameters={{
+            resolutionTier: "1K",
+            aspectRatio: "1:1",
+            size: "1024x1024",
+            quality: "auto",
+            outputFormat: "png",
+            outputCompression: null,
+          }}
+        />
+      </Providers>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Image size: 1024x1024" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "2K" }));
+    fireEvent.click(screen.getByRole("button", { name: "3:2" }));
+    expect(screen.getByText("2160x1440")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(onSelectSize).toHaveBeenCalledWith("2160x1440");
+    expect(
+      screen.queryByRole("dialog", { name: "Set image size" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("normalizes custom dimensions before applying them", () => {
+    const onSelectSize = vi.fn();
+    render(
+      <Providers initialLanguage="en">
+        <ImageGenerationSizeControl
+          ariaLabel="Image size"
+          capabilities={{
+            customSizes: true,
+            resolutionTiers: ["auto", "1K", "2K", "4K"],
+            aspectRatios: ["1:1", "3:2", "2:3"],
+          }}
+          disabled={false}
+          onSelectSize={onSelectSize}
+          parameters={{
+            resolutionTier: "1K",
+            aspectRatio: "1:1",
+            size: "1024x1024",
+            quality: "auto",
+            outputFormat: "png",
+            outputCompression: null,
+          }}
+        />
+      </Providers>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Image size: 1024x1024" }),
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Custom dimensions" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Width" }), {
+      target: { value: "1300" },
+    });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Height" }), {
+      target: { value: "700" },
+    });
+    expect(screen.getByText("1296x704")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(onSelectSize).toHaveBeenCalledWith("1296x704");
   });
 });

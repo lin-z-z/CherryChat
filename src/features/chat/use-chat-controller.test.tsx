@@ -125,6 +125,29 @@ describe("useChatController integration", () => {
       "portrait",
     );
     await act(async () => {
+      first.result.current.setImageGenerationParameters({
+        resolutionTier: "2K",
+        aspectRatio: "9:16",
+        outputFormat: "webp",
+        outputCompression: 82,
+      });
+    });
+    expect(first.result.current.imageGenerationParameters).toMatchObject({
+      size: "1440x2560",
+      outputFormat: "webp",
+      outputCompression: 82,
+    });
+    await act(async () => {
+      first.result.current.setImageGenerationSize("1296x704");
+      first.result.current.setImageGenerationParameters({ quality: "high" });
+    });
+    expect(first.result.current.imageGenerationParameters).toMatchObject({
+      size: "1296x704",
+      quality: "high",
+      outputFormat: "webp",
+      outputCompression: 82,
+    });
+    await act(async () => {
       await first.result.current.selectImageGenerationProfile("standard");
     });
     expect(first.result.current.activeImageGenerationProfile?.id).toBe(
@@ -258,19 +281,8 @@ describe("useChatController integration", () => {
 
     await act(async () => {
       await result.current.saveImageGenerationSettings({
-        profiles: [
-          {
-            id: "test-image-profile",
-            name: "Test image",
-            mode: "byok",
-            baseUrl: "https://images.example/v1",
-            apiKey: "image-test-key",
-            modelId: "gpt-image-1.5",
-            sizeMode: "fixed",
-            hasApiKey: true,
-          },
-        ],
-        defaultProfileId: "test-image-profile",
+        baseUrl: "https://images.example/v1",
+        apiKey: "image-test-key",
       });
     });
     await act(async () => {
@@ -284,14 +296,37 @@ describe("useChatController integration", () => {
     expect(result.current.imageGenerationConfig.profiles[0]).toMatchObject({
       baseUrl: "https://images.example/v1",
       apiKey: "image-test-key",
-      modelId: "gpt-image-1.5",
+      modelId: "gpt-image-2",
       hasApiKey: true,
     });
     expect(
       result.current.imageGenerationConfig.parametersByProfile[
-        "test-image-profile"
+        "default-gpt-image-2"
       ],
     ).toMatchObject({ size: "1536x1024", quality: "auto" });
+
+    await act(async () => {
+      result.current.setImageGenerationParameters({
+        outputFormat: "webp",
+        outputCompression: 82,
+      });
+      result.current.setImageGenerationSize("1024x1536");
+    });
+    expect(
+      result.current.imageGenerationConfig.parametersByProfile[
+        "default-gpt-image-2"
+      ],
+    ).toMatchObject({
+      size: "1024x1536",
+      outputFormat: "webp",
+      outputCompression: 82,
+    });
+    await act(async () => {
+      result.current.setImageGenerationParameters({
+        outputFormat: "png",
+        outputCompression: null,
+      });
+    });
 
     await act(async () => {
       await result.current.saveWebSearchSettings({

@@ -327,6 +327,12 @@ describe("ChatShell", () => {
     expect(
       screen.getByRole("textbox", { name: "给 CherryChat 发消息" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "对话" }).querySelector("svg"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "生图" }).querySelector("svg"),
+    ).toBeInTheDocument();
   });
 
   it("does not announce a model switch before a chat has started", async () => {
@@ -778,19 +784,16 @@ describe("ChatShell", () => {
     expect(
       screen.getByRole("textbox", { name: "描述你想生成的图片" }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("combobox", { name: "分辨率档位" }));
-    fireEvent.click(screen.getByRole("option", { name: "2K" }));
-    fireEvent.click(screen.getByRole("combobox", { name: "图片比例" }));
-    fireEvent.click(screen.getByRole("option", { name: "3:2" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "图片尺寸: 1024x1024" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "2K" }));
+    fireEvent.click(screen.getByRole("button", { name: "3:2" }));
+    fireEvent.click(screen.getByRole("button", { name: "确定" }));
     fireEvent.click(screen.getByRole("combobox", { name: "图片质量" }));
     fireEvent.click(screen.getByRole("option", { name: "高" }));
 
-    expect(controller.setImageGenerationParameters).toHaveBeenCalledWith(
-      expect.objectContaining({ resolutionTier: "2K" }),
-    );
-    expect(controller.setImageGenerationParameters).toHaveBeenCalledWith(
-      expect.objectContaining({ aspectRatio: "3:2" }),
-    );
+    expect(controller.setImageGenerationSize).toHaveBeenCalledWith("2160x1440");
     expect(controller.setImageGenerationParameters).toHaveBeenCalledWith(
       expect.objectContaining({ quality: "high" }),
     );
@@ -810,27 +813,33 @@ describe("ChatShell", () => {
     renderShell();
 
     await user.click(screen.getByRole("tab", { name: "图片生成" }));
-    await user.clear(screen.getByLabelText("图片模型"));
-    await user.type(screen.getByLabelText("图片模型"), "gpt-image-custom");
+    await user.clear(screen.getByLabelText("服务 URL"));
+    await user.type(
+      screen.getByLabelText("服务 URL"),
+      "https://images.example.test",
+    );
     await user.type(screen.getByLabelText("API 密钥"), "sk-image-secret");
-    await user.click(screen.getByRole("button", { name: "保存图片生成设置" }));
+    expect(screen.queryByLabelText("图片模型")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("尺寸能力")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "新增 Profile" }),
+    ).not.toBeInTheDocument();
+    const saveButton = screen.getByRole("button", {
+      name: "保存图片生成设置",
+    });
+    expect(saveButton.closest(".settings-ui-panel")).not.toBeNull();
+    await user.click(saveButton);
 
     await waitFor(() =>
-      expect(controller.saveImageGenerationSettings).toHaveBeenCalledWith(
-        expect.objectContaining({
-          profiles: expect.arrayContaining([
-            expect.objectContaining({
-              apiKey: "sk-image-secret",
-              modelId: "gpt-image-custom",
-            }),
-          ]),
-        }),
-      ),
+      expect(controller.saveImageGenerationSettings).toHaveBeenCalledWith({
+        apiKey: "sk-image-secret",
+        baseUrl: "https://images.example.test",
+      }),
     );
     expect(screen.getByText("图片生成设置已保存。")).toBeInTheDocument();
   });
 
-  it("does not treat the settings profile editor selection as the active chat profile", async () => {
+  it("does not expose image profile or capability management", async () => {
     const user = userEvent.setup();
     const controller = createController();
     controller.settingsOpen = true;
@@ -857,32 +866,21 @@ describe("ChatShell", () => {
     controller.activeImageGenerationProfile = firstProfile;
     vi.mocked(useChatController).mockReturnValue(controller);
 
-    Object.defineProperties(HTMLElement.prototype, {
-      hasPointerCapture: { configurable: true, value: () => false },
-      releasePointerCapture: { configurable: true, value: vi.fn() },
-      setPointerCapture: { configurable: true, value: vi.fn() },
-    });
-    const view = renderShell();
+    renderShell();
     await user.click(screen.getByRole("tab", { name: "图片生成" }));
-    await user.click(
-      screen.getByRole("combobox", { name: "图片模型 Profile" }),
-    );
-    await user.click(screen.getByRole("option", { name: /Second profile/u }));
+
+    expect(screen.queryByLabelText("Profile 名称")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("默认 Profile")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("图片模型")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("尺寸能力")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "新增 Profile" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "删除 Profile" }),
+    ).not.toBeInTheDocument();
     expect(controller.selectImageGenerationProfile).not.toHaveBeenCalled();
     expect(controller.activeImageGenerationProfile?.id).toBe(firstProfile.id);
-    await user.click(screen.getByRole("button", { name: "关闭" }));
-
-    expect(controller.setSettingsOpen).toHaveBeenCalledWith(false);
-    controller.settingsOpen = false;
-    view.rerender(
-      <Providers initialLanguage="zh-CN">
-        <ChatShell />
-      </Providers>,
-    );
-    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("main", { name: "设置" }),
-    ).not.toBeInTheDocument();
   });
 
   it("adds a generated image to the next reference draft", async () => {

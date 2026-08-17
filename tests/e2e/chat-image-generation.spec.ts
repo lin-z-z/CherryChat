@@ -40,10 +40,23 @@ test("generates and edits persistent images without desktop or mobile overflow",
   const prompt = page.getByRole("textbox", {
     name: "Describe the image you want to create",
   });
-  await selectImageParameter(page, "Resolution tier", "2K");
-  await selectImageParameter(page, "Aspect ratio", "9:16");
+  await selectImageSize(page, "2K", "9:16");
   await selectImageParameter(page, "Image quality", "High");
+  const parameterBar = page.locator(".image-generation-parameter-bar");
+  const pngParameterBarBox = await parameterBar.boundingBox();
+  await expectNoHorizontalOverflow(composer);
+  await page.screenshot({
+    path: `test-results/image-generation-composer-png-${test.info().project.name}.png`,
+    fullPage: true,
+  });
+
   await selectImageParameter(page, "Output format", "WebP");
+  const webpParameterBarBox = await parameterBar.boundingBox();
+  if (!mobile) {
+    expect(pngParameterBarBox).not.toBeNull();
+    expect(webpParameterBarBox).not.toBeNull();
+    expect(pngParameterBarBox!.x).toBeGreaterThan(webpParameterBarBox!.x);
+  }
   await page.getByRole("button", { name: "Compression quality: 100%" }).click();
   await page
     .getByRole("spinbutton", { name: "Compression quality" })
@@ -145,7 +158,7 @@ test("keeps Hosted image credentials and upstream targets out of the browser", a
   await selectSettingsPage(page, settings, "Image generation");
   await expect(settings.getByText("Hosted service available")).toBeVisible();
   await expect(settings.getByText("hosted-image-model")).toBeVisible();
-  await expect(settings.getByLabel("Provider base URL")).toHaveCount(0);
+  await expect(settings.getByLabel("Service URL")).toHaveCount(0);
   await settings.getByRole("button", { name: "Close" }).click();
 
   await page.getByRole("button", { name: "Image", exact: true }).click();
@@ -237,13 +250,15 @@ async function prepareByokImagePage(page: Page, mobile: boolean) {
 
 async function saveImageGenerationSettings(page: Page, settings: Locator) {
   await selectSettingsPage(page, settings, "Image generation");
-  await settings.getByLabel("Provider base URL").fill(BASE_URL);
+  await settings.getByLabel("Service URL").fill(BASE_URL);
   await settings
     .getByRole("textbox", { name: "API key", exact: true })
     .fill("image-e2e-key");
-  await settings
-    .getByRole("textbox", { name: "Image model", exact: true })
-    .fill(IMAGE_MODEL);
+  await expect(settings.getByLabel("Image model")).toHaveCount(0);
+  await expect(settings.getByLabel("Size capability")).toHaveCount(0);
+  await expect(
+    settings.getByRole("button", { name: "Add profile" }),
+  ).toHaveCount(0);
   await settings
     .getByRole("button", { name: "Save image generation settings" })
     .click();
@@ -255,6 +270,19 @@ async function saveImageGenerationSettings(page: Page, settings: Locator) {
 async function selectImageParameter(page: Page, label: string, option: string) {
   await page.getByRole("combobox", { name: label }).click();
   await page.getByRole("option", { name: option, exact: true }).click();
+}
+
+async function selectImageSize(page: Page, tier: string, ratio: string) {
+  await page.getByRole("button", { name: /^Image size:/u }).click();
+  const dialog = page.getByRole("dialog", { name: "Set image size" });
+  await dialog.getByRole("button", { name: tier, exact: true }).click();
+  await dialog.getByRole("button", { name: ratio, exact: true }).click();
+  await page.screenshot({
+    path: `test-results/image-generation-size-dialog-${test.info().project.name}.png`,
+    fullPage: true,
+  });
+  await dialog.getByRole("button", { name: "Confirm" }).click();
+  await expect(dialog).toBeHidden();
 }
 
 async function openSettings(page: Page, mobile: boolean) {
