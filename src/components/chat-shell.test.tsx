@@ -1297,7 +1297,7 @@ describe("ChatShell", () => {
       screen.getByRole("heading", { name: "产品信息" }),
     ).toBeInTheDocument();
     expect(screen.getByText("AI 对话工作区")).toBeInTheDocument();
-    expect(screen.getByText("1.0.0")).toBeInTheDocument();
+    expect(screen.getByText("1.1.0")).toBeInTheDocument();
     expect(screen.getByText("MIT")).toBeInTheDocument();
     expect(screen.getByText("访问码或自定义 API")).toBeInTheDocument();
     expect(screen.getByText("当前浏览器")).toBeInTheDocument();

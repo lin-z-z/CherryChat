@@ -8,11 +8,21 @@ capabilities and limitations.
 
 ## [Unreleased]
 
-### Added
+## [1.1.0] - 2026-08-18
+
+### Summary
+
+`v1.1.0` adds integrated image generation and reference-image editing to the
+stable browser-local, BYOK, Hosted access, search, backup, and deployment
+contracts established by `v1.0.0`.
+
+### Highlights
 
 - A dedicated image-generation mode with a built-in `gpt-image-2` BYOK
-  connection, configurable size and output controls, and up to 16 ordered
-  reference images for compatible edit endpoints.
+  connection and configurable resolution, aspect-ratio, quality, format, and
+  compression controls.
+- Generation from prompts or up to 16 ordered reference images through
+  compatible OpenAI-style generation and edit endpoints.
 - Deployment-owned Hosted image generation through one legacy configuration or
   an allowlisted set of server-side Profiles, without exposing upstream
   credentials or URLs to access-code users.
@@ -27,6 +37,38 @@ capabilities and limitations.
 - Normalized image service roots and `/v1` bases to the standard
   `/v1/images/generations` and `/v1/images/edits` endpoints, with bounded image
   responses and stricter Hosted URL validation.
+- The About page now reads the application version from Package metadata and
+  links to the repository; user-message presentation and inline editing were
+  refined.
+- Local development uses Webpack for more stable startup on Windows.
+
+### Known limitations
+
+- CherryChat does not include image-generation credits or a Provider service.
+  BYOK users and deployment operators own Provider availability, cost, rate
+  limits, and content-policy compliance.
+- Browser-direct image generation requires Provider CORS. Compatibility
+  depends on the configured service supporting the documented OpenAI-style
+  endpoints and options; compatible services may implement only a subset.
+- Generated images remain in the current browser and can materially increase
+  IndexedDB and Backup v2 size. CherryChat still provides no account, cloud
+  synchronization, global usage ledger, billing control, or hosted-service SLA.
+
+### Upgrade and backup
+
+This release does not add an IndexedDB schema migration. Backup v2 now
+round-trips generated images and ordered reference relationships. Create a full
+backup before updating an existing deployment or browser profile; credentials
+remain intentionally excluded.
+
+### Deployment and security
+
+BYOK-only image generation requires no deployment credential. Hosted image
+generation requires complete Hosted access configuration plus either one
+legacy image configuration or an allowlisted Profile set. Before enabling it
+for other users, independently verify the fixed upstream, spending limit,
+Firewall policy, Function logs, and real generation/edit behavior; repository
+CI cannot prove those deployment properties.
 
 ## [1.0.0] - 2026-08-12
 

@@ -7,14 +7,15 @@
   <p>
     <a href="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml"><img src="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
     <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
-    <img src="https://img.shields.io/badge/version-1.0.0-16a34a.svg" alt="CherryChat v1.0.0" />
+    <img src="https://img.shields.io/badge/version-1.1.0-16a34a.svg" alt="CherryChat v1.1.0" />
   </p>
 </div>
 
 > [!IMPORTANT]
-> CherryChat v1.0.0 is the first stable release. It does not provide accounts,
-> cloud sync, organization permissions, centralized audit, or billing
-> controls. Review the [security](./docs/SECURITY.md) and
+> CherryChat v1.1.0 adds integrated image generation and reference editing to
+> the stable contracts established by v1.0.0. It does not provide accounts,
+> cloud sync, organization permissions, centralized audit, or billing controls.
+> Review the [security](./docs/SECURITY.md) and
 > [deployment](./docs/DEPLOYMENT.md) boundaries before sharing a hosted-key
 > instance.
 
