@@ -61,7 +61,7 @@ const FORBIDDEN_PRODUCT_TERMS = [
 const REQUIRED_FILE_TOKENS = {
   "README.md": [
     "./README_CN.md",
-    "1.0.0",
+    "1.1.0",
     "Bring Your Own Key (BYOK)",
     "Hosted access",
     "Self-hosting",
@@ -77,7 +77,7 @@ const REQUIRED_FILE_TOKENS = {
   ],
   "README_CN.md": [
     "./README.md",
-    "1.0.0",
+    "1.1.0",
     "自带 API Key（BYOK",
     "托管访问（Hosted access）",
     "自托管（Self-hosting）",
@@ -110,19 +110,20 @@ const REQUIRED_FILE_TOKENS = {
     "IMAGE_GENERATION_PROFILES",
   ],
   "docs/README.md": [
-    "v1.0.0",
+    "v1.1.0",
     "./IMAGE_GENERATION.md",
     "./RELEASES.md",
     "../CHANGELOG.md",
   ],
   "docs/README_CN.md": [
-    "v1.0.0",
+    "v1.1.0",
     "./IMAGE_GENERATION_CN.md",
     "./RELEASES_CN.md",
     "../CHANGELOG_CN.md",
   ],
   "CHANGELOG.md": [
     "## [Unreleased]",
+    "## [1.1.0]",
     "## [1.0.0]",
     "### Known limitations",
     "Backup v2",
@@ -132,6 +133,7 @@ const REQUIRED_FILE_TOKENS = {
   ],
   "CHANGELOG_CN.md": [
     "## [Unreleased]",
+    "## [1.1.0]",
     "## [1.0.0]",
     "### 已知限制",
     "Backup v2",

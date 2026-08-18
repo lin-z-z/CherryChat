@@ -94,21 +94,21 @@ test("extracts only the requested structured changelog section", () => {
 
 test("reads matching package and bilingual changelog metadata", async () => {
   temporaryDirectory = await mkdtemp(join(tmpdir(), "cherrychat-release-"));
-  await writeJson("package.json", { version: "1.0.0" });
+  await writeJson("package.json", { version: "1.1.0" });
   await writeJson("package-lock.json", {
-    version: "1.0.0",
-    packages: { "": { version: "1.0.0" } },
+    version: "1.1.0",
+    packages: { "": { version: "1.1.0" } },
   });
   const changelog =
-    "# Changelog\n\n## [1.0.0] - 2026-08-12\n\n### Summary\n\nStable.\n";
+    "# Changelog\n\n## [1.1.0] - 2026-08-18\n\n### Summary\n\nImage generation.\n";
   await writeFixture("CHANGELOG.md", changelog);
   await writeFixture("CHANGELOG_CN.md", changelog);
 
   const metadata = await readReleaseMetadata({ root: temporaryDirectory });
 
-  assert.equal(metadata.version, "1.0.0");
-  assert.equal(metadata.tagName, "v1.0.0");
-  assert.equal(metadata.title, "CherryChat v1.0.0");
+  assert.equal(metadata.version, "1.1.0");
+  assert.equal(metadata.tagName, "v1.1.0");
+  assert.equal(metadata.title, "CherryChat v1.1.0");
   assert.match(metadata.chineseSection, /### Summary/u);
 });
 
