@@ -260,8 +260,14 @@ stop();
 - Size and quality are explicit controls. Submit persists an
   `image_generation` snapshot before the request so retry/reload uses the
   original model, parameters, connection scope, and reference order.
-- Generated output is displayed from local `image_ref` attachments. “Use as
-  reference” reuses the existing attachment record and never copies its blob.
+- Generated output is displayed from local `image_ref` attachments. Clicking
+  the image opens an accessible original-image dialog backed by the exact local
+  Blob URL and a Close action. A separate download icon lives in the generated
+  message action row, uses the same Blob URL, and preserves the snapshot output
+  format in a stable generation-time filename:
+  `CherryChat_YYYYMMDD_HHmmss_SSS.<format>`. The preview trigger and “Use as
+  reference” keep separate, non-overlapping hit targets; the latter reuses the
+  existing attachment record and never copies its blob.
 - BYOK settings expose only the custom service URL and API Key. The browser
   uses the built-in image model configuration; profile management, model IDs,
   and capability declarations are not user settings. Browser storage accepts
@@ -279,26 +285,30 @@ stop();
 | Generation active | Show Stop; prevent duplicate send |
 | User stops | Persist `stopped`, create no child output attachment |
 | Timeout/provider/invalid response | Persist stable error state and allow retry |
-| Completed output | Render image/download/use-as-reference actions |
+| Completed output | Render original-image preview, download, and use-as-reference actions |
+| Missing attachment Blob URL | Render no broken or actionable image control |
 
 ### 5. Good / Base / Bad Cases
 
 - **Good:** reorder two references, send, reload, and retry; every projection
   uses the same reference order and saved parameters.
 - **Base:** switch to image mode, enter a prompt, choose size/quality, and
-  receive one local generated attachment.
+  receive one local generated attachment that opens from the thumbnail.
 - **Bad:** share `pendingAttachments` with chat, infer parameters from prompt
-  text, retry from current global settings, or render a remote provider URL.
+  text, retry from current global settings, render a remote provider URL, or
+  overlay the reference action across the preview trigger's hit target.
 
 ### 6. Tests Required
 
 - Component: localized mode entry, BYOK/Hosted settings, size/quality, reference
-  add/remove/reorder/count, busy/stop/error states, and use-as-reference.
+  add/remove/reorder/count, busy/stop/error states, original-image dialog URL,
+  action-row Blob download/format, close/focus restoration, and use-as-reference.
 - Hook integration: real controller plus Fake IndexedDB for settings save,
   stored references, URL/Base64 result persistence, timeout, cancellation,
   retry, and model-cache coexistence.
-- Browser: desktop and Mobile Chrome composer layout, paste/drop/sort, reload,
-  backup round-trip, and no regression to ordinary chat/search/attachments.
+- Browser: desktop and Mobile Chrome composer layout, original-image preview
+  and Blob URL, non-overlapping preview/reference controls, paste/drop/sort,
+  reload, backup round-trip, and no regression to ordinary chat/search/attachments.
 - DOM response fixtures that represent binary images use an `ArrayBuffer`.
   Passing a jsdom `Blob` directly to Node's `Response` can stringify it and
   create a false image-format failure.
@@ -312,4 +322,13 @@ generate({ ...currentImageSettings, references: currentDraft });
 // Correct: retry reads the persisted message snapshot and output is a local
 // attachment linked to that message.
 generateFromSnapshot(imageGenerationPart);
+
+// Wrong: an absolute action covers the center of a small preview trigger.
+<button className="absolute inset-0">Use as reference</button>;
+
+// Correct: preview and reference actions have independent hit targets.
+<button onClick={openOriginal}>...</button>;
+<div className="message-image-actions">
+  <button onClick={useAsReference}>...</button>
+</div>;
 ```

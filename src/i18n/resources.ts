@@ -150,6 +150,9 @@ export const resources = {
       imageGenerationSnapshot:
         "图片模型：{{model}} · {{size}} · {{quality}} · {{format}}",
       attachedImage: "附加图片",
+      viewOriginalImage: "查看原图",
+      imagePreviewDescription: "以大图预览原始图片",
+      downloadOriginalImage: "下载原图",
       loadRemoteImage: "加载远程图片",
       loadRemoteImageWithAlt: "加载远程图片：{{alt}}",
       thinking: "正在思考…",
@@ -770,6 +773,9 @@ export const resources = {
       imageGenerationSnapshot:
         "Image model: {{model}} · {{size}} · {{quality}} · {{format}}",
       attachedImage: "Attached image",
+      viewOriginalImage: "View original image",
+      imagePreviewDescription: "Preview the original image at a larger size",
+      downloadOriginalImage: "Download original image",
       loadRemoteImage: "Load remote image",
       loadRemoteImageWithAlt: "Load remote image: {{alt}}",
       thinking: "Thinking…",
