@@ -80,6 +80,44 @@ test("generates and edits persistent images without desktop or mobile overflow",
     n: 1,
   });
   await expect(generatedImages(page)).toHaveCount(1);
+  const downloadLink = page
+    .getByRole("link", { name: "Download original image" })
+    .first();
+  await expect(downloadLink).toHaveAttribute("href", /^blob:/u);
+  await expect(downloadLink).toHaveAttribute(
+    "download",
+    /^CherryChat_\d{8}_\d{6}_\d{3}\.webp$/u,
+  );
+  expect(
+    await downloadLink.evaluate((element) =>
+      Boolean(element.closest(".message-actions")),
+    ),
+  ).toBe(true);
+  if (!mobile) {
+    const downloadStarted = page.waitForEvent("download");
+    await downloadLink.click();
+    const download = await downloadStarted;
+    expect(download.suggestedFilename()).toMatch(
+      /^CherryChat_\d{8}_\d{6}_\d{3}\.webp$/u,
+    );
+  }
+  const previewTrigger = page
+    .getByRole("button", { name: "View original image" })
+    .first();
+  await previewTrigger.click();
+  const previewDialog = page.getByRole("dialog", {
+    name: "View original image",
+  });
+  await expect(previewDialog).toBeVisible();
+  await expect(
+    previewDialog.getByRole("img", { name: "Attached image" }),
+  ).toHaveAttribute("src", /^blob:/u);
+  await expect(
+    previewDialog.getByRole("link", { name: "Download original image" }),
+  ).toHaveCount(0);
+  await previewDialog.getByRole("button", { name: "Close" }).click();
+  await expect(previewDialog).toBeHidden();
+  await expectNoHorizontalOverflow(page.locator("body"));
   await expect(
     page.getByText(/Image model: GPT Image 2.*1440x2560.*High.*WEBP/u),
   ).toBeVisible();

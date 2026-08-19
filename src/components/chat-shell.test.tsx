@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -910,6 +911,49 @@ describe("ChatShell", () => {
         "generated-1",
       ),
     );
+  });
+
+  it("opens a generated image preview and exposes the original image", async () => {
+    const user = userEvent.setup();
+    const controller = createController({
+      ...createAssistantMessage("completed"),
+      createdAt: "2026-07-17T12:34:56.789Z",
+      parts: [
+        {
+          type: "image_generation",
+          modelId: "gpt-image-1.5",
+          connectionScope: "image:byok:test",
+          size: "1024x1024",
+          quality: "high",
+          referenceAttachmentIds: [],
+        },
+        { type: "image_ref", attachmentId: "generated-1", alt: "Cherry" },
+      ],
+    });
+    controller.attachmentUrls = { "generated-1": "blob:generated-1" };
+    vi.mocked(useChatController).mockReturnValue(controller);
+    renderShell();
+
+    const downloadLink = screen.getByRole("link", { name: "下载原图" });
+    expect(downloadLink.getAttribute("download")).toMatch(
+      /^CherryChat_\d{8}_\d{6}_789\.png$/u,
+    );
+    expect(downloadLink).toHaveAttribute("href", "blob:generated-1");
+    const trigger = screen.getByRole("button", { name: "查看原图" });
+    await user.click(trigger);
+
+    const dialog = screen.getByRole("dialog", { name: "查看原图" });
+    expect(within(dialog).getByRole("img", { name: "Cherry" })).toHaveAttribute(
+      "src",
+      "blob:generated-1",
+    );
+    expect(within(dialog).queryByRole("link", { name: "下载原图" })).toBeNull();
+
+    await user.click(within(dialog).getByRole("button", { name: "关闭" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "查看原图" })).toBeNull(),
+    );
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it("saves the selected Tavily settings from the shared controls", async () => {

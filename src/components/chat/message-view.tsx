@@ -6,9 +6,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Download,
   Globe2,
   ImagePlus,
   LoaderCircle,
+  Maximize2,
   Pencil,
   RotateCcw,
   Save,
@@ -20,6 +22,7 @@ import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { BrandIcon } from "@/components/chat/brand-icon";
+import { ImagePreviewDialog } from "@/components/chat/image-preview-dialog";
 import { TextTooltip } from "@/components/chat/text-tooltip";
 import { MessageMarkdown } from "@/components/message-markdown";
 import { useNotifications } from "@/components/notifications/notification-provider";
@@ -42,10 +45,15 @@ export function MessageView({
   const { notify } = useNotifications();
   const editFieldId = useId();
   const editTriggerRef = useRef<HTMLButtonElement>(null);
+  const imagePreviewTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editDraft, setEditDraft] = useState("");
   const [editPending, setEditPending] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<{
+    alt: string;
+    src: string;
+  } | null>(null);
   const siblings = chat.allMessages
     .filter((candidate) => candidate.parentId === message.parentId)
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
@@ -55,6 +63,12 @@ export function MessageView({
   const imageGeneration = message.parts.find(
     (part) => part.type === "image_generation",
   );
+  const generatedImage = imageGeneration
+    ? message.parts.find((part) => part.type === "image_ref")
+    : undefined;
+  const generatedImageUrl = generatedImage
+    ? chat.attachmentUrls[generatedImage.attachmentId]
+    : undefined;
   const generationBusy =
     chat.generationStarting ||
     Boolean(chat.stream) ||
@@ -320,43 +334,73 @@ export function MessageView({
               <div className="message-attachments">
                 {message.parts
                   .filter((part) => part.type === "image_ref")
-                  .map((part) => (
-                    <div className="message-image" key={part.attachmentId}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        alt={part.alt ?? t("attachedImage")}
-                        src={chat.attachmentUrls[part.attachmentId]}
-                      />
-                      {message.role === "assistant" && imageGeneration ? (
-                        <TextTooltip content={t("useAsImageReference")}>
+                  .map((part) => {
+                    const src = chat.attachmentUrls[part.attachmentId];
+                    const alt = part.alt ?? t("attachedImage");
+                    if (!src) return null;
+
+                    return (
+                      <div className="message-image" key={part.attachmentId}>
+                        <TextTooltip content={t("viewOriginalImage")}>
                           <button
-                            aria-label={t("useAsImageReference")}
-                            className="message-image-reference-button"
-                            disabled={generationBusy}
-                            onClick={() =>
-                              void chat
-                                .addStoredImageReference(part.attachmentId)
-                                .then(() =>
-                                  notify({
-                                    message: t("imageReferenceAdded"),
-                                    tone: "success",
-                                  }),
-                                )
-                                .catch((cause: unknown) =>
-                                  notify({
-                                    message: formatUserFacingError(cause, t),
-                                    tone: "error",
-                                  }),
-                                )
-                            }
+                            aria-label={t("viewOriginalImage")}
+                            className="message-image-preview-button"
+                            onClick={(event) => {
+                              imagePreviewTriggerRef.current =
+                                event.currentTarget;
+                              setPreviewImage({ alt, src });
+                            }}
                             type="button"
                           >
-                            <ImagePlus aria-hidden="true" className="size-4" />
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img alt={alt} src={src} />
+                            <span
+                              aria-hidden="true"
+                              className="message-image-preview-indicator"
+                            >
+                              <Maximize2 className="size-4" />
+                            </span>
                           </button>
                         </TextTooltip>
-                      ) : null}
-                    </div>
-                  ))}
+                        {message.role === "assistant" && imageGeneration ? (
+                          <div className="message-image-actions">
+                            <TextTooltip content={t("useAsImageReference")}>
+                              <button
+                                aria-label={t("useAsImageReference")}
+                                className="message-image-reference-button"
+                                disabled={generationBusy}
+                                onClick={() =>
+                                  void chat
+                                    .addStoredImageReference(part.attachmentId)
+                                    .then(() =>
+                                      notify({
+                                        message: t("imageReferenceAdded"),
+                                        tone: "success",
+                                      }),
+                                    )
+                                    .catch((cause: unknown) =>
+                                      notify({
+                                        message: formatUserFacingError(
+                                          cause,
+                                          t,
+                                        ),
+                                        tone: "error",
+                                      }),
+                                    )
+                                }
+                                type="button"
+                              >
+                                <ImagePlus
+                                  aria-hidden="true"
+                                  className="size-4"
+                                />
+                              </button>
+                            </TextTooltip>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
               </div>
             </>
           )}
@@ -396,6 +440,22 @@ export function MessageView({
                 >
                   <Copy aria-hidden="true" className="size-3.5" />
                 </button>
+              </TextTooltip>
+            ) : null}
+            {message.role === "assistant" &&
+            imageGeneration &&
+            generatedImageUrl ? (
+              <TextTooltip content={t("downloadOriginalImage")}>
+                <a
+                  aria-label={t("downloadOriginalImage")}
+                  download={imageDownloadFilename(
+                    message.createdAt,
+                    imageGeneration.outputFormat ?? "png",
+                  )}
+                  href={generatedImageUrl}
+                >
+                  <Download aria-hidden="true" className="size-3.5" />
+                </a>
               </TextTooltip>
             ) : null}
             {message.role === "user" ? (
@@ -507,6 +567,21 @@ export function MessageView({
         <div aria-hidden="true" className="user-mark">
           <UserRound size={17} strokeWidth={2.1} />
         </div>
+      ) : null}
+      {previewImage ? (
+        <ImagePreviewDialog
+          alt={previewImage.alt}
+          onOpenChange={(open) => {
+            if (open) return;
+            setPreviewImage(null);
+            window.requestAnimationFrame(() => {
+              const trigger = imagePreviewTriggerRef.current;
+              if (trigger?.isConnected) trigger.focus();
+            });
+          }}
+          open
+          src={previewImage.src}
+        />
       ) : null}
     </article>
   );
@@ -630,4 +705,28 @@ function webSearchErrorMessage(
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function imageDownloadFilename(
+  createdAt: string,
+  outputFormat: string,
+): string {
+  const parsed = new Date(createdAt);
+  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const datePart = [
+    date.getFullYear(),
+    padNumber(date.getMonth() + 1, 2),
+    padNumber(date.getDate(), 2),
+  ].join("");
+  const timePart = [
+    padNumber(date.getHours(), 2),
+    padNumber(date.getMinutes(), 2),
+    padNumber(date.getSeconds(), 2),
+  ].join("");
+
+  return `CherryChat_${datePart}_${timePart}_${padNumber(date.getMilliseconds(), 3)}.${outputFormat}`;
+}
+
+function padNumber(value: number, length: number): string {
+  return String(value).padStart(length, "0");
 }
