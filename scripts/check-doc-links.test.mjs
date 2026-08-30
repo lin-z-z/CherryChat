@@ -156,7 +156,7 @@ test("reports missing release navigation", async () => {
 
 async function createValidFixture(root) {
   const readmeShared = [
-    "1.1.0",
+    "1.2.0",
     "[Contributing](./CONTRIBUTING.md)",
     "[License](./LICENSE)",
     "https://vercel.com/new/clone",
@@ -172,11 +172,11 @@ async function createValidFixture(root) {
   );
   await writeText(
     "CHANGELOG.md",
-    "# Changelog\n\n[简体中文](./CHANGELOG_CN.md)\n\n## [Unreleased]\n\n## [1.1.0]\n\n### Added\n\nImage generation.\n\n## [1.0.0]\n\n### Known limitations\n\nBackup v2.\n\n[Deployment](./docs/DEPLOYMENT.md)\n[Security](./docs/SECURITY.md)\n[Releases](./docs/RELEASES.md)\n",
+    "# Changelog\n\n[简体中文](./CHANGELOG_CN.md)\n\n## [Unreleased]\n\n## [1.2.0]\n\n### Added\n\nStateless Hosted access.\n\n## [1.1.0]\n\n### Added\n\nImage generation.\n\n## [1.0.0]\n\n### Known limitations\n\nBackup v2.\n\n[Deployment](./docs/DEPLOYMENT.md)\n[Security](./docs/SECURITY.md)\n[Releases](./docs/RELEASES.md)\n",
   );
   await writeText(
     "CHANGELOG_CN.md",
-    "# 变更记录\n\n[English](./CHANGELOG.md)\n\n## [Unreleased]\n\n## [1.1.0]\n\n### 新增\n\n图片生成。\n\n## [1.0.0]\n\n### 已知限制\n\nBackup v2。\n\n[部署](./docs/DEPLOYMENT_CN.md)\n[安全](./docs/SECURITY_CN.md)\n[发布](./docs/RELEASES_CN.md)\n",
+    "# 变更记录\n\n[English](./CHANGELOG.md)\n\n## [Unreleased]\n\n## [1.2.0]\n\n### 新增\n\n无状态 Hosted access。\n\n## [1.1.0]\n\n### 新增\n\n图片生成。\n\n## [1.0.0]\n\n### 已知限制\n\nBackup v2。\n\n[部署](./docs/DEPLOYMENT_CN.md)\n[安全](./docs/SECURITY_CN.md)\n[发布](./docs/RELEASES_CN.md)\n",
   );
   await writeText("CONTRIBUTING.md", "# Contributing\n");
   await writeText("LICENSES.md", "# Licenses\n");
@@ -196,7 +196,7 @@ async function createValidFixture(root) {
         ? "\nBring Your Own Key (BYOK)\nHosted access\nSelf-hosting\nWho supplies the provider key\nWho pays the provider\n[Images](./IMAGE_GENERATION.md)\nIMAGE_GENERATION_PROFILES\n"
         : "",
       englishName === "README.md"
-        ? "\nv1.1.0\n[Images](./IMAGE_GENERATION.md)\n[Releases](./RELEASES.md)\n[Changelog](../CHANGELOG.md)\n"
+        ? "\nv1.2.0\n[Images](./IMAGE_GENERATION.md)\n[Releases](./RELEASES.md)\n[Changelog](../CHANGELOG.md)\n"
         : "",
       englishName === "RELEASES.md"
         ? "\nvMAJOR.MINOR.PATCH\nworkflow_dispatch\nactions: read\ncontents: write\nPublic tags are immutable\n"
@@ -210,7 +210,7 @@ async function createValidFixture(root) {
         ? "\n自带 API Key（BYOK）\n托管访问（Hosted access）\n自托管（Self-hosting）\n谁提供 Provider Key\n谁承担 Provider 费用\n[图片](./IMAGE_GENERATION_CN.md)\nIMAGE_GENERATION_PROFILES\n"
         : "",
       chineseName === "README_CN.md"
-        ? "\nv1.1.0\n[图片](./IMAGE_GENERATION_CN.md)\n[发布](./RELEASES_CN.md)\n[变更记录](../CHANGELOG_CN.md)\n"
+        ? "\nv1.2.0\n[图片](./IMAGE_GENERATION_CN.md)\n[发布](./RELEASES_CN.md)\n[变更记录](../CHANGELOG_CN.md)\n"
         : "",
       chineseName === "RELEASES_CN.md"
         ? "\nvMAJOR.MINOR.PATCH\nworkflow_dispatch\nactions: read\ncontents: write\n公开 Tag 不可移动\n"
