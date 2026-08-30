@@ -7,12 +7,13 @@
   <p>
     <a href="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml"><img src="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml/badge.svg" alt="CI 状态" /></a>
     <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT 许可证" /></a>
-    <img src="https://img.shields.io/badge/version-1.1.0-16a34a.svg" alt="CherryChat v1.1.0" />
+    <img src="https://img.shields.io/badge/version-1.2.0-16a34a.svg" alt="CherryChat v1.2.0" />
   </p>
 </div>
 
 > [!IMPORTANT]
-> CherryChat v1.1.0 在 v1.0.0 建立的稳定契约上增加了集成图片生成与参考图编辑。
+> CherryChat v1.2.0 在 v1.1.0 建立的稳定契约上，将 Hosted access 改为每个请求都
+> 校验访问码，并增加原图预览与下载。
 > 项目不提供账号、云同步、组织权限、集中审计或计费控制。将 Hosted Key 实例
 > 分享给他人前，请先阅读
 > [安全说明](./docs/SECURITY_CN.md)和[部署边界](./docs/DEPLOYMENT_CN.md)。

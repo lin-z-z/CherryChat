@@ -8,6 +8,91 @@ capabilities and limitations.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-30
+
+### Summary
+
+`v1.2.0` makes Hosted authentication stateless and adds original-image previews
+and downloads, on top of the browser-local, BYOK, Hosted access, search, image
+generation, backup, and deployment contracts established by `v1.1.0`.
+
+### Highlights
+
+- Hosted access is validated on every request against the current `ACCESS_CODE`
+  allowlist. The browser resubmits its stored code in the
+  `X-CherryChat-Access-Code` header, so a still-valid code survives cookie
+  expiry, redeploys, and host changes instead of depending on a 7-day session.
+- A missing header reports `HOSTED_AUTH_REQUIRED` and a rejected code reports
+  `ACCESS_CODE_INVALID`, both as HTTP 401, so Hosted authentication failures
+  stay distinguishable from upstream and BYOK API key failures.
+- Generated images open in an accessible original-size preview and can be saved
+  as timestamped local downloads.
+- The About page reports the running deployment version, and a long-lived page
+  prompts for a refresh once a newer version is published; refreshing reloads
+  only the document and keeps local conversations and settings.
+
+### Changed
+
+- Removed Hosted session issuance and verification. `POST /api/auth` only
+  verifies a code for the settings page and returns a boolean; `DELETE
+/api/auth` only clears the legacy `cherrychat_session` cookie left by earlier
+  releases.
+- **Revoking Hosted access is now an `ACCESS_CODE` change.** Removing or
+  replacing a code takes effect on that code's next request. Rotating
+  `AUTH_SECRET` no longer signs clients out; it changes only digest derivation
+  and the rate-limit client fingerprint.
+- The access code header is percent-encoded because HTTP headers cannot carry
+  the non-ASCII codes the configuration allows. A malformed encoding counts as
+  invalid rather than missing, so it cannot bypass throttling.
+- A rejected code on any Hosted route now counts toward the same per-client and
+  global failure window that protects explicit sign-in, and a throttled client
+  receives HTTP 429 with `Retry-After`. `GET /api/config` is the exception: it
+  never fails for authentication and reports `authenticated: false` while
+  throttled, so a page still loads and the endpoint is not a brute-force oracle.
+- Resubmitting an unchanged Hosted access code is allowed, so the settings
+  dirty-state gate can no longer block re-verification.
+- Fixed a startup ordering defect where a valid stored access code read as
+  unauthenticated because `GET /api/config` was requested before the stored
+  connection resolved.
+
+### Known limitations
+
+- The access code header is attached only to same-origin CherryChat routes and
+  is never forwarded to an upstream model, search, or image service. It is a
+  deployment-shared credential, not a per-user account: CherryChat still
+  provides no accounts, cloud synchronization, global usage ledger, billing
+  control, or hosted-service SLA.
+- Authentication-failure and concurrency guards are process-local. On a
+  serverless platform they are not a globally consistent quota. A public Hosted
+  deployment still needs an upstream spending limit and an abuse-response plan.
+- The refresh prompt compares only `major.minor.patch` and ignores prerelease
+  metadata. It is checked when a page regains focus or visibility, not on a
+  timer, so a page that never loses focus will not observe a new deployment.
+
+### Upgrade and backup
+
+This release does not add an IndexedDB schema migration, and local
+conversations, settings, and the stored access code are preserved.
+
+A browser still running a pre-`v1.2.0` bundle does not send the access code
+header and will receive `HOSTED_AUTH_REQUIRED` on Hosted requests until it
+reloads. Reloading is sufficient; the stored access code does not need to be
+re-entered. Because the refresh prompt ships in this release, a page loaded
+before it cannot display that prompt for itself. Deployment operators should
+expect to reload any long-lived tab once after updating.
+
+Create a full backup before updating an existing deployment or browser profile;
+credentials remain intentionally excluded.
+
+### Deployment and security
+
+No new deployment credential is required, and existing `ACCESS_CODE` values
+continue to work. Operators who previously relied on rotating `AUTH_SECRET` to
+sign clients out must now remove or replace the shared `ACCESS_CODE`. Access
+codes are normalized, bounded to 256 UTF-8 bytes, HMAC-SHA-256 digested, and
+compared against every configured code with timing-safe comparison; they are not
+written to responses, error details, or logs.
+
 ## [1.1.0] - 2026-08-18
 
 ### Summary
