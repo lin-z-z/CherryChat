@@ -42,6 +42,8 @@ export interface ImageGenerationEndpoint {
   baseUrl: string;
   apiKey: string;
   mode: "byok" | "hosted";
+  /** Hosted credential sent only to the same-origin image route. */
+  accessCode?: string | undefined;
 }
 
 const imageGenerationRequestShape = {

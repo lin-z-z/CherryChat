@@ -163,6 +163,7 @@ describe("chat controller projections", () => {
         },
         {
           hostedEnabled: true,
+          appVersion: "1.1.0",
           byokEnabled: true,
           defaultModel: "gpt-5-mini",
           titleModel: null,

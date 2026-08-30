@@ -1,5 +1,5 @@
 import { getServerConfig, toPublicServerConfig } from "@/server/config";
-import { hasValidHostedSession } from "@/server/hosted-session";
+import { hasValidHostedAccessCode } from "@/server/hosted-access-code";
 import { errorResponse, jsonResponse } from "@/server/http";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request): Promise<Response> {
   try {
     const config = getServerConfig();
-    const authenticated = hasValidHostedSession(request, config.hosted);
+    const authenticated = hasValidHostedAccessCode(request, config.hosted);
     return jsonResponse({ ...toPublicServerConfig(config), authenticated });
   } catch {
     return errorResponse(

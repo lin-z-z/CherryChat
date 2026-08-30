@@ -97,8 +97,11 @@ function createController(
   return {
     ready: true,
     online: true,
+    updateAvailable: false,
+    reloadForUpdate: vi.fn(),
     storageDegraded: false,
     publicConfig: {
+      appVersion: "1.1.0",
       byokEnabled: true,
       hostedEnabled: true,
       hostedWebSearchEnabled: false,
@@ -1358,6 +1361,7 @@ describe("ChatShell", () => {
     const controller = createController();
     controller.settingsOpen = true;
     controller.publicConfig = {
+      appVersion: "1.1.0",
       byokEnabled: true,
       hostedEnabled: false,
       hostedWebSearchEnabled: false,
@@ -1569,6 +1573,7 @@ describe("ChatShell", () => {
     const controller = createController();
     controller.settingsOpen = true;
     controller.publicConfig = {
+      appVersion: "1.1.0",
       byokEnabled: true,
       hostedEnabled: false,
       hostedWebSearchEnabled: false,
@@ -1600,6 +1605,70 @@ describe("ChatShell", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存连接" })).toBeDisabled();
     expect(controller.saveConnection).not.toHaveBeenCalled();
+  });
+
+  it("resubmits an unchanged hosted access code to re-verify it", async () => {
+    const controller = createController();
+    controller.settingsOpen = true;
+    controller.connection = {
+      ...controller.connection,
+      mode: "hosted",
+      accessCode: "saved-code",
+    };
+    vi.mocked(useChatController).mockReturnValue(controller);
+    renderShell();
+
+    fireEvent.click(screen.getByRole("tab", { name: "模型服务" }));
+    const save = screen.getByRole("button", { name: "保存连接" });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+
+    await waitFor(() =>
+      expect(controller.saveConnection).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: "hosted", accessCode: "saved-code" }),
+      ),
+    );
+  });
+
+  it("blocks a hosted save while the access code is empty", () => {
+    const controller = createController();
+    controller.settingsOpen = true;
+    controller.connection = {
+      ...controller.connection,
+      mode: "hosted",
+      accessCode: "",
+    };
+    vi.mocked(useChatController).mockReturnValue(controller);
+    renderShell();
+
+    fireEvent.click(screen.getByRole("tab", { name: "模型服务" }));
+
+    expect(screen.getByRole("button", { name: "保存连接" })).toBeDisabled();
+    expect(controller.saveConnection).not.toHaveBeenCalled();
+  });
+
+  it("offers a refresh when a newer deployment is published", () => {
+    const controller = createController();
+    controller.updateAvailable = true;
+    vi.mocked(useChatController).mockReturnValue(controller);
+    renderShell();
+
+    expect(screen.getByText(/有新版本发布/u)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "刷新页面" }));
+
+    expect(controller.reloadForUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the refresh notice when the bundle is current", () => {
+    const controller = createController();
+    controller.updateAvailable = false;
+    vi.mocked(useChatController).mockReturnValue(controller);
+    renderShell();
+
+    expect(screen.queryByText(/有新版本发布/u)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "刷新页面" }),
+    ).not.toBeInTheDocument();
   });
 
   it("saves the default model independently", async () => {

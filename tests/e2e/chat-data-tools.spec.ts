@@ -587,9 +587,21 @@ test("uses hosted web search immediately after access-code sign-in", async ({
       body: JSON.stringify({ authenticated: true }),
     });
   });
+  await page.route("**/api/models", async (route) => {
+    expect(route.request().headers()["x-cherrychat-access-code"]).toBe(
+      "visitor-code",
+    );
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ data: [{ id: "gpt-4.1-mini" }] }),
+    });
+  });
   await page.route("**/api/web-search", async (route) => {
     hostedSearchPosts += 1;
     expect(route.request().headers().authorization).toBeUndefined();
+    expect(route.request().headers()["x-cherrychat-access-code"]).toBe(
+      "visitor-code",
+    );
     expect(route.request().postDataJSON()).toEqual({
       query: "Web search connection test",
       maxResults: 6,

@@ -15,7 +15,7 @@ import {
   type HostedRequestGuard,
   type HostedRequestLease,
 } from "@/server/hosted-request-guard";
-import { requireHostedSession } from "@/server/hosted-session";
+import { requireHostedAccessCode } from "@/server/hosted-access-code";
 import {
   errorResponse,
   jsonResponse,
@@ -50,7 +50,11 @@ export async function handleHostedWebSearch(
   let lease: HostedRequestLease | null = null;
   try {
     assertSameOrigin(request);
-    const hosted = requireHostedSession(request, config.hosted);
+    const hosted = requireHostedAccessCode(
+      request,
+      config.hosted,
+      requestGuard,
+    );
     if (!hosted.webSearch) {
       throw new RequestSecurityError(
         404,

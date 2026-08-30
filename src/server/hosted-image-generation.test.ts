@@ -7,11 +7,7 @@ import type {
 import { handleHostedImageGeneration } from "@/server/hosted-image-generation";
 import { HostedRequestGuard } from "@/server/hosted-request-guard";
 import { MAX_IMAGE_GENERATION_RESPONSE_BYTES } from "@/runtime/image-generation/image-generation-contract";
-import {
-  authenticateAccessCode,
-  createSessionToken,
-  SESSION_COOKIE_NAME,
-} from "@/server/auth";
+import { ACCESS_CODE_HEADER_NAME } from "@/server/auth";
 
 const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -66,6 +62,8 @@ describe("hosted image generation", () => {
     expect(new Headers(init?.headers).get("authorization")).toBe(
       "Bearer image-deployment-key",
     );
+    expect(new Headers(init?.headers).has(ACCESS_CODE_HEADER_NAME)).toBe(false);
+    expect(String(init?.body)).not.toContain("access-code");
     expect(JSON.parse(String(init?.body))).toEqual({
       ...requestBody(),
       model: "deployment-image-model",
@@ -341,6 +339,20 @@ describe("hosted image generation", () => {
       createGuard(),
     );
     expect(unauthenticated.status).toBe(401);
+    await expect(unauthenticated.json()).resolves.toMatchObject({
+      error: { code: "HOSTED_AUTH_REQUIRED" },
+    });
+
+    const revoked = await handleHostedImageGeneration(
+      imageRequest(JSON.stringify(requestBody()), "application/json", {
+        [ACCESS_CODE_HEADER_NAME]: "revoked-code",
+      }),
+      config,
+      fetchMock as unknown as typeof fetch,
+      createGuard(),
+    );
+    expect(revoked.status).toBe(401);
+    expect(await revoked.text()).toContain("ACCESS_CODE_INVALID");
 
     const crossOrigin = await handleHostedImageGeneration(
       imageRequest(JSON.stringify(requestBody()), "application/json", {
@@ -401,11 +413,9 @@ function imageRequest(
 }
 
 function authenticatedHeaders(extra: Record<string, string> = {}): Headers {
-  const codeId = authenticateAccessCode("access-code", config.hosted!);
-  if (!codeId) throw new Error("Hosted test session is invalid");
   return new Headers({
     Origin: "https://cherry.example",
-    Cookie: `${SESSION_COOKIE_NAME}=${createSessionToken(config.hosted!.authSecret, codeId)}`,
+    [ACCESS_CODE_HEADER_NAME]: config.hosted?.accessCodes[0] ?? "",
     ...extra,
   });
 }

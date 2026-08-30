@@ -71,9 +71,10 @@ Key。
 - 不会把访客路由到原生 Anthropic、原生 Gemini、OpenAI Responses 或任意 New API
   Endpoint 类型。
 - 托管模型必须存在于部署 `MODELS` 白名单中。
-- 删除一个访问码会使由该访问码创建的 Session 失效；轮换 `AUTH_SECRET` 会使
-  全部 Session 失效。
-- 进程内并发和登录 Guard 会随 Serverless Instance 重置或分散。它们不是全局用户
+- 托管身份验证是无状态的：浏览器在每次请求时重新提交访问码。删除或替换某个访问码
+  会在它的下一次请求时生效。轮换 `AUTH_SECRET` **不会**让客户端登出；撤销访问请
+  修改 `ACCESS_CODE`。
+- 进程内并发和身份验证失败 Guard 会随 Serverless Instance 重置或分散。它们不是全局用户
   配额、每日预算或计费账本。
 
 ## 本地开发
@@ -148,7 +149,7 @@ IMAGE_GENERATION_MODEL=gpt-image-2
 | `DEFAULT_MODEL`                    | 否       | `MODELS` 第一项                 | 托管默认模型，必须存在于 `MODELS` 中。                 |
 | `TITLE_MODEL`                      | 否       | `DEFAULT_MODEL`                 | 部署端标题模型，必须存在于 `MODELS` 中。               |
 | `ACCESS_CODE`                      | 托管访问 | 无                              | 逗号分隔的访客访问码，每个最多 256 UTF-8 Byte。        |
-| `AUTH_SECRET`                      | 托管访问 | 无                              | 至少 32 UTF-8 Byte 的 HMAC/Session Secret。            |
+| `AUTH_SECRET`                      | 托管访问 | 无                              | 至少 32 UTF-8 Byte 的 HMAC Digest Secret。             |
 | `WEB_SEARCH_PROVIDER`              | 否       | `tavily`                        | 默认 Hosted Provider：`tavily`、`exa` 或 `grok`。      |
 | `WEB_SEARCH_ALLOWED_PROVIDERS`     | 否       | 仅默认 Provider                 | 访问码用户可选的有序 Provider 列表。                   |
 | `TAVILY_API_KEY`                   | 否       | 无                              | 选择 Tavily 时使用的部署方 Key。                       |
@@ -247,11 +248,14 @@ BYOK-only Demo 不得设置：
 
 共享托管部署建议：
 
-1. 发布一条只匹配 `POST /api/auth` 的 Vercel Firewall Rate-limit Rule。
+1. 发布一条只匹配 `POST /api/auth` 的 Vercel Firewall Rate-limit Rule。由于托管
+   身份验证是无状态的，任意托管路由上的无效访问码也会计入进程内身份验证失败
+   Guard。
 2. 以客户端 IP、固定 60 秒窗口、五次匹配请求和一分钟拒绝期作为仓库初始建议。
 3. 注意区域 Counter 和共享公网 IP 会影响结果。
 4. 设置上游账号消费限额；CherryChat 不提供全局消费账本。
-5. 使用较长的随机访问码；需要撤销全部 Session 时轮换 `AUTH_SECRET`。
+5. 使用较长的随机访问码；需要撤销访问时删除或替换 `ACCESS_CODE` 并重新部署，轮换
+   `AUTH_SECRET` 不会撤销访问。
 6. 在真实认证流量后检查不含凭据的日志。
 
 应用还会应用尽力而为的单实例登录与并发 Guard。它们只能作为纵深防御。

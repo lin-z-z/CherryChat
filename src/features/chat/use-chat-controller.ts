@@ -24,6 +24,7 @@ import {
   resolveWebSearchSource,
   type GenerationPreparation,
 } from "@/features/chat/chat-controller-projections";
+import { isNewerAppVersion } from "@/lib/app-version";
 import { formatUserFacingError } from "@/lib/user-facing-error";
 import { ImageProcessor } from "@/runtime/attachments/image-processor";
 import { ImageReferenceProcessor } from "@/runtime/image-generation/image-reference-processor";
@@ -78,8 +79,11 @@ import {
 import {
   ChatTransportError,
   errorCodeForStatus,
+  hostedAuthErrorCodeFromBody,
+  isHostedAuthErrorCode,
 } from "@/runtime/transport/chat-errors";
 import { createChatTransport } from "@/runtime/transport/chat-transport-factory";
+import { hostedAccessCodeHeaders } from "@/runtime/transport/hosted-auth";
 import {
   DEFAULT_REQUEST_TIMEOUT_POLICY,
   type RequestTimeoutPolicy,
@@ -142,6 +146,25 @@ const THEME_STORAGE_KEY = "cherrychat.theme";
 const DEFAULT_MODEL_SETTINGS_KEY = "defaultModel";
 const TITLE_MODEL_SETTINGS_KEY = "titleModel";
 const TITLE_ATTEMPT_PREFIX = "title-attempt:";
+const VERSION_CHECK_COOLDOWN_MS = 5 * 60 * 1000;
+
+/**
+ * Loads public deployment config, attaching the Hosted access code so the server
+ * can report authentication for this browser. Always uncached so a page opened
+ * before a deployment still observes the current version.
+ */
+async function fetchPublicConfig(
+  connection: {
+    mode: "byok" | "hosted";
+    accessCode?: string | null | undefined;
+  } | null,
+): Promise<PublicConfig> {
+  const response = await fetch("/api/config", {
+    cache: "no-store",
+    headers: connection ? hostedAccessCodeHeaders(connection) : {},
+  });
+  return parsePublicConfig(await response.json());
+}
 
 export type AppTheme = "system" | "light" | "dark";
 export type ChatController = ReturnType<typeof useChatController>;
@@ -209,7 +232,9 @@ export function useChatController() {
   const conversationLoadEpochRef = useRef(0);
   const webSearchEnabledRef = useRef(false);
   const hostedAuthEpochRef = useRef(0);
+  const versionCheckedAtRef = useRef(0);
   const [ready, setReady] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const [online, setOnline] = useState(true);
   const [storageDegraded, setStorageDegraded] = useState(false);
   const [publicConfig, setPublicConfig] = useState<PublicConfig | null>(null);
@@ -348,6 +373,54 @@ export function useChatController() {
       window.removeEventListener("online", updateOnlineState);
       window.removeEventListener("offline", updateOnlineState);
     };
+  }, []);
+
+  /**
+   * Re-reads public config so a long-lived page can notice a newer deployment
+   * and re-confirm Hosted authentication. Failures stay silent: the existing
+   * config and error surfaces already cover an unreachable server.
+   */
+  const refreshPublicConfig = useCallback(async () => {
+    const authEpoch = hostedAuthEpochRef.current;
+    let config: PublicConfig;
+    try {
+      config = await fetchPublicConfig(connectionRef.current);
+    } catch {
+      return;
+    }
+    requestTimeoutsRef.current = config.requestTimeouts;
+    if (isNewerAppVersion(config.appVersion)) setUpdateAvailable(true);
+    setPublicConfig((current) => {
+      if (!current) return config;
+      // An explicit verify or auth failure that landed while this request was in
+      // flight owns the authentication state.
+      return authEpoch === hostedAuthEpochRef.current
+        ? config
+        : { ...config, authenticated: current.authenticated };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return undefined;
+    const checkForUpdate = () => {
+      if (document.visibilityState === "hidden") return;
+      const now = Date.now();
+      if (now - versionCheckedAtRef.current < VERSION_CHECK_COOLDOWN_MS) return;
+      versionCheckedAtRef.current = now;
+      void refreshPublicConfig();
+    };
+    window.addEventListener("focus", checkForUpdate);
+    document.addEventListener("visibilitychange", checkForUpdate);
+    return () => {
+      window.removeEventListener("focus", checkForUpdate);
+      document.removeEventListener("visibilitychange", checkForUpdate);
+    };
+  }, [ready, refreshPublicConfig]);
+
+  const reloadForUpdate = useCallback(() => {
+    // Only reloads the document; local conversations, connection and settings
+    // stay in IndexedDB and localStorage.
+    window.location.reload();
   }, []);
 
   const requireServices = useCallback(() => {
@@ -579,12 +652,19 @@ export function useChatController() {
         activeServices = services;
         servicesRef.current = services;
         await services.conversations.recoverInterruptedMessages();
-        const publicConfigPromise = fetch("/api/config", {
-          cache: "no-store",
-        }).then(async (response) => parsePublicConfig(await response.json()));
+        // The stored connection must resolve first so /api/config can carry the
+        // Hosted access code; otherwise a valid code reads as unauthenticated.
+        const stored = await services.connections.load();
+        const publicConfigPromise = fetchPublicConfig(
+          stored
+            ? {
+                mode: stored.connection.mode,
+                accessCode: stored.credential.accessCode,
+              }
+            : null,
+        );
         const [
           config,
-          stored,
           storedDefaultModel,
           storedTitleModel,
           active,
@@ -593,7 +673,6 @@ export function useChatController() {
           nextImageGenerationConfig,
         ] = await Promise.all([
           publicConfigPromise,
-          services.connections.load(),
           services.database.settings.get(DEFAULT_MODEL_SETTINGS_KEY),
           services.database.settings.get(TITLE_MODEL_SETTINGS_KEY),
           services.conversations.listConversations(false),
@@ -641,6 +720,8 @@ export function useChatController() {
           requiredModelIds: [nextDefaultModel, nextTitleModel],
         });
         if (disposed) return;
+        versionCheckedAtRef.current = Date.now();
+        if (isNewerAppVersion(config.appVersion)) setUpdateAvailable(true);
         setPublicConfig(config);
         connectionRef.current = nextConnection;
         modelDescriptorsRef.current = structuredClone(initialModelDescriptors);
@@ -735,6 +816,25 @@ export function useChatController() {
     [refreshLists, requireServices],
   );
 
+  /**
+   * Marks Hosted access as unauthenticated when the server rejects the access
+   * code. The locally stored code is preserved so the user can re-verify it from
+   * settings rather than retyping it.
+   */
+  const noteHostedAuthFailure = useCallback((cause: unknown) => {
+    if (
+      !(cause instanceof ChatTransportError) ||
+      !isHostedAuthErrorCode(cause.code) ||
+      connectionRef.current.mode !== "hosted"
+    ) {
+      return;
+    }
+    hostedAuthEpochRef.current += 1;
+    setPublicConfig((current) =>
+      current ? { ...current, authenticated: false } : current,
+    );
+  }, []);
+
   const buildTransport = useCallback(
     (value: ConnectionDraft) =>
       createChatTransport(
@@ -805,6 +905,7 @@ export function useChatController() {
         }
         return nextDescriptors.map(({ id }) => id);
       } catch (cause) {
+        noteHostedAuthFailure(cause);
         const cachedModels = await requireServices()
           .modelLists.load(scope)
           .catch(() => []);
@@ -841,6 +942,7 @@ export function useChatController() {
       buildTransport,
       connection,
       defaultModel,
+      noteHostedAuthFailure,
       publicConfig,
       requireServices,
       resolveCapability,
@@ -864,7 +966,14 @@ export function useChatController() {
               body: JSON.stringify({ accessCode }),
             });
             if (!response.ok) {
-              const code = errorCodeForStatus(response.status);
+              const body = await response.text().catch(() => "");
+              const code =
+                hostedAuthErrorCodeFromBody(body) ??
+                errorCodeForStatus(response.status);
+              hostedAuthEpochRef.current += 1;
+              setPublicConfig((current) =>
+                current ? { ...current, authenticated: false } : current,
+              );
               throw new ChatTransportError(
                 code,
                 t(`chatError.${code}`),
@@ -1131,6 +1240,7 @@ export function useChatController() {
         connectionRef.current.mode,
         input,
         publicConfig,
+        connectionRef.current.accessCode,
       );
       if (!source) {
         throw new ChatTransportError(
@@ -1161,6 +1271,7 @@ export function useChatController() {
             connectionRef.current.mode,
             webSearchConfig,
             publicConfig,
+            connectionRef.current.accessCode,
           ))
       ) {
         throw new ChatTransportError(
@@ -1407,6 +1518,7 @@ export function useChatController() {
           connection.mode,
           webSearchConfig,
           publicConfig,
+          connection.accessCode,
         );
         if (
           conversationRecord.webSearchEnabled &&
@@ -1474,6 +1586,7 @@ export function useChatController() {
           },
         });
       } catch (cause) {
+        noteHostedAuthFailure(cause);
         const transportError =
           cause instanceof ChatTransportError
             ? cause
@@ -1527,6 +1640,7 @@ export function useChatController() {
       loadConversation,
       createHostedWebSearchUnauthorizedHandler,
       modelPreferences,
+      noteHostedAuthFailure,
       publicConfig,
       reasoningChoice,
       refreshLists,
@@ -1682,6 +1796,9 @@ export function useChatController() {
             mode,
             baseUrl: profile.baseUrl,
             apiKey: profile.apiKey,
+            ...(mode === "hosted"
+              ? { accessCode: connectionRef.current.accessCode }
+              : {}),
           },
         });
         const result = await transport.generate(
@@ -1706,6 +1823,7 @@ export function useChatController() {
           result.images,
         );
       } catch (cause) {
+        noteHostedAuthFailure(cause);
         const error = imageGenerationTransportError(cause, timedOut);
         const stopped = error.code === "ABORTED" && !timedOut;
         await services.conversations.failImageGeneration(
@@ -1738,6 +1856,7 @@ export function useChatController() {
     [
       imageGenerationConfig,
       loadConversation,
+      noteHostedAuthFailure,
       publicConfig,
       refreshLists,
       requireServices,
@@ -2653,11 +2772,14 @@ export function useChatController() {
     connection.mode,
     webSearchConfig,
     publicConfig,
+    connection.accessCode,
   );
 
   return {
     ready,
     online,
+    updateAvailable,
+    reloadForUpdate,
     storageDegraded,
     publicConfig,
     connection,

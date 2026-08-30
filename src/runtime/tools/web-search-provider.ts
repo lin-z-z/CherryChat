@@ -30,7 +30,11 @@ export type WebSearchExecutionSource =
       model: string;
       xSearch: boolean;
     }
-  | { kind: "hosted"; provider: WebSearchProviderId };
+  | {
+      kind: "hosted";
+      provider: WebSearchProviderId;
+      accessCode?: string | undefined;
+    };
 
 export interface WebSearchSourceContext {
   connectionMode: "hosted" | "byok";
@@ -39,6 +43,8 @@ export interface WebSearchSourceContext {
   hostedWebSearchProvider: WebSearchProviderId | null;
   hostedWebSearchProviders: readonly WebSearchProviderId[];
   authenticated: boolean;
+  /** Browser-held Hosted access code, sent with same-origin search requests. */
+  accessCode?: string | undefined;
 }
 
 export function resolveWebSearchExecutionSource(
@@ -54,6 +60,7 @@ export function resolveWebSearchExecutionSource(
       ? {
           kind: "hosted",
           provider,
+          ...(context.accessCode ? { accessCode: context.accessCode } : {}),
         }
       : null;
   }
@@ -108,6 +115,9 @@ export function createWebSearchProviderExecutor(options: {
     return createHostedWebSearchToolExecutor({
       maxResults: options.maxResults,
       provider: options.source.provider,
+      ...(options.source.accessCode
+        ? { accessCode: options.source.accessCode }
+        : {}),
       ...(options.fetchImplementation
         ? { fetchImplementation: options.fetchImplementation }
         : {}),

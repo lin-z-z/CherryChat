@@ -41,7 +41,8 @@ BYOK 模型与图片 API Key、访问码输入和可选个人 Tavily、Exa 或 G
 
 凭据保存在独立连接记录中，完整备份、对话导出、搜索、打印输出和公开配置不会
 包含它们。清除全部本地数据会删除 CherryChat IndexedDB 数据、以
-`cherrychat.` 开头的 localStorage 记录、内存预览和托管访问 Session Cookie。
+`cherrychat.` 开头的 localStorage 记录、内存预览，以及旧版本遗留的托管访问
+Session Cookie。
 
 准确的删除和导出规则见[数据与备份行为](./DATA_CN.md)。
 
@@ -50,15 +51,32 @@ BYOK 模型与图片 API Key、访问码输入和可选个人 Tavily、Exa 或 G
 托管访问要求同时配置 `OPENAI_API_KEY`、`ACCESS_CODE` 和 `AUTH_SECRET`，并提供
 非空的 `MODELS` 白名单。配置不完整时会 Fail Closed。
 
+托管身份验证是无状态的。浏览器把访问码保存在本地连接记录中，并在每个托管请求的
+`X-CherryChat-Access-Code` Header 中提交；由于 HTTP Header 不能携带非 ASCII
+Byte，该值使用 Percent-encoding。服务端在每次请求时用当前 `ACCESS_CODE` 白名单
+校验它。没有 Session、Token 和过期时间，因此仍然有效的访问码在重新部署、切换
+访问 Host 或清除 Cookie 之后继续可用。
+
 访问码会经过规范化、限制为最多 256 UTF-8 Byte、使用 HMAC-SHA-256 生成 Digest，
-并与所有已配置访问码进行 Timing-safe 比较。Session Cookie 包含过期时间和不可逆
-Code Identifier，不包含访问码本身。删除一个访问码会使由该访问码创建的 Session
-失效；轮换 `AUTH_SECRET` 会使全部 Session 失效。
+并与所有已配置访问码进行 Timing-safe 比较。该 Header 只在同源 CherryChat 路由上
+被接受，绝不转发给上游模型、搜索或图片服务，也不会写入响应、错误详情或日志。
 
-身份验证 Mutation 要求同源请求。在 HTTPS/生产环境中，Session Cookie 使用
-HttpOnly、Secure 和 SameSite Strict。托管模型 ID 必须属于部署白名单。
+**撤销托管访问的手段是修改 `ACCESS_CODE`。** 删除或替换某个访问码，会在该访问码
+的下一次请求时生效。轮换 `AUTH_SECRET` 不再让客户端登出：它只改变 Digest 派生和
+限流用的客户端指纹。需要一次性全局切断时，必须删除共享的访问码。
 
-单个运行实例会应用有界登录和并发 Guard。Vercel Firewall 可以在 Function 之前
+缺少 Header 返回 `HOSTED_AUTH_REQUIRED`，访问码被拒绝返回 `ACCESS_CODE_INVALID`，
+两者都使用 HTTP 401，都不会被当作上游或 BYOK API Key 失败。`POST /api/auth` 仍然
+保留，供设置页显式验证访问码；它只返回布尔结果，不签发 Session。
+`DELETE /api/auth` 用于清除旧版本遗留的 Cookie。
+
+身份验证 Mutation 要求同源请求。托管模型 ID 必须属于部署白名单。
+
+单个运行实例会应用有界身份验证失败和并发 Guard。由于现在每个托管请求都携带凭据，
+任意托管路由上被拒绝的访问码都会计入与显式登录相同的单客户端与全局失败窗口，被
+限流的客户端会收到带 `Retry-After` 的 HTTP 429；有效访问码永远不计入失败。
+`GET /api/config` 是唯一例外：它始终返回公开配置，在客户端被限流时只报告
+`authenticated: false`，因此页面仍然可以加载。Vercel Firewall 可以在 Function 之前
 增加区域性 IP 规则。这两层都不是全局一致配额、按用户预算或计费账本。公开托管
 部署仍然需要上游消费限额和滥用响应方案。
 
@@ -69,13 +87,13 @@ HttpOnly、Secure 和 SameSite Strict。托管模型 ID 必须属于部署白名
 1. 绝对 BYOK Base URL 由浏览器直接请求，要求 Provider 支持 CORS。
 2. OpenAI-compatible BYOK Base URL 留空时，使用同源路由，并且只能转发到经过校验
    的部署 `BASE_URL`。
-3. 托管访问在签名 Session 校验后，通过同一个固定目标使用部署端 API Key。
+3. 托管访问在访问码校验后，通过同一个固定目标使用部署端 API Key。
 
 服务端不接受来自 Query Parameter、Request Body 或目标主机 Header 的上游目标。
 系统拒绝重定向。托管聊天会校验严格、有界的请求结构和模型白名单。同源 BYOK 会
 保留 OpenAI-compatible 扩展字段，但仍不能改变固定目标。
 
-托管网络搜索使用独立的同源 POST 路由。它要求有效托管 Session，只接受有界
+托管网络搜索使用独立的同源 POST 路由。它要求有效托管访问码，只接受有界
 Query 和结果数，并使用部署端固定的 Tavily、Exa 或 Grok 目标及凭据。浏览器不能为
 此路由提供 Provider、模型、服务端目标或凭据。
 
@@ -86,7 +104,7 @@ Query 和结果数，并使用部署端固定的 Tavily、Exa 或 Grok 目标及
    `/v1/images/generations`，有参考图时使用 `/v1/images/edits`；CORS 失败后不会
    静默回退到服务端代理。
 2. Hosted 图片生成向同源 `POST /api/image-generation` 发送有界请求。它要求有效的
-   签名 Session；服务端从经过校验的配置中选择完整白名单 Profile、固定上游、模型
+   访问码；服务端从经过校验的配置中选择完整白名单 Profile、固定上游、模型
    和部署凭据。
 
 Hosted 生成图片 URL 必须与配置的上游同 Origin，且不能包含凭据或 Fragment。

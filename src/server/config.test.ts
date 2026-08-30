@@ -8,6 +8,8 @@ import {
 } from "@/server/config";
 import { DEFAULT_REQUEST_TIMEOUT_POLICY } from "@/runtime/transport/request-timeout-policy";
 
+import packageJson from "../../package.json";
+
 describe("server configuration", () => {
   it("supports a BYOK-only deployment with safe defaults", () => {
     const config = parseServerConfig({});
@@ -59,6 +61,7 @@ describe("server configuration", () => {
       ],
     });
     expect(toPublicServerConfig(config)).toEqual({
+      appVersion: packageJson.version,
       byokEnabled: false,
       hostedEnabled: true,
       hostedWebSearchEnabled: true,

@@ -4,6 +4,7 @@ import {
   TRUNCATED_CHAT_COMPLETION_FINISH_REASON,
 } from "@/runtime/agent/ai-sdk/openai-compatible-stream-contract";
 import { ChatTransportError } from "@/runtime/transport/chat-errors";
+import { hostedAccessCodeHeaders } from "@/runtime/transport/hosted-auth";
 import { normalizeDirectBaseUrl } from "@/runtime/transport/openai-transport";
 import {
   chatTimeouts,
@@ -75,7 +76,10 @@ export function createOpenAICompatibleAgentProviderOptions(
   return {
     baseURL: SAME_ORIGIN_PROVIDER_BASE_URL,
     ...(connection.mode === "byok" ? { apiKey: connection.apiKey } : {}),
-    headers: { "X-CherryChat-Mode": connection.mode },
+    headers: {
+      "X-CherryChat-Mode": connection.mode,
+      ...hostedAccessCodeHeaders(connection),
+    },
     fetch: createControlledChatFetch({
       providerBaseUrl: SAME_ORIGIN_PROVIDER_BASE_URL,
       targetUrl: "/api/chat",

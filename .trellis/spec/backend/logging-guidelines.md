@@ -15,7 +15,8 @@ only when it is not a credential.
 
 ## Never Log
 
-- `OPENAI_API_KEY`, BYOK keys, Authorization/Cookie headers, or session tokens.
+- `OPENAI_API_KEY`, BYOK keys, access codes, Authorization/Cookie headers, or
+  the `X-CherryChat-Access-Code` header.
 - Access codes, normalized codes, HMAC digests, or `AUTH_SECRET`.
 - Full request/response bodies, prompts, model replies, custom parameters, or
   Base64/blob image data.

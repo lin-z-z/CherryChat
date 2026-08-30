@@ -15,6 +15,7 @@ import { bytesToBlob } from "@/runtime/attachments/blob-utils";
 import {
   ChatTransportError,
   errorCodeForStatus,
+  hostedAuthErrorCodeFromBody,
   redactSensitiveText,
 } from "@/runtime/transport/chat-errors";
 import {
@@ -24,6 +25,7 @@ import {
   readLimitedResponseText,
   ResponseLimitError,
 } from "@/runtime/transport/response-reader";
+import { hostedAccessCodeHeaders } from "@/runtime/transport/hosted-auth";
 import type { FetchLike } from "@/runtime/transport/transport-http";
 
 export interface ImageGenerationTransportOptions {
@@ -72,6 +74,11 @@ export class OpenAICompatibleImageTransport {
     const outputFormat = body.output_format ?? "png";
     if (this.options.endpoint.mode === "hosted") {
       headers.set("x-cherrychat-mode", "hosted");
+      for (const [name, value] of Object.entries(
+        hostedAccessCodeHeaders(this.options.endpoint),
+      )) {
+        headers.set(name, value);
+      }
     } else {
       headers.set("Authorization", `Bearer ${this.options.endpoint.apiKey}`);
     }
@@ -129,11 +136,14 @@ export class OpenAICompatibleImageTransport {
       );
     }
     if (!response.ok) {
-      const detail = redactSensitiveText(
-        await readLimitedResponseText(response, ERROR_RESPONSE_MAX_BYTES),
-      ).slice(0, 4096);
+      const body = await readLimitedResponseText(
+        response,
+        ERROR_RESPONSE_MAX_BYTES,
+      );
+      const detail = redactSensitiveText(body).slice(0, 4096);
       throw new ChatTransportError(
-        errorCodeForStatus(response.status),
+        hostedAuthErrorCodeFromBody(body) ??
+          errorCodeForStatus(response.status),
         "Image generation request failed",
         response.status,
         detail || undefined,

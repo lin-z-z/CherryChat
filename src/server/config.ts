@@ -26,6 +26,7 @@ import {
   type WebSearchProviderId,
 } from "@/runtime/chat/types";
 import { normalizeImageBaseUrl } from "@/runtime/image-generation/image-generation-contract";
+import { APP_VERSION } from "@/lib/app-version";
 
 const booleanStringSchema = z
   .enum(["true", "false"])
@@ -120,6 +121,7 @@ export interface ServerConfig {
 }
 
 export interface PublicServerConfig {
+  appVersion: string;
   byokEnabled: boolean;
   hostedEnabled: boolean;
   hostedWebSearchEnabled: boolean;
@@ -406,6 +408,7 @@ export function getServerConfig(): ServerConfig {
 export function toPublicServerConfig(config: ServerConfig): PublicServerConfig {
   const imageProfiles = config.hosted?.imageGeneration?.profiles ?? [];
   return {
+    appVersion: APP_VERSION,
     byokEnabled: !config.disableByok,
     hostedEnabled: config.hosted !== null,
     hostedWebSearchEnabled: Boolean(config.hosted?.webSearch),

@@ -8,6 +8,7 @@ import {
   Menu,
   MessageCircle,
   Plus,
+  RefreshCw,
   Square,
   X,
 } from "lucide-react";
@@ -428,6 +429,15 @@ export function ChatShell() {
                   type="button"
                 >
                   <X aria-hidden="true" className="size-4" />
+                </button>
+              </div>
+            ) : null}
+            {chat.updateAvailable ? (
+              <div className="update-notice" role="status">
+                <span>{t("updateAvailable")}</span>
+                <button onClick={chat.reloadForUpdate} type="button">
+                  <RefreshCw aria-hidden="true" className="size-4" />
+                  <span>{t("reloadForUpdate")}</span>
                 </button>
               </div>
             ) : null}

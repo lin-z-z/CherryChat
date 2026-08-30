@@ -1,9 +1,4 @@
-import {
-  authenticateAccessCode,
-  createSessionToken,
-  SESSION_COOKIE_NAME,
-  SESSION_TTL_SECONDS,
-} from "@/server/auth";
+import { authenticateAccessCode, SESSION_COOKIE_NAME } from "@/server/auth";
 import { getServerConfig } from "@/server/config";
 import {
   hostedRateLimitResponse,
@@ -16,6 +11,11 @@ import {
 } from "@/server/http";
 import { assertSameOrigin, readRequestText } from "@/server/security";
 
+/**
+ * Explicitly verifies an access code so the settings page can confirm it before
+ * saving. Hosted authentication itself is stateless: every request carries the
+ * access code header, so no session is issued here.
+ */
 export async function POST(request: Request): Promise<Response> {
   try {
     assertSameOrigin(request);
@@ -65,19 +65,14 @@ export async function POST(request: Request): Promise<Response> {
           failureRetryAfter,
         );
       }
-      return errorResponse(401, "UNAUTHORIZED", "Access code is invalid");
+      return errorResponse(
+        401,
+        "ACCESS_CODE_INVALID",
+        "Access code is invalid",
+      );
     }
     hostedRequestGuard.recordLoginSuccess(request, config.hosted.authSecret);
-
-    const response = jsonResponse({ authenticated: true });
-    response.headers.append(
-      "Set-Cookie",
-      serializeSessionCookie(
-        createSessionToken(config.hosted.authSecret, codeId),
-        request,
-      ),
-    );
-    return response;
+    return jsonResponse({ authenticated: true });
   } catch (error) {
     return (
       securityErrorResponse(error) ??
@@ -86,6 +81,10 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
+/**
+ * Clears the legacy session cookie issued by releases before stateless Hosted
+ * authentication. The browser-held access code is cleared by the client.
+ */
 export async function DELETE(request: Request): Promise<Response> {
   try {
     assertSameOrigin(request);
@@ -101,10 +100,6 @@ export async function DELETE(request: Request): Promise<Response> {
       errorResponse(500, "UPSTREAM_ERROR", "Sign-out failed")
     );
   }
-}
-
-function serializeSessionCookie(token: string, request: Request): string {
-  return `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_TTL_SECONDS}${secureSuffix(request)}`;
 }
 
 function secureSuffix(request: Request): string {

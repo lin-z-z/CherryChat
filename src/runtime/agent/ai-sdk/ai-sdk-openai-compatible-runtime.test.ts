@@ -968,6 +968,7 @@ describe("AiSdkOpenAICompatibleRuntime", () => {
       mode: "hosted",
       baseUrl: "https://ignored.invalid",
       apiKey: "must-not-leak",
+      accessCode: "visitor-code",
     };
     const result = await aiSdkOpenAICompatibleRuntime.run(options);
 
@@ -977,6 +978,7 @@ describe("AiSdkOpenAICompatibleRuntime", () => {
     expect(calls[0]?.init?.credentials).toBe("same-origin");
     const headers = new Headers(calls[0]?.init?.headers);
     expect(headers.get("X-CherryChat-Mode")).toBe("hosted");
+    expect(headers.get("X-CherryChat-Access-Code")).toBe("visitor-code");
     expect(headers.get("Authorization")).toBeNull();
     expect(
       hostedChatRequestSchema.safeParse(
@@ -984,6 +986,38 @@ describe("AiSdkOpenAICompatibleRuntime", () => {
       ).success,
     ).toBe(true);
     expect(JSON.stringify(calls)).not.toContain("must-not-leak");
+  });
+
+  it("never sends a stored access code to a browser-direct BYOK upstream", async () => {
+    const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({ input, ...(init ? { init } : {}) });
+        return sseResponse([chunk({ content: "BYOK answer." }, "stop")]);
+      }),
+    );
+
+    const options = runtimeOptions({
+      modelId: "grok-4.5",
+      registry: new ToolRegistry([]),
+      stream: true,
+    });
+    options.connection = {
+      ...options.connection,
+      mode: "byok",
+      baseUrl: "https://api.example.test/v1",
+      apiKey: "sk-personal",
+      accessCode: "visitor-code",
+    };
+    const result = await aiSdkOpenAICompatibleRuntime.run(options);
+
+    expect(result.state).toBe("completed");
+    expect(calls).toHaveLength(1);
+    expect(String(calls[0]?.input)).toContain("api.example.test");
+    const headers = new Headers(calls[0]?.init?.headers);
+    expect(headers.get("X-CherryChat-Access-Code")).toBeNull();
+    expect(JSON.stringify(calls)).not.toContain("visitor-code");
   });
 
   it("persists a running tool as interrupted when the user stops", async () => {

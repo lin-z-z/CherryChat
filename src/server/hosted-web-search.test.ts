@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  authenticateAccessCode,
-  createSessionToken,
-  SESSION_COOKIE_NAME,
-} from "@/server/auth";
+import { ACCESS_CODE_HEADER_NAME } from "@/server/auth";
 import type { ServerConfig } from "@/server/config";
 import { handleHostedWebSearch } from "@/server/hosted-web-search";
 import { HostedRequestGuard } from "@/server/hosted-request-guard";
@@ -41,7 +37,7 @@ const config: ServerConfig = {
 describe("hosted web search", () => {
   afterEach(() => vi.useRealTimers());
 
-  it("requires a hosted session and sends only the deployment key to the fixed target", async () => {
+  it("requires a hosted access code and sends only the deployment key to the fixed target", async () => {
     const calls: Array<{ target: RequestInfo | URL; init?: RequestInit }> = [];
     const response = await handleHostedWebSearch(
       webSearchRequest(
@@ -77,13 +73,15 @@ describe("hosted web search", () => {
       "Bearer tvly-deployment-secret",
     );
     expect(new Headers(init?.headers).has("x-base-url")).toBe(false);
+    expect(new Headers(init?.headers).has(ACCESS_CODE_HEADER_NAME)).toBe(false);
+    expect(String(init?.body)).not.toContain("access-code");
     expect(JSON.parse(String(init?.body))).toEqual({
       query: "CherryChat",
       max_results: 50,
     });
   });
 
-  it("rejects missing sessions, cross-origin requests and unavailable hosted search before fetch", async () => {
+  it("rejects a missing code, cross-origin requests and unavailable hosted search before fetch", async () => {
     const fetchMock = vi.fn();
     const unauthenticated = await handleHostedWebSearch(
       webSearchRequest({ query: "test", maxResults: 5, provider: "tavily" }),
@@ -91,6 +89,9 @@ describe("hosted web search", () => {
       fetchMock as unknown as typeof fetch,
     );
     expect(unauthenticated.status).toBe(401);
+    await expect(unauthenticated.json()).resolves.toMatchObject({
+      error: { code: "HOSTED_AUTH_REQUIRED" },
+    });
 
     const crossOrigin = await handleHostedWebSearch(
       webSearchRequest(
@@ -117,11 +118,11 @@ describe("hosted web search", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("treats a malformed session cookie as unauthorized", async () => {
+  it("treats a revoked access code as unauthorized", async () => {
     const response = await handleHostedWebSearch(
       webSearchRequest(
         { query: "test", maxResults: 5, provider: "tavily" },
-        { Cookie: `${SESSION_COOKIE_NAME}=%` },
+        { [ACCESS_CODE_HEADER_NAME]: "revoked-code" },
       ),
       config,
       vi.fn() as unknown as typeof fetch,
@@ -129,7 +130,7 @@ describe("hosted web search", () => {
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: "UNAUTHORIZED" },
+      error: { code: "ACCESS_CODE_INVALID" },
     });
   });
 
@@ -388,11 +389,8 @@ function authenticatedHeaders(
   const extraHeaders = isServerConfig(configOrExtra) ? extra : configOrExtra;
   const hosted = configValue.hosted;
   if (!hosted) throw new Error("Hosted test configuration is missing");
-  const codeId = authenticateAccessCode("access-code", hosted);
-  if (!codeId) throw new Error("Hosted test access code is invalid");
-  const token = createSessionToken(hosted.authSecret, codeId);
   return {
-    Cookie: `${SESSION_COOKIE_NAME}=${token}`,
+    [ACCESS_CODE_HEADER_NAME]: hosted.accessCodes[0] ?? "",
     ...extraHeaders,
   };
 }

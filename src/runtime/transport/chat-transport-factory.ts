@@ -34,6 +34,8 @@ export interface ChatTransportConnection {
   modelId: string;
   apiType: ChatApiType;
   endpointType?: ChatEndpointType | undefined;
+  /** Hosted credential sent only to same-origin CherryChat routes. */
+  accessCode?: string | undefined;
 }
 
 export function createChatTransport(
@@ -43,8 +45,7 @@ export function createChatTransport(
 ): ChatTransport {
   if (connection.mode === "hosted") {
     return createSameOriginTransport(
-      "hosted",
-      null,
+      { mode: "hosted", apiKey: null, accessCode: connection.accessCode },
       fetchImplementation,
       timeoutPolicy,
     );
@@ -88,8 +89,7 @@ export function createChatTransport(
 
   if (!connection.baseUrl.trim()) {
     return createSameOriginTransport(
-      "byok",
-      connection.apiKey,
+      { mode: "byok", apiKey: connection.apiKey },
       fetchImplementation,
       timeoutPolicy,
     );

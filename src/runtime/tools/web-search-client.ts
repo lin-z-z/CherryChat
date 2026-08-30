@@ -5,6 +5,7 @@ import type {
   WebSearchProviderId,
   WebSearchToolOutput,
 } from "@/runtime/chat/types";
+import { hostedAccessCodeHeaders } from "@/runtime/transport/hosted-auth";
 import { readLimitedResponseJson } from "@/runtime/transport/response-reader";
 import type { FetchLike } from "@/runtime/transport/transport-http";
 import {
@@ -26,6 +27,8 @@ const hostedErrorSchema = z
     error: z.object({
       code: z.enum([
         "UNAUTHORIZED",
+        "HOSTED_AUTH_REQUIRED",
+        "ACCESS_CODE_INVALID",
         "FORBIDDEN",
         "INVALID_REQUEST",
         "TOOL_NOT_AVAILABLE",
@@ -43,7 +46,11 @@ const hostedErrorSchema = z
 export interface WebSearchRequestOptions {
   access:
     | { kind: "direct"; apiKey: string; url: string }
-    | { kind: "hosted"; onUnauthorized?: () => void };
+    | {
+        kind: "hosted";
+        accessCode?: string | undefined;
+        onUnauthorized?: () => void;
+      };
   body: JsonValue;
   fetchImplementation: FetchLike;
   signal: AbortSignal;
@@ -97,6 +104,7 @@ export function createWebSearchToolExecutor(
 export function createHostedWebSearchToolExecutor(options: {
   maxResults: number;
   provider: WebSearchProviderId;
+  accessCode?: string | undefined;
   fetchImplementation?: FetchLike;
   timeoutMs?: number;
   onUnauthorized?: () => void;
@@ -105,6 +113,7 @@ export function createHostedWebSearchToolExecutor(options: {
     const { payload, status } = await requestWebSearchJson({
       access: {
         kind: "hosted",
+        ...(options.accessCode ? { accessCode: options.accessCode } : {}),
         ...(options.onUnauthorized
           ? { onUnauthorized: options.onUnauthorized }
           : {}),
@@ -156,7 +165,10 @@ export async function requestWebSearchJson({
         headers: {
           ...(access.kind === "direct"
             ? { Authorization: `Bearer ${access.apiKey}` }
-            : {}),
+            : hostedAccessCodeHeaders({
+                mode: "hosted",
+                accessCode: access.accessCode,
+              })),
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
@@ -245,7 +257,12 @@ async function hostedToolError(
   const parsed = hostedErrorSchema.safeParse(value);
   if (!parsed.success) return toolHttpError(response.status);
   const code = parsed.data.error.code;
-  if (code === "UNAUTHORIZED" || code === "FORBIDDEN") {
+  if (
+    code === "UNAUTHORIZED" ||
+    code === "FORBIDDEN" ||
+    code === "HOSTED_AUTH_REQUIRED" ||
+    code === "ACCESS_CODE_INVALID"
+  ) {
     onUnauthorized?.();
     return new ToolExecutionError("TOOL_AUTH_FAILED", response.status, false);
   }

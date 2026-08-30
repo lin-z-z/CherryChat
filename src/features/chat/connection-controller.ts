@@ -15,6 +15,7 @@ import {
 } from "@/runtime/transport/request-timeout-policy";
 
 export interface PublicConfig {
+  appVersion: string | null;
   byokEnabled: boolean;
   hostedEnabled: boolean;
   hostedWebSearchEnabled: boolean;
@@ -276,6 +277,10 @@ export function parsePublicConfig(value: unknown): PublicConfig {
       ? record.imageGenerationMaximumRequestBytes
       : 8 * 1024 * 1024;
   return {
+    appVersion:
+      typeof record.appVersion === "string" && record.appVersion.trim()
+        ? record.appVersion.trim()
+        : null,
     byokEnabled: record.byokEnabled,
     hostedEnabled: record.hostedEnabled,
     hostedWebSearchEnabled: record.hostedWebSearchEnabled,

@@ -175,7 +175,7 @@ per user send.
   connection mode, or billing source.
 - Keep inactive Provider credentials persisted but do not execute them:
   access-code mode disables personal search editing, while Custom API ignores
-  an otherwise valid Hosted Session.
+  an otherwise valid Hosted access code.
 - Browser credentials and their Provider-specific URL/model/options come from
   `webSearchCredentials`.
   Hosted execution calls fixed `/api/web-search` with `credentials: same-origin`,
@@ -195,7 +195,7 @@ per user send.
   a generated answer capped at 12,000 characters and derives de-duplicated
   sources only from structured `url_citation` annotations; naked URLs in text
   are not trusted as citations.
-- Hosted session `401 UNAUTHORIZED` invalidates only the matching auth epoch;
+- A Hosted auth `401` invalidates only the matching auth epoch;
   an older delayed 401 cannot overwrite a newer successful access-code login.
 - One abort signal covers model fetch, selected search Provider response
   headers, and bounded body reading. Timeout is 30 seconds and response size is
@@ -215,7 +215,7 @@ per user send.
 | Tool arguments are invalid | `INVALID_TOOL_INPUT`, not retryable |
 | Personal URL is not absolute HTTP(S), contains credentials/query/fragment, or exceeds 2048 characters | `INVALID_REQUEST` before fetch/save |
 | Any direct Provider returns 401/403 | `TOOL_AUTH_FAILED`, status retained |
-| Hosted Session is missing/expired | Proxy `UNAUTHORIZED` -> local `TOOL_AUTH_FAILED`; mark current auth epoch invalid |
+| Hosted access code is missing/revoked | Proxy `HOSTED_AUTH_REQUIRED`/`ACCESS_CODE_INVALID` -> local `TOOL_AUTH_FAILED`; mark current auth epoch invalid |
 | Any Provider returns 429 | `TOOL_RATE_LIMITED`, retryable |
 | Any Provider returns 5xx | `TOOL_SERVICE_UNAVAILABLE`, retryable |
 | Header or body exceeds timeout | `TOOL_REQUEST_TIMEOUT`, retryable |
@@ -227,7 +227,7 @@ per user send.
 | EOF has neither `[DONE]` nor any finish reason | `STREAM_PROTOCOL_ERROR`; retain partial output |
 | Canonical OpenAI tool result contains `name` | Strip `name` at the OpenAI Chat transport boundary |
 | Hosted mode has personal Key but no authenticated Hosted source | Search unavailable; do not use the personal Key |
-| BYOK mode has a valid Hosted Session but no selected-Provider Key | Search unavailable; do not use deployment search |
+| BYOK mode has a valid Hosted access code but no selected-Provider Key | Search unavailable; do not use deployment search |
 | Saved Hosted preference is still allowed | Send that Provider ID to `/api/web-search` |
 | Saved Hosted preference is absent or no longer allowed | Send the public default Provider ID |
 | Hosted request omits Provider or adds bundle fields | Proxy rejects before upstream fetch |
@@ -267,7 +267,7 @@ per user send.
 - Good: access-code mode uses the authenticated site source and keeps personal
   fields disabled even if a personal Key was saved earlier.
 - Good: switching to Custom API immediately requires the personal Provider
-  selected by that user; the still-valid Hosted Session cannot fund the search.
+  selected by that user; the still-valid Hosted access code cannot fund the search.
 - Good: Hosted Grok uses only env-selected Key, complete Responses URL, model,
   and X Search switch while the browser sends only
   `{ query, maxResults, provider: "grok" }`.
@@ -335,7 +335,7 @@ per user send.
 - Browser: settings save, composer on/off, actual mocked cross-origin POST,
   sources, localized errors, reload, and desktop/mobile overflow.
 - Browser: same-origin hosted POST has no Authorization; Custom API requests
-  remain isolated; Session expiry prevents a silent ordinary answer while the
+  remain isolated; a rejected access code prevents a silent ordinary answer while the
   conversation search intent remains on.
 
 ### 7. Wrong vs Correct
@@ -357,7 +357,7 @@ const executor = resolvedSource
   ? createExecutorForSource(resolvedSource)
   : null;
 
-// Wrong: reuse a valid Hosted Session while the model uses a Custom API.
+// Wrong: reuse a valid Hosted access code while the model uses a Custom API.
 const crossModeSource = browserKey
   ? browserSource
   : authenticated

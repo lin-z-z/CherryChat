@@ -82,10 +82,12 @@ Hosted access has these important limits:
 - It does not route visitors to native Anthropic, native Gemini, OpenAI
   Responses, or arbitrary New API endpoint types.
 - Hosted models must be present in the deployment `MODELS` allowlist.
-- Removing one access code invalidates sessions created by that code. Rotating
-  `AUTH_SECRET` invalidates every session.
-- Process-local concurrency and login guards reset or split across serverless
-  instances. They are not a global user quota, daily budget, or billing ledger.
+- Hosted authentication is stateless: the browser resubmits its access code on
+  every request. Removing or replacing an access code revokes it on the next
+  request. Rotating `AUTH_SECRET` does **not** sign clients out; revoke access
+  by changing `ACCESS_CODE`.
+- Process-local concurrency and authentication-failure guards reset or split
+  across serverless instances. They are not a global user quota, daily budget, or billing ledger.
 
 ## Local development
 
@@ -169,7 +171,7 @@ BYOK setup, supported parameters, and endpoint compatibility.
 | `DEFAULT_MODEL`                    | No            | First `MODELS` entry            | Hosted default; must be in `MODELS`.                            |
 | `TITLE_MODEL`                      | No            | `DEFAULT_MODEL`                 | Deployment title model; must be in `MODELS`.                    |
 | `ACCESS_CODE`                      | Hosted access | None                            | Comma-separated visitor codes, each at most 256 UTF-8 bytes.    |
-| `AUTH_SECRET`                      | Hosted access | None                            | HMAC/session secret of at least 32 UTF-8 bytes.                 |
+| `AUTH_SECRET`                      | Hosted access | None                            | HMAC digest secret of at least 32 UTF-8 bytes.                  |
 | `WEB_SEARCH_PROVIDER`              | No            | `tavily`                        | Default Hosted provider: `tavily`, `exa`, or `grok`.            |
 | `WEB_SEARCH_ALLOWED_PROVIDERS`     | No            | Default provider only           | Ordered providers access-code users may select.                 |
 | `TAVILY_API_KEY`                   | No            | None                            | Deployment-funded Tavily key when that provider is selected.    |
@@ -288,8 +290,8 @@ For a shared Hosted deployment:
 3. Remember that regional counters and shared public IPs affect the result.
 4. Set an upstream account spending limit; CherryChat does not provide a global
    spend ledger.
-5. Use long random access codes and rotate `AUTH_SECRET` when every session must
-   be revoked.
+5. Use long random access codes. To revoke access, remove or replace the value in
+   `ACCESS_CODE` and redeploy; rotating `AUTH_SECRET` does not revoke access.
 6. Review credential-free logs after authenticated traffic.
 
 The application also applies best-effort per-instance login and concurrency

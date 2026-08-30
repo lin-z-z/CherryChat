@@ -30,5 +30,12 @@ export function errorResponse(
 
 export function securityErrorResponse(error: unknown): Response | null {
   if (!(error instanceof RequestSecurityError)) return null;
-  return errorResponse(error.status, error.code, error.message);
+  const response = errorResponse(error.status, error.code, error.message);
+  if (error.retryAfterSeconds !== undefined) {
+    response.headers.set(
+      "Retry-After",
+      String(Math.max(1, Math.ceil(error.retryAfterSeconds))),
+    );
+  }
+  return response;
 }

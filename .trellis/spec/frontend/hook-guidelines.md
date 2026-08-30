@@ -236,9 +236,9 @@ saveConnectionChange(
 - Connection saving runs `normalize -> Hosted authenticate -> optional target
   cache clear -> transactional connection persistence`. Authentication or
   normalization failure must stop before cache/persistence side effects. A
-  successful Hosted authentication may update the authenticated projection even
-  when a later local persistence step fails, because the HttpOnly Session Cookie
-  is already active.
+  successful Hosted verification may update the authenticated projection even
+  when a later local persistence step fails, because the code itself is already
+  known to be accepted by the server.
 - `titleModel` is stored independently as the `settings` key `titleModel`; a
   missing key on a Hosted connection falls back to public `titleModel`, then
   `defaultModel`. A saved Custom API connection skips the Hosted title default.
@@ -248,8 +248,10 @@ saveConnectionChange(
   the durable `title-attempt:<conversationId>` marker before starting the remote
   request. Failure keeps the local title and the marker; success only updates
   the title projection. A later send must not retry a failed or pending attempt.
-- Startup resolves `/api/config` once and shares that promise with connection
-  and web-search initialization. With no saved connection, Hosted mode wins
+- Startup loads the stored connection first, then resolves `/api/config` once
+  with the Hosted access-code header and shares that promise with connection and
+  web-search initialization. Requesting public config before the local
+  connection is available would report a valid code as unauthenticated. With no saved connection, Hosted mode wins
   when `hostedEnabled=true`; otherwise Custom API is selected. A saved
   connection always wins, including a saved Custom API on a Hosted deployment.
 - The same public config passes `hostedWebSearchEnabled` to
@@ -340,7 +342,7 @@ saveConnectionChange(
 | Hosted allowlist contains several Providers | Allow one global Settings selection; do not add conversation-level Provider state |
 | Saved Hosted preference is no longer allowed | Resolve the public default without rewriting BYOK Provider or credentials |
 | Hosted Provider is Grok while BYOK selection is Exa | Display Hosted Grok; do not rewrite or execute local Exa settings |
-| Custom API has only a valid Hosted Session | Report personal setup required; do not call `/api/web-search` |
+| Custom API has only a valid Hosted access code | Report personal setup required; do not call `/api/web-search` |
 | Model discovery fails for the current scope | Keep its last-known-good list; reject to the settings action |
 | Hosted cache/backup enables only a subset | Project every current server model; keep the stale subset stored but inactive |
 | Cached New API list has endpoint metadata | Restore descriptors and recompute capability before rethrowing the refresh error |
