@@ -16,6 +16,7 @@ import { ChatDatabase } from "@/storage/database";
 import { ModelListCacheRepository } from "@/storage/model-list-cache-repository";
 
 const hostedConfig: PublicConfig = {
+  appVersion: "1.1.0",
   byokEnabled: true,
   hostedEnabled: true,
   hostedWebSearchEnabled: false,
@@ -41,6 +42,24 @@ const savedByokConnection: ConnectionBundle = {
     id: "current",
     apiKey: "saved-key",
     accessCode: "",
+    encrypted: false,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  },
+};
+
+const savedHostedConnection: ConnectionBundle = {
+  connection: {
+    id: "current",
+    mode: "hosted",
+    baseUrl: "https://api.openai.com",
+    modelId: "hosted-default",
+    apiType: "openai",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  },
+  credential: {
+    id: "current",
+    apiKey: "",
+    accessCode: "saved-code",
     encrypted: false,
     updatedAt: "2026-08-01T00:00:00.000Z",
   },
@@ -173,6 +192,80 @@ describe("useChatController integration", () => {
     await act(async () => {
       await expect(result.current.selectModel("  ")).rejects.toThrow();
     });
+  });
+
+  it("authenticates a stored Hosted access code on the first config request", async () => {
+    await persistConnection(savedHostedConnection);
+    const fetchMock = installFetchMock({
+      config: { ...hostedConfig, authenticated: true },
+    });
+    const { result } = renderController();
+
+    await waitForController(result);
+
+    expect(requestPath(fetchMock.mock.calls[0]?.[0])).toBe("/api/config");
+    expect(
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get(
+        "X-CherryChat-Access-Code",
+      ),
+    ).toBe("saved-code");
+    expect(result.current.connection.accessCode).toBe("saved-code");
+    expect(result.current.publicConfig?.authenticated).toBe(true);
+  });
+
+  it("never sends the access code on a saved BYOK boot", async () => {
+    await persistConnection({
+      ...savedByokConnection,
+      credential: {
+        ...savedByokConnection.credential,
+        accessCode: "stale-code",
+      },
+    });
+    const fetchMock = installFetchMock();
+    const { result } = renderController();
+
+    await waitForController(result);
+
+    expect(requestPath(fetchMock.mock.calls[0]?.[0])).toBe("/api/config");
+    expect(
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).has(
+        "X-CherryChat-Access-Code",
+      ),
+    ).toBe(false);
+    expect(result.current.publicConfig?.authenticated).toBe(false);
+  });
+
+  it("loads public config unauthenticated when no access code is stored", async () => {
+    const fetchMock = installFetchMock();
+    const { result } = renderController();
+
+    await waitForController(result);
+
+    expect(
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).has(
+        "X-CherryChat-Access-Code",
+      ),
+    ).toBe(false);
+    expect(result.current.publicConfig?.authenticated).toBe(false);
+    expect(result.current.updateAvailable).toBe(false);
+  });
+
+  it("prompts for a refresh when the deployment publishes a newer version", async () => {
+    installFetchMock({ config: { ...hostedConfig, appVersion: "99.0.0" } });
+    const { result } = renderController();
+
+    await waitForController(result);
+
+    expect(result.current.updateAvailable).toBe(true);
+  });
+
+  it("stays quiet when the deployment version is missing or not newer", async () => {
+    installFetchMock({ config: { ...hostedConfig, appVersion: null } });
+    const { result } = renderController();
+
+    await waitForController(result);
+
+    expect(result.current.updateAvailable).toBe(false);
   });
 
   it("keeps a saved BYOK connection on a Hosted deployment", async () => {

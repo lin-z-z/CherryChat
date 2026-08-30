@@ -5,12 +5,15 @@ import {
   POST as createSession,
 } from "@/app/api/auth/route";
 import { GET as getPublicConfig } from "@/app/api/config/route";
+import { ACCESS_CODE_HEADER_NAME } from "@/server/auth";
 import {
   HOSTED_LOGIN_FAILURE_LIMIT,
   hostedRequestGuard,
 } from "@/server/hosted-request-guard";
 
-describe("public config and hosted session routes", () => {
+import packageJson from "../../package.json";
+
+describe("public config and hosted access code routes", () => {
   beforeEach(() => {
     hostedRequestGuard.reset();
     vi.stubEnv("OPENAI_API_KEY", "deployment-route-secret");
@@ -36,6 +39,7 @@ describe("public config and hosted session routes", () => {
 
     expect(response.status).toBe(200);
     expect(JSON.parse(text)).toEqual({
+      appVersion: packageJson.version,
       byokEnabled: true,
       hostedEnabled: true,
       hostedWebSearchEnabled: true,
@@ -66,33 +70,40 @@ describe("public config and hosted session routes", () => {
     expect(text).not.toContain("fixed.example");
   });
 
-  it("accepts any configured code, exposes only the signed cookie, and signs out", async () => {
+  it("verifies any configured code without issuing a session", async () => {
     const wrong = await createSession(authRequest("wrong-code"));
     expect(wrong.status).toBe(401);
-    expect(await wrong.text()).not.toContain("wrong-code");
+    const wrongText = await wrong.text();
+    expect(wrongText).not.toContain("wrong-code");
+    expect(wrongText).toContain("ACCESS_CODE_INVALID");
 
     const accepted = await createSession(authRequest("  second-code  "));
     expect(accepted.status).toBe(200);
-    const setCookie = accepted.headers.get("set-cookie");
-    expect(setCookie).toContain("cherrychat_session=");
-    expect(setCookie).toContain("HttpOnly");
-    expect(setCookie).not.toContain("second-code");
-    if (!setCookie) throw new Error("Expected a hosted session cookie");
+    expect(accepted.headers.get("set-cookie")).toBeNull();
+    await expect(accepted.json()).resolves.toEqual({ authenticated: true });
+  });
 
-    const authenticated = await getPublicConfig(
-      new Request("http://localhost/api/config", {
-        headers: { Cookie: setCookie.split(";")[0] ?? "" },
-      }),
-    );
+  it("reports authentication from the access code header", async () => {
+    const authenticated = await getPublicConfig(configRequest("second-code"));
     expect(await authenticated.json()).toMatchObject({ authenticated: true });
 
+    const revoked = await getPublicConfig(configRequest("removed-code"));
+    expect(revoked.status).toBe(200);
+    expect(await revoked.json()).toMatchObject({ authenticated: false });
+  });
+
+  it("clears the legacy session cookie on sign-out", async () => {
     const signedOut = await deleteSession(
       new Request("http://localhost/api/auth", {
         method: "DELETE",
         headers: { Origin: "http://localhost" },
       }),
     );
+
     expect(signedOut.status).toBe(200);
+    expect(signedOut.headers.get("set-cookie")).toContain(
+      "cherrychat_session=",
+    );
     expect(signedOut.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 
@@ -110,7 +121,7 @@ describe("public config and hosted session routes", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("set-cookie")).toContain("cherrychat_session=");
+    await expect(response.json()).resolves.toEqual({ authenticated: true });
   });
 
   it("rate limits repeated access-code failures without echoing the code", async () => {
@@ -139,10 +150,10 @@ describe("public config and hosted session routes", () => {
     expect(text).not.toContain("wrong-rate-code");
   });
 
-  it("treats a malformed session cookie as unauthenticated", async () => {
+  it("ignores a legacy session cookie when reporting authentication", async () => {
     const response = await getPublicConfig(
       new Request("http://localhost/api/config", {
-        headers: { Cookie: "cherrychat_session=%" },
+        headers: { Cookie: "cherrychat_session=any-previous-token" },
       }),
     );
 
@@ -151,7 +162,41 @@ describe("public config and hosted session routes", () => {
       authenticated: false,
     });
   });
+
+  it("keeps public config available while throttling code guessing", async () => {
+    const address = "203.0.113.120";
+    for (
+      let attempt = 0;
+      attempt < HOSTED_LOGIN_FAILURE_LIMIT + 2;
+      attempt += 1
+    ) {
+      const response = await getPublicConfig(
+        configRequest("guessed-code", address),
+      );
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        authenticated: false,
+      });
+    }
+
+    const throttled = await getPublicConfig(
+      configRequest("first-code", address),
+    );
+    expect(throttled.status).toBe(200);
+    await expect(throttled.json()).resolves.toMatchObject({
+      authenticated: false,
+    });
+  });
 });
+
+function configRequest(accessCode: string, address = "203.0.113.81"): Request {
+  return new Request("http://localhost/api/config", {
+    headers: {
+      [ACCESS_CODE_HEADER_NAME]: encodeURIComponent(accessCode),
+      "X-Forwarded-For": address,
+    },
+  });
+}
 
 function authRequest(
   accessCode: string,

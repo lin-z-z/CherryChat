@@ -20,11 +20,12 @@
 ## Required Tests
 
 Configuration combinations and public projection live in `config.test.ts`;
-HMAC/session behavior in `auth.test.ts`; auth/config routes in `routes.test.ts`;
+access-code HMAC/header behavior in `auth.test.ts`; the Hosted auth boundary in
+`hosted-access-code.test.ts`; auth/config routes in `routes.test.ts`;
 proxy target, redaction, abort, streaming, and allowlist behavior in
 `upstream-proxy.test.ts`. Storage changes require transaction, migration, quota,
 or integrity tests as applicable.
-Hosted search additionally requires fixed-target, session, origin, bounded-body,
+Hosted search additionally requires fixed-target, access-code, origin, bounded-body,
 timeout/cancel, upstream error, and secret-isolation tests in
 `hosted-web-search.test.ts`.
 
@@ -49,7 +50,7 @@ fix that downgrades Next.js or adds an unverified override.
 ### 1. Scope / Trigger
 
 Use this contract whenever changing Vercel environment wiring, hosted login,
-session cookies, public configuration, or same-origin model/chat/search routes.
+the access-code header, public configuration, or same-origin model/chat/search routes.
 
 ### 2. Signatures
 
@@ -57,7 +58,7 @@ session cookies, public configuration, or same-origin model/chat/search routes.
 - `POST /api/auth` accepts `{ accessCode: string }`; `DELETE /api/auth` signs out.
 - `GET /api/models` and `POST /api/chat` use `x-cherrychat-mode: byok | hosted`.
 - `POST /api/web-search` accepts the strict
-  `{ query, maxResults, provider }` shape after same-origin and signed-session
+  `{ query, maxResults, provider }` shape after same-origin and access-code
   validation. `provider` is only an allowed Provider ID; the server selects the
   complete Tavily, Exa, or Grok configuration from its validated env mapping.
 - `parseServerConfig(process.env)` is the only environment-to-domain adapter.
@@ -125,7 +126,8 @@ Grok adapters own their exact upstream bodies; only their normalized
 | `DISABLE_BYOK=true` without complete hosted config | `CONFIGURATION_ERROR` |
 | Missing, invalid, or cross-origin `Origin` on auth mutation | `403 FORBIDDEN` |
 | Browser Origin matches HTTP Host while `request.url` uses a normalized hostname | Accept as same-origin |
-| Wrong access code or invalid session | `401 UNAUTHORIZED` |
+| Missing access code header | `401 HOSTED_AUTH_REQUIRED` |
+| Wrong or revoked access code | `401 ACCESS_CODE_INVALID` |
 | Hosted model outside the allowlist | `403 MODEL_NOT_ALLOWED` |
 | Any search Provider Key without complete Hosted config | `CONFIGURATION_ERROR` |
 | `WEB_SEARCH_PROVIDER` is not Tavily, Exa, or Grok | `CONFIGURATION_ERROR` |
@@ -134,7 +136,7 @@ Grok adapters own their exact upstream bodies; only their normalized
 | Explicit allowlist contains an incomplete Provider | `CONFIGURATION_ERROR` |
 | Any configured Provider URL is unsafe or malformed | `CONFIGURATION_ERROR` |
 | Empty/overlong Grok model | `CONFIGURATION_ERROR` |
-| Search route without valid same-origin Session | `401 UNAUTHORIZED` before Provider fetch |
+| Search route without a valid same-origin access code | `401` before Provider fetch |
 | Provider is missing, unknown, or not in the allowlist | `400 INVALID_REQUEST`; no lease or Provider fetch |
 | Browser adds Key/URL/model/X Search or another extra field | `400 INVALID_REQUEST`; no Provider fetch |
 | Deployment Provider Key rejected upstream | `502 TOOL_AUTH_FAILED`, never `401` |
@@ -159,7 +161,7 @@ Grok adapters own their exact upstream bodies; only their normalized
   still resolves Tavily until the browser saves an allowed Grok preference.
 - **Base:** omit the allowlist to preserve the legacy single-Provider locked UI
   and request path with no migration.
-- **Bad:** expose a search proxy with no Session because the client tool runner
+- **Bad:** expose a search proxy with no access code because the client tool runner
   already limits calls. Client limits are not deployment-wide abuse controls.
 
 ### 6. Tests Required
@@ -174,7 +176,7 @@ Grok adapters own their exact upstream bodies; only their normalized
 - `src/server/security.test.ts`: request-URL match, Host-authority match,
   missing/malformed Origin, malformed Host, and cross-origin rejection.
 - `src/server/upstream-proxy.test.ts`: fixed target, allowlist, redaction, abort.
-- `src/server/hosted-web-search.test.ts`: origin/session, strict required
+- `src/server/hosted-web-search.test.ts`: origin/access-code, strict required
   Provider body, unknown/disallowed Provider rejection before lease/fetch,
   environment-selected target for all three Providers, client Key/URL/model/
   X Search rejection, 401/403/429/5xx, timeout, abort, response bound,
@@ -197,7 +199,7 @@ fetch("/api/chat", {
 });
 
 // Correct: mode is declared; the server selects its validated deployment target
-// and injects the hosted Key only after verifying the signed session.
+// and injects the hosted Key only after validating the access-code header.
 fetch("/api/chat", {
   headers: { "x-cherrychat-mode": "hosted" },
 });
@@ -740,37 +742,50 @@ steps:
       persist-credentials: false
 ```
 
-## Scenario: Hosted Session And Upstream Response Boundaries
+## Scenario: Hosted Access Code And Upstream Response Boundaries
 
 ### 1. Scope / Trigger
 
-Use this contract when changing access-code authentication, signed Sessions,
-Hosted upstream URLs, model-list/native JSON readers, or OpenAI-compatible SSE
-inspection. These paths must remain stateless and bounded without Redis or a
-server database.
+Use this contract when changing access-code authentication, the Hosted auth
+boundary, Hosted upstream URLs, model-list/native JSON readers, or
+OpenAI-compatible SSE inspection. These paths must remain stateless and bounded
+without Redis or a server database.
 
 ### 2. Signatures
 
 ```ts
-interface SessionPayload {
-  version: 2;
-  expiresAt: number;
-  codeId: string;
-}
+type HostedAccessCodeOutcome =
+  | { status: "authenticated" }
+  | { status: "missing" }
+  | { status: "invalid" }
+  | { status: "rate-limited"; retryAfterSeconds: number };
 
 authenticateAccessCode(candidate, hosted): string | null;
-verifySessionToken(token, hosted): boolean;
+evaluateHostedAccessCode(request, hosted, guard?): HostedAccessCodeOutcome;
+requireHostedAccessCode(request, hosted, guard?): HostedServerConfig;
+hasValidHostedAccessCode(request, hosted, guard?): boolean;
 readLimitedResponseJson(response, maximumBytes, signal?): Promise<unknown>;
 validateChatCompletionStream(response, limits?): Response;
 ```
 
 ### 3. Contracts
 
-- `codeId` is base64url HMAC-SHA-256 over purpose `access-code-id` plus the
-  normalized code. Tokens never contain the access code or a reversible form.
-- Session verification accepts only the exact v2 payload and checks `codeId`
-  against every currently active code. Removing code A invalidates only A's
-  Sessions; v1 and unknown versions fail closed.
+- Hosted authentication is stateless. Every Hosted request carries the
+  browser-held code in `X-CherryChat-Access-Code`, percent-encoded because HTTP
+  headers cannot hold non-ASCII bytes, and is validated against the current
+  `ACCESS_CODE` allowlist. No session, token, or TTL participates.
+- The header is accepted only on same-origin CherryChat routes and is never
+  forwarded upstream, echoed in responses, or logged. Legacy
+  `cherrychat_session` cookies are ignored; `DELETE /api/auth` only clears them.
+- A missing/blank header is `HOSTED_AUTH_REQUIRED`; a decodable-but-rejected or
+  malformed-encoding code is `ACCESS_CODE_INVALID`. Both are `401` and must stay
+  distinguishable from upstream and BYOK `401`.
+- Rejected codes on any Hosted route count toward the same per-client and global
+  failure window as explicit sign-in and return `429` with `Retry-After`; a
+  valid code never counts as a failure. `GET /api/config` never fails for this:
+  it reports `authenticated: false` while throttled.
+- Revocation is an `ACCESS_CODE` change. Rotating `AUTH_SECRET` does not sign
+  clients out; it only changes digest derivation and the rate-limit fingerprint.
 - Production Hosted `BASE_URL` and every configured search Provider URL require
   HTTPS. Outside production, `ALLOW_INSECURE_LOCAL_UPSTREAM=true` allows HTTP
   only for localhost, `.localhost`, IPv4 127/8, or IPv6 loopback.
@@ -817,11 +832,11 @@ validateChatCompletionStream(response, limits?): Response;
 ### 7. Wrong vs Correct
 
 ```ts
-// Wrong: one old token stays valid after its access code is removed.
-return verifySignature(token, authSecret);
+// Wrong: a stale credential keeps working after its access code is removed.
+return hasSessionCookie(request);
 
-// Correct: signature, strict v2 payload, expiry, and active codeId all pass.
-return verifySessionToken(token, { authSecret, accessCodes });
+// Correct: validate the submitted code against the current allowlist per request.
+return requireHostedAccessCode(request, config.hosted, requestGuard);
 
 // Wrong: repeated full-buffer encoding makes tiny chunks quadratic.
 lineBytes = encoder.encode(accumulatedLine).byteLength;
@@ -1030,7 +1045,7 @@ reference images are ordinary `AttachmentRecord` rows linked by
 | Invalid/duplicate Profile ID or missing default Profile | `CONFIGURATION_ERROR` |
 | Image env quartet without Hosted access | `CONFIGURATION_ERROR` |
 | Unsafe active upstream URL | `CONFIGURATION_ERROR` |
-| Missing Session or cross-origin request | `401` / `403` before fetch |
+| Missing access code or cross-origin request | `401` / `403` before fetch |
 | Hosted `profileId` is outside the allowlist | `400 INVALID_REQUEST` |
 | Profile does not support the resolved size | `400 INVALID_REQUEST` |
 | PNG request contains `output_compression` | `400 INVALID_REQUEST` |
@@ -1063,7 +1078,7 @@ reference images are ordinary `AttachmentRecord` rows linked by
   ordered references, Base64, URL download, invalid/empty response, MIME/size,
   abort, and response limits.
 - Server: multi-Profile env parsing/default validation, allowlist selection,
-  fixed generation/edit targets, deployment model override, Session, Origin,
+  fixed generation/edit targets, deployment model override, access code, Origin,
   byte/reference limits, timeout/cancel, safe URL download, redirect/cross-
   origin rejection, redaction, and lease release.
 - Storage: transactional generated-output save, SHA-256 de-duplication,

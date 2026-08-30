@@ -54,7 +54,10 @@ describe("OpenAI-compatible transports", () => {
       fetchCalls.push({ target, ...(init ? { init } : {}) });
       return Response.json({ choices: [] });
     };
-    const transport = createSameOriginTransport("hosted", null, fetchMock);
+    const transport = createSameOriginTransport(
+      { mode: "hosted", apiKey: null, accessCode: "saved-code" },
+      fetchMock,
+    );
     await transport.createChatCompletion(request);
 
     const { target: url, init } = fetchCalls[0] ?? {};

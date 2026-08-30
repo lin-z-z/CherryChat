@@ -25,7 +25,7 @@ localStorage 保存当前连接 Bundle。界面会显示警告，说明刷新或
 - 删除一个对话会移除它的全部分支，并且只释放不再被任何剩余消息引用的附件。
 - 清空全部对话会删除所有对话、分支和附件，同时保留凭据与设置。
 - 清除全部本地数据会删除 CherryChat 数据库、所有 `cherrychat.*` localStorage
-  Key、内存预览和托管访问 Session Cookie；不会清除其他站点或无关 localStorage
+  Key、内存预览和旧版本遗留的托管访问 Session Cookie；不会清除其他站点或无关 localStorage
   Key。
 - 归档只改变可见性，不会删除消息或图片。
 

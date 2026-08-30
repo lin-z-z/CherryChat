@@ -30,7 +30,7 @@ import {
   type HostedRequestGuard,
   type HostedRequestLease,
 } from "@/server/hosted-request-guard";
-import { requireHostedSession } from "@/server/hosted-session";
+import { requireHostedAccessCode } from "@/server/hosted-access-code";
 import {
   errorResponse,
   jsonResponse,
@@ -52,7 +52,11 @@ export async function handleHostedImageGeneration(
   let lease: HostedRequestLease | null = null;
   try {
     assertSameOrigin(request);
-    const hosted = requireHostedSession(request, config.hosted);
+    const hosted = requireHostedAccessCode(
+      request,
+      config.hosted,
+      requestGuard,
+    );
     const imageConfig = hosted.imageGeneration;
     if (!imageConfig) {
       throw new RequestSecurityError(

@@ -16,7 +16,7 @@ import {
   type HostedRequestGuard,
   type HostedRequestLease,
 } from "@/server/hosted-request-guard";
-import { requireHostedSession } from "@/server/hosted-session";
+import { requireHostedAccessCode } from "@/server/hosted-access-code";
 import {
   errorResponse,
   jsonResponse,
@@ -51,9 +51,10 @@ export async function handleModelsProxy(
   request: Request,
   config: ServerConfig,
   fetchImplementation: FetchLike = fetch,
+  requestGuard: HostedRequestGuard = hostedRequestGuard,
 ): Promise<Response> {
   try {
-    const credentials = resolveCredentials(request, config);
+    const credentials = resolveCredentials(request, config, requestGuard);
     if (credentials.mode === "hosted") {
       return jsonResponse({
         object: "list",
@@ -90,7 +91,7 @@ export async function handleChatProxy(
   let hostedLease: HostedRequestLease | null = null;
   try {
     assertSameOrigin(request);
-    const credentials = resolveCredentials(request, config);
+    const credentials = resolveCredentials(request, config, requestGuard);
     if (credentials.mode === "hosted") {
       hostedLease = requestGuard.tryAcquire("chat");
       if (!hostedLease) {
@@ -158,6 +159,7 @@ export async function handleChatProxy(
 function resolveCredentials(
   request: Request,
   config: ServerConfig,
+  requestGuard: HostedRequestGuard,
 ): ProxyCredentials {
   const mode = request.headers.get("x-cherrychat-mode");
   if (mode !== "byok" && mode !== "hosted") {
@@ -165,7 +167,11 @@ function resolveCredentials(
   }
 
   if (mode === "hosted") {
-    const hosted = requireHostedSession(request, config.hosted);
+    const hosted = requireHostedAccessCode(
+      request,
+      config.hosted,
+      requestGuard,
+    );
     return {
       mode,
       authorization: `Bearer ${hosted.apiKey}`,

@@ -89,6 +89,12 @@ export function ModelServicePage({
   const canUseAccessCode = publicConfig?.hostedEnabled ?? false;
   const selectedMethodAvailable =
     connection.mode === "hosted" ? canUseAccessCode : canUseCustom;
+  // Hosted authentication is verified per submit, so resubmitting the same
+  // non-empty access code must stay possible. BYOK keeps the dirty gate.
+  const canSubmitConnection =
+    connection.mode === "hosted"
+      ? connection.accessCode.trim().length > 0
+      : dirty;
   const selectedMethodLabel =
     connection.mode === "hosted" ? t("useAccessCode") : t("customApi");
   const SelectedMethodIcon = connection.mode === "hosted" ? KeyRound : Code2;
@@ -290,7 +296,9 @@ export function ModelServicePage({
             </span>
             <SettingsButton
               aria-busy={saving}
-              disabled={saving || !dirty || !selectedMethodAvailable}
+              disabled={
+                saving || !canSubmitConnection || !selectedMethodAvailable
+              }
               onClick={onSave}
               type="button"
               variant="primary"

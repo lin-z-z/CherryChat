@@ -32,7 +32,7 @@ message history are not forced into localStorage.
 - Clearing all chats removes all conversations, branches, and attachments while
   preserving credentials and settings.
 - Clearing all local data deletes the CherryChat database, every
-  `cherrychat.*` localStorage key, in-memory previews, and the hosted session
+  `cherrychat.*` localStorage key, in-memory previews, and any legacy hosted session
   cookie. It does not clear unrelated sites or unrelated localStorage keys.
 - Archiving changes visibility only; it does not delete messages or images.
 

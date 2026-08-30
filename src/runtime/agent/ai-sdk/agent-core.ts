@@ -29,6 +29,7 @@ import type {
 import {
   ChatTransportError,
   errorCodeForStatus,
+  hostedAuthErrorCodeFromBody,
 } from "@/runtime/transport/chat-errors";
 
 const DEFAULT_MAX_STEPS = 5;
@@ -287,8 +288,10 @@ function toTransportError(cause: unknown): ChatTransportError {
   if (cause instanceof ChatTransportError) return cause;
   if (APICallError.isInstance(cause)) {
     const status = cause.statusCode ?? null;
+    const hostedAuthCode = hostedAuthErrorCodeFromBody(cause.responseBody);
     return new ChatTransportError(
-      status === null ? "UPSTREAM_ERROR" : errorCodeForStatus(status),
+      hostedAuthCode ??
+        (status === null ? "UPSTREAM_ERROR" : errorCodeForStatus(status)),
       "Upstream request failed",
       status,
     );

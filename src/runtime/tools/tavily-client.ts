@@ -49,6 +49,7 @@ export type TavilyClientOptions = SharedTavilyClientOptions &
     | {
         mode: "hosted";
         apiKey?: never;
+        accessCode?: string | undefined;
         onUnauthorized?: () => void;
       }
   );
@@ -70,6 +71,7 @@ export function createTavilyToolExecutor(
       provider: "tavily",
       fetchImplementation,
       timeoutMs,
+      ...(options.accessCode ? { accessCode: options.accessCode } : {}),
       ...(options.onUnauthorized
         ? { onUnauthorized: options.onUnauthorized }
         : {}),

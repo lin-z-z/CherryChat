@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  authenticateAccessCode,
-  createSessionToken,
-  SESSION_COOKIE_NAME,
-} from "@/server/auth";
+import { ACCESS_CODE_HEADER_NAME } from "@/server/auth";
 import type { ServerConfig } from "@/server/config";
 import { HostedRequestGuard } from "@/server/hosted-request-guard";
 import { handleChatProxy, handleModelsProxy } from "@/server/upstream-proxy";
@@ -55,7 +51,7 @@ describe("fixed upstream proxy", () => {
   });
 
   it("ignores client target hints and injects only the hosted key", async () => {
-    const token = hostedSessionToken();
+    const token = hostedAccessCode();
     const fetchCalls: Array<{ target: RequestInfo | URL; init?: RequestInit }> =
       [];
     const fetchMock: typeof fetch = async (target, init) => {
@@ -72,7 +68,7 @@ describe("fixed upstream proxy", () => {
         stream: true,
       },
       {
-        Cookie: `${SESSION_COOKIE_NAME}=${token}`,
+        [ACCESS_CODE_HEADER_NAME]: token,
         Authorization: "Bearer attacker-key",
         "X-Base-Url": "https://evil.example",
       },
@@ -89,9 +85,104 @@ describe("fixed upstream proxy", () => {
       "Bearer deployment-super-secret",
     );
     expect(new Headers(init?.headers).has("x-base-url")).toBe(false);
+    expect(new Headers(init?.headers).has(ACCESS_CODE_HEADER_NAME)).toBe(false);
+    expect(String(init?.body)).not.toContain(token);
     expect(JSON.parse(String(init?.body))).toMatchObject({
       model: "allowed-model",
     });
+  });
+
+  it("rejects a missing or revoked hosted access code with distinct codes", async () => {
+    const fetchMock = vi.fn();
+
+    const missing = await handleChatProxy(
+      chatRequest("hosted", validHostedBody()),
+      hostedConfig,
+      fetchMock as typeof fetch,
+    );
+    expect(missing.status).toBe(401);
+    await expect(missing.json()).resolves.toMatchObject({
+      error: { code: "HOSTED_AUTH_REQUIRED" },
+    });
+
+    const revoked = await handleChatProxy(
+      chatRequest("hosted", validHostedBody(), {
+        [ACCESS_CODE_HEADER_NAME]: "revoked-code",
+      }),
+      hostedConfig,
+      fetchMock as typeof fetch,
+      new HostedRequestGuard(),
+    );
+    expect(revoked.status).toBe(401);
+    const revokedText = await revoked.text();
+    expect(revokedText).toContain("ACCESS_CODE_INVALID");
+    expect(revokedText).not.toContain("revoked-code");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("throttles repeated invalid hosted codes with Retry-After", async () => {
+    const fetchMock = vi.fn();
+    const guard = new HostedRequestGuard();
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await handleChatProxy(
+        chatRequest("hosted", validHostedBody(), {
+          [ACCESS_CODE_HEADER_NAME]: "revoked-code",
+        }),
+        hostedConfig,
+        fetchMock as typeof fetch,
+        guard,
+      );
+    }
+
+    const limited = await handleChatProxy(
+      chatRequest("hosted", validHostedBody(), {
+        [ACCESS_CODE_HEADER_NAME]: "revoked-code",
+      }),
+      hostedConfig,
+      fetchMock as typeof fetch,
+      guard,
+    );
+
+    expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect(await limited.text()).toContain("AUTH_RATE_LIMITED");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps serving hosted requests that present a valid code", async () => {
+    const guard = new HostedRequestGuard();
+    const fetchMock = vi.fn(
+      async () => new Response("data: [DONE]\n\n"),
+    ) as unknown as typeof fetch;
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const response = await handleChatProxy(
+        chatRequest("hosted", validHostedBody(), authenticatedHostedHeaders()),
+        hostedConfig,
+        fetchMock,
+        guard,
+      );
+      await response.text();
+      expect(response.status).toBe(200);
+    }
+  });
+
+  it("does not forward the access code header when listing hosted models", async () => {
+    const fetchMock = vi.fn();
+    const response = await handleModelsProxy(
+      new Request("https://cherrychat.example/api/models", {
+        headers: {
+          "x-cherrychat-mode": "hosted",
+          ...authenticatedHostedHeaders(),
+        },
+      }),
+      hostedConfig,
+      fetchMock as typeof fetch,
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await response.text()).not.toContain(hostedAccessCode());
   });
 
   it("normalizes an omitted Hosted stream flag before forwarding", async () => {
@@ -405,10 +496,10 @@ describe("fixed upstream proxy", () => {
 
   it("rejects cross-origin POST and disallowed hosted models before fetch", async () => {
     const fetchMock = vi.fn();
-    const token = hostedSessionToken();
+    const token = hostedAccessCode();
     const crossOrigin = chatRequest("hosted", validHostedBody(), {
       Origin: "https://evil.example",
-      Cookie: `${SESSION_COOKIE_NAME}=${token}`,
+      [ACCESS_CODE_HEADER_NAME]: token,
     });
     expect(
       (
@@ -423,7 +514,7 @@ describe("fixed upstream proxy", () => {
     const disallowed = chatRequest(
       "hosted",
       { ...validHostedBody(), model: "other-model" },
-      { Cookie: `${SESSION_COOKIE_NAME}=${token}` },
+      { [ACCESS_CODE_HEADER_NAME]: token },
     );
     const response = await handleChatProxy(
       disallowed,
@@ -450,10 +541,10 @@ describe("fixed upstream proxy", () => {
   });
 
   it("redacts arbitrary hosted keys from upstream errors", async () => {
-    const token = hostedSessionToken();
+    const token = hostedAccessCode();
     const response = await handleChatProxy(
       chatRequest("hosted", validHostedBody(), {
-        Cookie: `${SESSION_COOKIE_NAME}=${token}`,
+        [ACCESS_CODE_HEADER_NAME]: token,
       }),
       hostedConfig,
       vi.fn(
@@ -472,12 +563,12 @@ describe("fixed upstream proxy", () => {
   });
 
   it("serves the hosted model allowlist without contacting upstream", async () => {
-    const token = hostedSessionToken();
+    const token = hostedAccessCode();
     const fetchMock = vi.fn();
     const request = new Request("https://cherry.example/api/models", {
       headers: {
         "X-CherryChat-Mode": "hosted",
-        Cookie: `${SESSION_COOKIE_NAME}=${token}`,
+        [ACCESS_CODE_HEADER_NAME]: token,
       },
     });
     const response = await handleModelsProxy(
@@ -493,7 +584,7 @@ describe("fixed upstream proxy", () => {
   });
 
   it("holds a concurrency lease until the client stream ends or is cancelled", async () => {
-    const token = hostedSessionToken();
+    const token = hostedAccessCode();
     const guard = new HostedRequestGuard({ chatConcurrencyLimit: 1 });
     let upstreamCancelled = false;
     const upstreamBody = new ReadableStream<Uint8Array>({
@@ -506,7 +597,7 @@ describe("fixed upstream proxy", () => {
     });
     const response = await handleChatProxy(
       chatRequest("hosted", validHostedBody(), {
-        Cookie: `${SESSION_COOKIE_NAME}=${token}`,
+        [ACCESS_CODE_HEADER_NAME]: token,
       }),
       hostedConfig,
       (async () =>
@@ -519,7 +610,7 @@ describe("fixed upstream proxy", () => {
     expect(guard.activeCount("chat")).toBe(1);
     const limited = await handleChatProxy(
       chatRequest("hosted", validHostedBody(), {
-        Cookie: `${SESSION_COOKIE_NAME}=${token}`,
+        [ACCESS_CODE_HEADER_NAME]: token,
       }),
       hostedConfig,
       vi.fn() as unknown as typeof fetch,
@@ -537,7 +628,7 @@ describe("fixed upstream proxy", () => {
 
     const resumed = await handleChatProxy(
       chatRequest("hosted", validHostedBody(), {
-        Cookie: `${SESSION_COOKIE_NAME}=${token}`,
+        [ACCESS_CODE_HEADER_NAME]: token,
       }),
       hostedConfig,
       (async () => new Response("data: [DONE]\n\n")) as typeof fetch,
@@ -626,14 +717,12 @@ function validHostedBody() {
 }
 
 function authenticatedHostedHeaders(): Record<string, string> {
-  const token = hostedSessionToken();
-  return { Cookie: `${SESSION_COOKIE_NAME}=${token}` };
+  const token = hostedAccessCode();
+  return { [ACCESS_CODE_HEADER_NAME]: token };
 }
 
-function hostedSessionToken(): string {
+function hostedAccessCode(): string {
   const hosted = hostedConfig.hosted;
   if (!hosted) throw new Error("Hosted test configuration is missing");
-  const codeId = authenticateAccessCode("access-code", hosted);
-  if (!codeId) throw new Error("Hosted test access code is invalid");
-  return createSessionToken(hosted.authSecret, codeId);
+  return hosted.accessCodes[0] ?? "";
 }

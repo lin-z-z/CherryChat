@@ -17,8 +17,9 @@ ownership rather than collected in one store.
   capability projections. Recompute from canonical records instead of storing a
   second total or flattened copy.
 - **Server-derived state:** `/api/config` exposes only safe deployment metadata,
-  authenticated session status, and a hosted-search availability boolean. A
-  Hosted Key itself never enters React state.
+  the deployment `appVersion`, whether the submitted access code authenticates,
+  and a hosted-search availability boolean. A Hosted Key itself never enters
+  React state.
 
 ## Mutation Rules
 

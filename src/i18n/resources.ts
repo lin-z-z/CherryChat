@@ -104,6 +104,8 @@ export const resources = {
         MIXED_CONTENT:
           "当前页面无法连接不安全的 HTTP 地址，请改用 HTTPS API 地址",
         UNAUTHORIZED: "API 密钥或访问码无效",
+        HOSTED_AUTH_REQUIRED: "需要访问码，请在设置中填写访问码后重试",
+        ACCESS_CODE_INVALID: "访问码已失效，请在设置中重新填写并验证访问码",
         FORBIDDEN: "模型服务拒绝了当前连接，请检查 API 密钥和访问权限",
         MODEL_NOT_ALLOWED: "当前模型不可用，请从模型列表中选择其他模型",
         RATE_LIMITED: "请求过于频繁，请稍后再试",
@@ -581,6 +583,9 @@ export const resources = {
       reasoning: "思考过程",
       storageDegraded:
         "浏览器暂时无法保存会话。刷新或关闭页面后，当前内容可能会丢失。",
+      updateAvailable:
+        "有新版本发布，刷新页面即可使用；本地会话和设置不会丢失。",
+      reloadForUpdate: "刷新页面",
       storageError: {
         QUOTA_EXCEEDED: "浏览器存储空间已满，请删除部分会话或图片后重试。",
         TRANSACTION_FAILED: "保存本地数据失败，请重试。",
@@ -715,6 +720,10 @@ export const resources = {
         MIXED_CONTENT:
           "This page cannot connect to an insecure HTTP address. Use an HTTPS API URL.",
         UNAUTHORIZED: "The API key or access code is invalid",
+        HOSTED_AUTH_REQUIRED:
+          "An access code is required. Add it in settings and try again.",
+        ACCESS_CODE_INVALID:
+          "This access code is no longer valid. Re-enter and verify it in settings.",
         FORBIDDEN:
           "The model service rejected this connection. Check the API key and access permissions.",
         MODEL_NOT_ALLOWED:
@@ -1248,6 +1257,9 @@ export const resources = {
       reasoning: "Reasoning",
       storageDegraded:
         "Chats cannot be saved in this browser right now. Current content may be lost after refresh or close.",
+      updateAvailable:
+        "A new version is available. Refresh the page to use it; local chats and settings are kept.",
+      reloadForUpdate: "Refresh page",
       storageError: {
         QUOTA_EXCEEDED:
           "Browser storage is full. Delete some chats or images and try again.",

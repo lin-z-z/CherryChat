@@ -147,6 +147,7 @@ export function resolveWebSearchSource(
   connectionMode: ConnectionDraft["mode"],
   webSearch: WebSearchConfiguration,
   publicConfig: PublicConfig | null,
+  accessCode?: string,
 ): WebSearchExecutionSource | null {
   return resolveWebSearchExecutionSource({
     connectionMode,
@@ -155,6 +156,7 @@ export function resolveWebSearchSource(
     hostedWebSearchProvider: publicConfig?.hostedWebSearchProvider ?? null,
     hostedWebSearchProviders: publicConfig?.hostedWebSearchProviders ?? [],
     authenticated: publicConfig?.authenticated ?? false,
+    ...(accessCode ? { accessCode } : {}),
   });
 }
 

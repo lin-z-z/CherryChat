@@ -13,6 +13,7 @@ import { ChatTransportError } from "@/runtime/transport/chat-errors";
 import { DEFAULT_REQUEST_TIMEOUT_POLICY } from "@/runtime/transport/request-timeout-policy";
 
 const publicConfig: PublicConfig = {
+  appVersion: "1.1.0",
   byokEnabled: true,
   hostedEnabled: true,
   hostedWebSearchEnabled: false,
@@ -46,6 +47,7 @@ const savedByokConnection: ConnectionBundle = {
 describe("connection controller", () => {
   it("validates public config and supplies the checked-in timeout policy", () => {
     const parsed = parsePublicConfig({
+      appVersion: "1.1.0",
       byokEnabled: true,
       hostedEnabled: false,
       hostedWebSearchEnabled: false,
@@ -64,6 +66,7 @@ describe("connection controller", () => {
     });
 
     expect(parsed).toEqual({
+      appVersion: "1.1.0",
       byokEnabled: true,
       hostedEnabled: false,
       hostedWebSearchEnabled: false,
@@ -82,6 +85,14 @@ describe("connection controller", () => {
       requestTimeouts: DEFAULT_REQUEST_TIMEOUT_POLICY,
     });
     expect(parsed.requestTimeouts).not.toBe(DEFAULT_REQUEST_TIMEOUT_POLICY);
+    expect(
+      parsePublicConfig({ ...publicConfig, appVersion: " 1.2.0 " }).appVersion,
+    ).toBe("1.2.0");
+    for (const appVersion of [undefined, null, "", "   ", 12]) {
+      expect(
+        parsePublicConfig({ ...publicConfig, appVersion }).appVersion,
+      ).toBeNull();
+    }
     expect(
       parsePublicConfig({
         ...publicConfig,

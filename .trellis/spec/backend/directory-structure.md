@@ -3,10 +3,10 @@
 ```text
 src/app/api/*/route.ts       HTTP boundary adapters
 src/server/config.ts         Environment parsing and public projection
-src/server/auth.ts           Access-code HMAC and signed sessions
+src/server/auth.ts           Access-code HMAC and request-header reader
 src/server/security.ts       Same-origin and bounded-body checks
 src/server/http.ts           JSON/error response shape
-src/server/hosted-session.ts Shared signed-session guard
+src/server/hosted-access-code.ts Shared stateless Hosted auth guard
 src/server/upstream-proxy.ts Fixed-target OpenAI-compatible forwarding
 src/server/hosted-web-search.ts Authenticated env-selected search execution
 src/runtime/transport/       Browser transport and stable chat errors

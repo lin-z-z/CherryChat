@@ -13,6 +13,7 @@ import {
   encodeOpenAIChatReasoning,
   getOpenAIChatReasoningContextProvider,
 } from "@/runtime/transport/reasoning-wire";
+import { hostedAccessCodeHeaders } from "@/runtime/transport/hosted-auth";
 import { parseNativeJson } from "@/runtime/transport/native-response";
 import { MODEL_LIST_RESPONSE_MAX_BYTES } from "@/runtime/transport/response-reader";
 import {
@@ -44,12 +45,18 @@ export function createByokDirectTransport(
   );
 }
 
+export interface SameOriginTransportCredentials {
+  mode: "byok" | "hosted";
+  apiKey: string | null;
+  accessCode?: string | null | undefined;
+}
+
 export function createSameOriginTransport(
-  mode: "byok" | "hosted",
-  apiKey: string | null,
+  credentials: SameOriginTransportCredentials,
   fetchImplementation: FetchLike = fetch,
   timeoutPolicy: RequestTimeoutPolicy = DEFAULT_REQUEST_TIMEOUT_POLICY,
 ): OpenAICompatibleTransport {
+  const { mode, apiKey } = credentials;
   if (mode === "byok" && !apiKey) {
     throw new ChatTransportError(
       "UNAUTHORIZED",
@@ -64,6 +71,7 @@ export function createSameOriginTransport(
       headers: () => ({
         "X-CherryChat-Mode": mode,
         ...(mode === "byok" ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...hostedAccessCodeHeaders(credentials),
       }),
       isMixedContent: () => false,
     },

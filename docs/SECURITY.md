@@ -49,7 +49,7 @@ person with access to the browser profile may read them.
 Credentials are kept in separate connection records and are excluded from full
 backups, chat export, search, printed output, and public configuration. Clearing
 all local data removes CherryChat IndexedDB data, CherryChat-prefixed
-localStorage records, in-memory previews, and the Hosted session cookie.
+localStorage records, in-memory previews, and any legacy Hosted session cookie.
 
 See [Data and backup behavior](./DATA.md) for exact deletion and export rules.
 
@@ -59,17 +59,42 @@ Hosted access requires `OPENAI_API_KEY`, `ACCESS_CODE`, and `AUTH_SECRET`
 together, plus a non-empty `MODELS` allowlist. Partial configuration fails
 closed.
 
+Hosted authentication is stateless. The browser keeps the access code in its
+local connection record and submits it with every Hosted request in the
+`X-CherryChat-Access-Code` header; the value is percent-encoded because HTTP
+headers cannot carry non-ASCII bytes. The server validates it against the
+current `ACCESS_CODE` allowlist on each request. There is no session, no token,
+and no expiry, so a still-valid code keeps working across deployments, host
+changes, and cleared cookies.
+
 Access codes are normalized, bounded to 256 UTF-8 bytes, HMAC-SHA-256 digested,
-and compared across every configured code with timing-safe comparison. Session
-cookies contain an expiry and irreversible code identifier; they do not contain
-the access code. Removing a code invalidates sessions created by that code, and
-rotating `AUTH_SECRET` invalidates every session.
+and compared across every configured code with timing-safe comparison. The
+header is accepted only on same-origin CherryChat routes and is never forwarded
+to an upstream model, search, or image service. It is not written to responses,
+error details, or logs.
 
-Authentication mutations require same-origin requests. On HTTPS/production,
-the session cookie is HttpOnly, Secure, and SameSite Strict. Hosted model IDs
-must belong to the deployment allowlist.
+**Revoking Hosted access is an `ACCESS_CODE` change.** Removing or replacing a
+code takes effect on that code's next request. Rotating `AUTH_SECRET` no longer
+signs clients out: it changes only digest derivation and the rate-limit client
+fingerprint. Deployments that need a single global cut-off must remove the
+shared code.
 
-One running instance applies bounded login and concurrency guards. Vercel
+A missing header reports `HOSTED_AUTH_REQUIRED` and a rejected code reports
+`ACCESS_CODE_INVALID`, both with HTTP 401. Neither is reported as an upstream or
+BYOK API key failure. `POST /api/auth` remains available so the settings page
+can verify a code explicitly; it returns only a boolean and issues no session.
+`DELETE /api/auth` clears the legacy cookie left by earlier releases.
+
+Authentication mutations require same-origin requests. Hosted model IDs must
+belong to the deployment allowlist.
+
+One running instance applies bounded authentication-failure and concurrency
+guards. Because every Hosted request now carries a credential, a rejected code
+on any Hosted route counts toward the same per-client and global failure window
+that protects explicit sign-in, and a throttled client receives HTTP 429 with
+`Retry-After`. A valid code never counts as a failure. `GET /api/config` is the
+one exception: it always returns public configuration, and simply reports
+`authenticated: false` while a client is throttled, so a page can still load. Vercel
 Firewall can add a regional IP-based rule before the Function. Neither layer is
 a globally consistent quota, per-user budget, or billing ledger. A public
 Hosted deployment still needs an upstream spending limit and an abuse-response
@@ -84,7 +109,7 @@ Chat requests use three relevant paths:
 2. An empty OpenAI-compatible BYOK Base URL uses same-origin routes that can
    forward only to the validated deployment `BASE_URL`.
 3. Hosted access uses the same fixed target with a server-side deployment key
-   after signed-session validation.
+   after access-code validation.
 
 The server does not accept an upstream target from query parameters, request
 bodies, or target-host headers. Redirects are rejected. Hosted chat validates a
@@ -92,7 +117,7 @@ strict bounded request shape and model allowlist. Same-origin BYOK preserves
 OpenAI-compatible extension fields but still cannot change the fixed target.
 
 Hosted web search is a separate same-origin POST route. It requires a valid
-Hosted session, accepts only a bounded query and result count, and calls the
+Hosted access code, accepts only a bounded query and result count, and calls the
 validated deployment URL for the server-selected Tavily, Exa, or Grok provider
 with the deployment credential. The browser cannot supply a server target,
 provider, model, or credential for this route.
@@ -104,7 +129,7 @@ Image generation adds two explicit paths:
    use `/v1/images/generations` without references and `/v1/images/edits` with
    references; CherryChat does not fall back to a server proxy after CORS fails.
 2. Hosted image generation sends a bounded same-origin request to
-   `POST /api/image-generation`. It requires a valid signed Session, and the
+   `POST /api/image-generation`. It requires a valid access code, and the
    server selects the complete allowlisted Profile, fixed upstream, model, and
    deployment credential from validated configuration.
 
@@ -153,7 +178,8 @@ quotas or a deployment-wide budget.
 ## Logging and error handling
 
 Application code must not log API keys, access codes, access-code digests,
-`AUTH_SECRET`, Authorization or Cookie headers, request/response bodies, private
+`AUTH_SECRET`, access codes, Authorization, `X-CherryChat-Access-Code` or Cookie
+headers, request/response bodies, private
 prompts, model output, Base64 images, or raw user-configured target URLs.
 
 Public errors use stable codes and bounded/redacted details. Vercel log review

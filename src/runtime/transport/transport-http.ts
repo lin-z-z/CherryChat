@@ -1,6 +1,7 @@
 import {
   ChatTransportError,
   errorCodeForStatus,
+  hostedAuthErrorCodeFromBody,
   redactSensitiveText,
 } from "@/runtime/transport/chat-errors";
 import {
@@ -63,11 +64,10 @@ function timeoutTransportError(phase: RequestTimeoutPhase): ChatTransportError {
 export async function assertSuccessful(response: Response): Promise<void> {
   if (response.ok) return;
   let detail: string | undefined;
+  let body: string | null = null;
   try {
-    detail =
-      redactSensitiveText(
-        await readLimitedResponseText(response, ERROR_RESPONSE_MAX_BYTES),
-      ).trim() || undefined;
+    body = await readLimitedResponseText(response, ERROR_RESPONSE_MAX_BYTES);
+    detail = redactSensitiveText(body).trim() || undefined;
   } catch (error) {
     if (error instanceof ChatTransportError) throw error;
     if (error instanceof ResponseLimitError) {
@@ -75,7 +75,7 @@ export async function assertSuccessful(response: Response): Promise<void> {
     }
   }
   throw new ChatTransportError(
-    errorCodeForStatus(response.status),
+    hostedAuthErrorCodeFromBody(body) ?? errorCodeForStatus(response.status),
     "Upstream request failed",
     response.status,
     detail,

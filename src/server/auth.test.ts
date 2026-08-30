@@ -1,11 +1,10 @@
-import { createHmac } from "node:crypto";
-
 import { describe, expect, it } from "vitest";
 
 import {
+  ACCESS_CODE_HEADER_NAME,
   authenticateAccessCode,
-  createSessionToken,
-  verifySessionToken,
+  decodeAccessCodeHeader,
+  readAccessCodeHeader,
 } from "@/server/auth";
 
 const secret = "s".repeat(32);
@@ -39,47 +38,43 @@ describe("hosted authentication", () => {
     expect(authenticateAccessCode("界".repeat(86), multibyteConfig)).toBeNull();
   });
 
-  it("binds v2 sessions to one active access code", () => {
-    const activeConfig = {
+  it("distinguishes each configured access code", () => {
+    const config = {
       accessCodes: ["first-code", "second-code"],
       authSecret: secret,
     };
-    const codeId = authenticateAccessCode("first-code", activeConfig);
-    if (!codeId) throw new Error("Expected an access-code ID");
-    const token = createSessionToken(secret, codeId, 1000, 60);
 
-    expect(verifySessionToken(token, activeConfig, 1059)).toBe(true);
+    const first = authenticateAccessCode("first-code", config);
+    const second = authenticateAccessCode("second-code", config);
+
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+    expect(first).not.toBe(second);
     expect(
-      verifySessionToken(
-        token,
-        { ...activeConfig, accessCodes: ["second-code"] },
-        1059,
-      ),
-    ).toBe(false);
-    expect(verifySessionToken(token, activeConfig, 1060)).toBe(false);
-    expect(verifySessionToken(`${token}x`, activeConfig, 1059)).toBe(false);
-    expect(token).not.toContain("first-code");
+      authenticateAccessCode("first-code", {
+        ...config,
+        accessCodes: ["second-code"],
+      }),
+    ).toBeNull();
   });
 
-  it("rejects legacy v1 session payloads after the one-time upgrade", () => {
-    const encodedPayload = Buffer.from(
-      JSON.stringify({ version: 1, expiresAt: 2000 }),
-    ).toString("base64url");
-    const legacySignature = createHmac("sha256", secret)
-      .update("session")
-      .update("\0")
-      .update(encodedPayload)
-      .digest("base64url");
+  it("reads the access code from the dedicated request header", () => {
+    const request = new Request("https://app.example/api/models", {
+      headers: { [ACCESS_CODE_HEADER_NAME]: "first-code" },
+    });
 
+    expect(readAccessCodeHeader(request)).toBe("first-code");
     expect(
-      verifySessionToken(
-        `${encodedPayload}.${legacySignature}`,
-        {
-          accessCodes: ["first-code"],
-          authSecret: secret,
-        },
-        1000,
-      ),
-    ).toBe(false);
+      readAccessCodeHeader(new Request("https://app.example/api/models")),
+    ).toBeNull();
+  });
+
+  it("decodes percent-encoded access codes and rejects malformed encodings", () => {
+    expect(decodeAccessCodeHeader(encodeURIComponent("访问码-1"))).toBe(
+      "访问码-1",
+    );
+    expect(decodeAccessCodeHeader("plain-code")).toBe("plain-code");
+    expect(decodeAccessCodeHeader("%E4%B8")).toBeNull();
+    expect(decodeAccessCodeHeader("%zz")).toBeNull();
   });
 });
