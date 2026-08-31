@@ -570,7 +570,7 @@ test("uses hosted web search immediately after access-code sign-in", async ({
   );
   let hostedSearchPosts = 0;
   let hostedChatPosts = 0;
-  let expireHostedSession = false;
+  let revokeAccessCode = false;
   await mockConfig(page, {
     byokEnabled: false,
     hostedEnabled: true,
@@ -608,11 +608,14 @@ test("uses hosted web search immediately after access-code sign-in", async ({
       provider: "tavily",
     });
     await route.fulfill({
-      status: expireHostedSession ? 401 : 200,
+      status: revokeAccessCode ? 401 : 200,
       contentType: "application/json",
       body: JSON.stringify(
-        expireHostedSession
-          ? { error: { code: "UNAUTHORIZED", message: "expired" } }
+        revokeAccessCode
+          ? // Stateless auth rejects a revoked code with a Hosted-specific
+            // code; a bare UNAUTHORIZED here would mean the deployment's own
+            // upstream key failed, which must not clear the access code state.
+            { error: { code: "ACCESS_CODE_INVALID", message: "revoked" } }
           : {
               query: "Web search connection test",
               results: [],
@@ -680,7 +683,7 @@ test("uses hosted web search immediately after access-code sign-in", async ({
     .click();
   await page.getByRole("button", { name: "Settings" }).click();
   await selectSettingsPage(page, settings, "Web search");
-  expireHostedSession = true;
+  revokeAccessCode = true;
   await settings.getByRole("button", { name: "Test connection" }).click();
   await expect(settings.getByRole("alert")).toContainText(
     "Web search could not be reached",

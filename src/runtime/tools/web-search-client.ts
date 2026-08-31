@@ -5,6 +5,7 @@ import type {
   WebSearchProviderId,
   WebSearchToolOutput,
 } from "@/runtime/chat/types";
+import { isHostedAuthErrorCode } from "@/runtime/transport/chat-errors";
 import { hostedAccessCodeHeaders } from "@/runtime/transport/hosted-auth";
 import { readLimitedResponseJson } from "@/runtime/transport/response-reader";
 import type { FetchLike } from "@/runtime/transport/transport-http";
@@ -263,7 +264,10 @@ async function hostedToolError(
     code === "HOSTED_AUTH_REQUIRED" ||
     code === "ACCESS_CODE_INVALID"
   ) {
-    onUnauthorized?.();
+    // Only a Hosted-specific rejection means the access code itself failed.
+    // `FORBIDDEN` is an origin check and `UNAUTHORIZED` belongs to the
+    // deployment's own upstream credential, so neither may touch auth state.
+    if (isHostedAuthErrorCode(code)) onUnauthorized?.();
     return new ToolExecutionError("TOOL_AUTH_FAILED", response.status, false);
   }
   if (code === "INVALID_REQUEST") {

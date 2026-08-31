@@ -289,6 +289,31 @@ saveConnectionChange(
   increasing epoch when the mutation executes. Capability results may update
   React state only when both the epoch and canonical `scope + modelId` identity
   still match `connectionRef.current`.
+- Hosted authentication state is epoch-owned. Every request that can produce a
+  Hosted auth error binds the current auth epoch when it starts, through one
+  shared scope factory; no request path re-implements the epoch comparison.
+  `publicConfig.authenticated` may be projected to `false` only while the bound
+  epoch is still current, and a successful projection advances the epoch so a
+  second failure at the same epoch is a no-op. Explicit access-code verification
+  defines a new epoch directly, which is what strips write permission from
+  requests already in flight. Failure projection additionally requires a
+  `ChatTransportError` carrying a Hosted-specific code, so upstream/BYOK 401,
+  429, 5xx, timeout, and cancel never touch it. Auth failures never clear the
+  locally stored access code.
+- The epoch must be bound at the same point the request reads its credential,
+  not at callback entry. A path that resolves attachments or persists messages
+  before building transport reads `connectionRef.current.accessCode` late, so
+  binding at entry can pair one request's epoch with a code the user has since
+  replaced — which silently discards a real rejection. Read the code and bind
+  the epoch together, immediately before the request.
+- Mode is checked inside the shared projection, not at each call site. Switching
+  Hosted to BYOK does not advance the auth epoch, so an in-flight Hosted request
+  still holds a current epoch; only the `hosted` mode check stops it from
+  projecting onto a BYOK session.
+- Only a Hosted-specific error code means the access code failed. On
+  `/api/web-search`, `FORBIDDEN` is an origin rejection and a bare
+  `UNAUTHORIZED` belongs to the deployment's own upstream credential; both fail
+  the tool call without touching authentication state.
 - Explicit New chat creation activates the persisted default model. If the user
   selects a model on an empty workspace and sends directly, implicit creation
   preserves that selection instead of silently restoring the default.
@@ -348,6 +373,13 @@ saveConnectionChange(
 | Cached New API list has endpoint metadata | Restore descriptors and recompute capability before rethrowing the refresh error |
 | Title model uses another New API endpoint | Build title transport from the title model descriptor |
 | An older model refresh finishes after a new connection starts | Return to its caller but do not write cache or React state |
+| A stale-epoch request returns a Hosted auth error | Record its own failure; leave `authenticated` and the stored access code untouched |
+| A current-epoch model/chat/image/title request returns a Hosted auth error | Project `authenticated: false`, advance the epoch, keep the stored access code |
+| A current-epoch automatic title request returns a Hosted auth error | Project `authenticated: false` but stay silent; no global error or title toast |
+| Hosted mode receives a 401 without a Hosted error code | Map it as an upstream failure; do not change `authenticated` |
+| A Hosted auth error lands after the user switched to BYOK | Fail the request only; the mode check blocks the projection |
+| Hosted web search returns `FORBIDDEN` or a bare `UNAUTHORIZED` | Fail the tool call; do not treat it as a rejected access code |
+| The access code changes while a request prepares attachments | The request's epoch matches the code it actually sent, so a real rejection still lands |
 | Connection scope or credential changes | Clear the target list cache before persisting the new connection |
 | A answered, B selected without sending, then C selected | Return a switch event from A to C |
 | A answered, B selected without sending, then A selected | Return `null`; do not invent a switch event |
@@ -416,6 +448,18 @@ saveConnectionChange(
   models cannot be deselected; legacy records without enablement stay valid.
 - Hook/component: Hosted initialization and backup restore ignore stale enabled
   subsets, and the Hosted Model service renders no enablement checkboxes.
+- Hook integration: hold a Hosted request open across a successful access-code
+  verification, then fail it with a Hosted auth code and assert `authenticated`
+  stays `true`; cover both a transport path and the web search path. Also assert
+  a current-epoch Hosted 401 flips `authenticated` to `false` while preserving
+  the stored code, and that a 401 without a Hosted error code changes nothing.
+  Verify these tests fail when the epoch comparison is removed.
+- Hook integration: a Hosted rejection arriving after a switch to BYOK leaves
+  `authenticated` alone. This test must fail when the mode check is removed;
+  the epoch alone does not cover it.
+- Runtime: hosted web search fires its unauthorized callback for
+  `ACCESS_CODE_INVALID` / `HOSTED_AUTH_REQUIRED` only, and not for `FORBIDDEN`
+  or a bare `UNAUTHORIZED`.
 - Projection/browser: model switch events cover no prior answer, A -> B -> C
   without a B reply, selecting A again, and B replying before switching to C.
 - Playwright: cached models survive reload and transient failure; a delayed
@@ -450,6 +494,28 @@ selectRequestContext({ historyMessageLimit: conversation.contextMessageLimit });
 // and context selection is driven by the model token budget.
 await controller.saveModelSettings(selectedModel, override, preferences);
 selectRequestContext({ contextWindow: capability.contextWindow, history });
+
+// Wrong: a Hosted auth failure is projected from the live mode alone, so a
+// delayed rejection for a replaced access code undoes a newer verification.
+if (isHostedAuthErrorCode(cause.code) && connectionRef.current.mode === "hosted") {
+  setPublicConfig((current) => ({ ...current, authenticated: false }));
+}
+
+// Correct: the request binds an epoch when it starts and only that epoch writes.
+const authScope = beginHostedAuthEpoch();
+try { ... } catch (cause) { authScope.noteFailure(cause); throw cause; }
+
+// Wrong: the epoch is bound at entry, but the code is read after awaiting
+// attachments, so this epoch may not belong to the code actually sent.
+const authScope = beginHostedAuthEpoch();
+await loadReferences();
+transport = build({ accessCode: connectionRef.current.accessCode });
+
+// Correct: credential and epoch are one snapshot taken at request time.
+await loadReferences();
+const accessCode = connectionRef.current.accessCode;
+const authScope = beginHostedAuthEpoch();
+transport = build({ accessCode });
 
 // Wrong: an async result writes after the active connection has changed.
 setModels(await transport.listModels());

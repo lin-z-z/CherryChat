@@ -101,7 +101,7 @@ function createController(
     reloadForUpdate: vi.fn(),
     storageDegraded: false,
     publicConfig: {
-      appVersion: "1.2.0",
+      appVersion: "1.2.1",
       byokEnabled: true,
       hostedEnabled: true,
       hostedWebSearchEnabled: false,
@@ -1344,7 +1344,7 @@ describe("ChatShell", () => {
       screen.getByRole("heading", { name: "产品信息" }),
     ).toBeInTheDocument();
     expect(screen.getByText("AI 对话工作区")).toBeInTheDocument();
-    expect(screen.getByText("1.2.0")).toBeInTheDocument();
+    expect(screen.getByText("1.2.1")).toBeInTheDocument();
     expect(screen.getByText("MIT")).toBeInTheDocument();
     expect(screen.getByText("访问码或自定义 API")).toBeInTheDocument();
     expect(screen.getByText("当前浏览器")).toBeInTheDocument();
@@ -1361,7 +1361,7 @@ describe("ChatShell", () => {
     const controller = createController();
     controller.settingsOpen = true;
     controller.publicConfig = {
-      appVersion: "1.2.0",
+      appVersion: "1.2.1",
       byokEnabled: true,
       hostedEnabled: false,
       hostedWebSearchEnabled: false,
@@ -1573,7 +1573,7 @@ describe("ChatShell", () => {
     const controller = createController();
     controller.settingsOpen = true;
     controller.publicConfig = {
-      appVersion: "1.2.0",
+      appVersion: "1.2.1",
       byokEnabled: true,
       hostedEnabled: false,
       hostedWebSearchEnabled: false,
