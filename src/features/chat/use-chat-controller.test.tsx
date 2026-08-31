@@ -773,6 +773,222 @@ describe("useChatController integration", () => {
     expect(window.localStorage.getItem("cherrychat.language")).toBe("en");
     expect(window.localStorage.getItem("cherrychat.theme")).toBe("dark");
   });
+
+  it("keeps the newer verification when a stale Hosted request is rejected", async () => {
+    let releaseStaleModels: ((response: Response) => void) | null = null;
+    const staleModels = new Promise<Response>((resolve) => {
+      releaseStaleModels = resolve;
+    });
+    installSequencedModelsFetchMock([
+      () => staleModels,
+      () => modelListResponse(),
+    ]);
+    const { result } = renderController();
+    await waitForController(result);
+
+    let staleRefreshError: unknown;
+    const staleRefresh = result.current
+      .refreshModels()
+      .catch((cause: unknown) => {
+        staleRefreshError = cause;
+      });
+
+    await act(async () => {
+      await result.current.saveConnection({
+        mode: "hosted",
+        baseUrl: "https://api.openai.com",
+        apiKey: "",
+        accessCode: "code-b",
+        modelId: "hosted-default",
+        apiType: "openai",
+      });
+    });
+    expect(result.current.publicConfig?.authenticated).toBe(true);
+
+    await act(async () => {
+      releaseStaleModels?.(hostedAuthErrorResponse());
+      await staleRefresh;
+    });
+
+    expect(staleRefreshError).toBeDefined();
+    expect(result.current.publicConfig?.authenticated).toBe(true);
+    expect(result.current.connection.accessCode).toBe("code-b");
+  });
+
+  it("marks Hosted unauthenticated when the current access code is rejected", async () => {
+    installSequencedModelsFetchMock([
+      () => modelListResponse(),
+      () => hostedAuthErrorResponse("HOSTED_AUTH_REQUIRED"),
+    ]);
+    const { result } = renderController();
+    await waitForController(result);
+
+    await act(async () => {
+      await result.current.saveConnection({
+        mode: "hosted",
+        baseUrl: "https://api.openai.com",
+        apiKey: "",
+        accessCode: "code-b",
+        modelId: "hosted-default",
+        apiType: "openai",
+      });
+    });
+    expect(result.current.publicConfig?.authenticated).toBe(true);
+
+    await act(async () => {
+      await result.current.refreshModels().catch(() => undefined);
+    });
+
+    expect(result.current.publicConfig?.authenticated).toBe(false);
+    expect(result.current.connection.accessCode).toBe("code-b");
+  });
+
+  it("leaves Hosted authentication untouched for a plain upstream 401", async () => {
+    installSequencedModelsFetchMock([
+      () => modelListResponse(),
+      () =>
+        new Response(
+          JSON.stringify({ error: { message: "invalid api key" } }),
+          {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+    ]);
+    const { result } = renderController();
+    await waitForController(result);
+
+    await act(async () => {
+      await result.current.saveConnection({
+        mode: "hosted",
+        baseUrl: "https://api.openai.com",
+        apiKey: "",
+        accessCode: "code-b",
+        modelId: "hosted-default",
+        apiType: "openai",
+      });
+    });
+    expect(result.current.publicConfig?.authenticated).toBe(true);
+
+    await act(async () => {
+      await result.current.refreshModels().catch(() => undefined);
+    });
+
+    expect(result.current.publicConfig?.authenticated).toBe(true);
+    expect(result.current.connection.accessCode).toBe("code-b");
+  });
+
+  it("keeps the newer verification when a stale Hosted web search is rejected", async () => {
+    const hostedSearchConfig: PublicConfig = {
+      ...hostedConfig,
+      hostedWebSearchEnabled: true,
+      hostedWebSearchProvider: "tavily",
+      hostedWebSearchProviders: ["tavily"],
+      authenticated: true,
+    };
+    let releaseWebSearch: ((response: Response) => void) | null = null;
+    const staleWebSearch = new Promise<Response>((resolve) => {
+      releaseWebSearch = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+        const path = requestPath(input);
+        if (path === "/api/config") return jsonResponse(hostedSearchConfig);
+        if (path === "/api/auth") return new Response(null, { status: 204 });
+        if (path === "/api/models") return modelListResponse();
+        if (path === "/api/web-search") return staleWebSearch;
+        throw new Error(`Unexpected fetch: ${path}`);
+      }),
+    );
+    const { result } = renderController();
+    await waitForController(result);
+    expect(result.current.webSearchSource).toBe("hosted");
+
+    let staleSearchError: unknown;
+    const staleSearch = result.current
+      .testWebSearch(result.current.webSearchConfig)
+      .catch((cause: unknown) => {
+        staleSearchError = cause;
+      });
+
+    await act(async () => {
+      await result.current.saveConnection({
+        mode: "hosted",
+        baseUrl: "https://api.openai.com",
+        apiKey: "",
+        accessCode: "code-b",
+        modelId: "hosted-default",
+        apiType: "openai",
+      });
+    });
+    expect(result.current.publicConfig?.authenticated).toBe(true);
+
+    await act(async () => {
+      releaseWebSearch?.(hostedAuthErrorResponse());
+      await staleSearch;
+    });
+
+    expect(staleSearchError).toBeDefined();
+    expect(result.current.publicConfig?.authenticated).toBe(true);
+  });
+
+  it("ignores a Hosted rejection that lands after switching to BYOK", async () => {
+    let releaseStaleModels: ((response: Response) => void) | null = null;
+    const staleModels = new Promise<Response>((resolve) => {
+      releaseStaleModels = resolve;
+    });
+    installSequencedModelsFetchMock([
+      // The Hosted save refreshes first, then the stale explicit refresh hangs,
+      // then the BYOK save refreshes.
+      () => modelListResponse(),
+      () => staleModels,
+      () => modelListResponse(["saved-model"]),
+    ]);
+    const { result } = renderController();
+    await waitForController(result);
+
+    await act(async () => {
+      await result.current.saveConnection({
+        mode: "hosted",
+        baseUrl: "https://api.openai.com",
+        apiKey: "",
+        accessCode: "code-b",
+        modelId: "hosted-default",
+        apiType: "openai",
+      });
+    });
+    expect(result.current.publicConfig?.authenticated).toBe(true);
+
+    let staleRefreshError: unknown;
+    const staleRefresh = result.current
+      .refreshModels()
+      .catch((cause: unknown) => {
+        staleRefreshError = cause;
+      });
+
+    // Switching to BYOK does not advance the auth epoch, so only the mode check
+    // stops this Hosted rejection from projecting onto a BYOK session.
+    await act(async () => {
+      await result.current.saveConnection({
+        mode: "byok",
+        baseUrl: "https://gateway.example",
+        apiKey: "byok-key",
+        accessCode: "",
+        modelId: "saved-model",
+        apiType: "openai-compatible",
+      });
+    });
+
+    await act(async () => {
+      releaseStaleModels?.(hostedAuthErrorResponse());
+      await staleRefresh;
+    });
+
+    expect(staleRefreshError).toBeDefined();
+    expect(result.current.connection.mode).toBe("byok");
+    expect(result.current.publicConfig?.authenticated).toBe(true);
+  });
 });
 
 function renderController() {
@@ -826,6 +1042,50 @@ function installFetchMock(
   );
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+/**
+ * Serves `/api/models` from an ordered responder list so a test can keep one
+ * refresh in flight while a later request completes. The last responder repeats.
+ */
+function installSequencedModelsFetchMock(
+  modelsResponders: ReadonlyArray<() => Response | Promise<Response>>,
+) {
+  let modelsCalls = 0;
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL): Promise<Response> => {
+      const path = requestPath(input);
+      if (path === "/api/config") return jsonResponse(hostedConfig);
+      if (path === "/api/auth") return new Response(null, { status: 204 });
+      if (path.endsWith("/models")) {
+        const responder =
+          modelsResponders[modelsCalls] ?? modelsResponders.at(-1);
+        modelsCalls += 1;
+        if (!responder) throw new Error("No /api/models responder configured");
+        return responder();
+      }
+      throw new Error(`Unexpected fetch: ${path}`);
+    },
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function modelListResponse(
+  models: readonly string[] = hostedConfig.models,
+): Response {
+  return new Response(
+    JSON.stringify({ object: "list", data: models.map((id) => ({ id })) }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+/** A CherryChat Hosted access-code rejection, distinct from an upstream 401. */
+function hostedAuthErrorResponse(code = "ACCESS_CODE_INVALID"): Response {
+  return new Response(JSON.stringify({ error: { code } }), {
+    status: 401,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 function requestPath(input: RequestInfo | URL | undefined): string {

@@ -151,26 +151,43 @@ describe("Tavily tool", () => {
     });
   });
 
-  it("preserves hosted error codes and reports an expired site session", async () => {
+  it("preserves hosted error codes and reports a rejected access code", async () => {
     const onUnauthorized = vi.fn();
-    const unauthorized = createTavilyToolExecutor({
+    const rejectedCode = createTavilyToolExecutor({
       mode: "hosted",
       maxResults: 5,
       onUnauthorized,
       fetchImplementation: async () =>
         Response.json(
-          { error: { code: "UNAUTHORIZED", message: "expired" } },
+          { error: { code: "ACCESS_CODE_INVALID", message: "revoked" } },
           { status: 401 },
         ),
     });
     await expect(
-      unauthorized.execute({ query: "session" }, new AbortController().signal),
+      rejectedCode.execute({ query: "session" }, new AbortController().signal),
     ).rejects.toMatchObject({
       code: "TOOL_AUTH_FAILED",
       status: 401,
       retryable: false,
     });
     expect(onUnauthorized).toHaveBeenCalledOnce();
+
+    // Origin rejection and the deployment's own upstream 401 both fail the tool
+    // without implying the access code is bad.
+    for (const code of ["FORBIDDEN", "UNAUTHORIZED"] as const) {
+      const notAccessCode = vi.fn();
+      const executor = createTavilyToolExecutor({
+        mode: "hosted",
+        maxResults: 5,
+        onUnauthorized: notAccessCode,
+        fetchImplementation: async () =>
+          Response.json({ error: { code } }, { status: 403 }),
+      });
+      await expect(
+        executor.execute({ query: code }, new AbortController().signal),
+      ).rejects.toMatchObject({ code: "TOOL_AUTH_FAILED", retryable: false });
+      expect(notAccessCode).not.toHaveBeenCalled();
+    }
 
     const timeout = createTavilyToolExecutor({
       mode: "hosted",

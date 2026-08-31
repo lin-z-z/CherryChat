@@ -208,6 +208,19 @@ export interface ActiveGenerationProjection {
   snapshot: StreamSnapshot;
 }
 
+/**
+ * Write permission for the Hosted authentication projection, held by one
+ * in-flight request. Every method is a no-op once a newer epoch owns the state.
+ */
+interface HostedAuthEpochScope {
+  /** True while this request may still own `publicConfig.authenticated`. */
+  isCurrent: () => boolean;
+  /** Projects `authenticated: false` for a confirmed Hosted auth rejection. */
+  markUnauthenticated: () => void;
+  /** Projects `authenticated: false` only for Hosted-specific transport errors. */
+  noteFailure: (cause: unknown) => void;
+}
+
 export function useChatController() {
   const { t } = useTranslation();
   const translateRef = useRef(t);
@@ -376,12 +389,47 @@ export function useChatController() {
   }, []);
 
   /**
+   * Binds a request to the Hosted authentication epoch that was current when it
+   * started. Only the bound epoch may still project authentication state, so a
+   * delayed response for a replaced access code cannot undo a newer explicit
+   * verification. The locally stored code is never cleared here: the user
+   * re-verifies it from settings instead of retyping it.
+   */
+  const beginHostedAuthEpoch = useCallback((): HostedAuthEpochScope => {
+    const requestEpoch = hostedAuthEpochRef.current;
+    const isCurrent = () => requestEpoch === hostedAuthEpochRef.current;
+    const markUnauthenticated = () => {
+      // The mode check lives here so both entry points share it: switching to
+      // BYOK does not advance the epoch, so an in-flight Hosted request would
+      // otherwise still hold a current epoch and project onto a BYOK session.
+      if (!isCurrent() || connectionRef.current.mode !== "hosted") return;
+      hostedAuthEpochRef.current += 1;
+      setPublicConfig((current) =>
+        current ? { ...current, authenticated: false } : current,
+      );
+    };
+    return {
+      isCurrent,
+      markUnauthenticated,
+      noteFailure: (cause: unknown) => {
+        if (
+          !(cause instanceof ChatTransportError) ||
+          !isHostedAuthErrorCode(cause.code)
+        ) {
+          return;
+        }
+        markUnauthenticated();
+      },
+    };
+  }, []);
+
+  /**
    * Re-reads public config so a long-lived page can notice a newer deployment
    * and re-confirm Hosted authentication. Failures stay silent: the existing
    * config and error surfaces already cover an unreachable server.
    */
   const refreshPublicConfig = useCallback(async () => {
-    const authEpoch = hostedAuthEpochRef.current;
+    const authScope = beginHostedAuthEpoch();
     let config: PublicConfig;
     try {
       config = await fetchPublicConfig(connectionRef.current);
@@ -394,11 +442,11 @@ export function useChatController() {
       if (!current) return config;
       // An explicit verify or auth failure that landed while this request was in
       // flight owns the authentication state.
-      return authEpoch === hostedAuthEpochRef.current
+      return authScope.isCurrent()
         ? config
         : { ...config, authenticated: current.authenticated };
     });
-  }, []);
+  }, [beginHostedAuthEpoch]);
 
   useEffect(() => {
     if (!ready) return undefined;
@@ -816,25 +864,6 @@ export function useChatController() {
     [refreshLists, requireServices],
   );
 
-  /**
-   * Marks Hosted access as unauthenticated when the server rejects the access
-   * code. The locally stored code is preserved so the user can re-verify it from
-   * settings rather than retyping it.
-   */
-  const noteHostedAuthFailure = useCallback((cause: unknown) => {
-    if (
-      !(cause instanceof ChatTransportError) ||
-      !isHostedAuthErrorCode(cause.code) ||
-      connectionRef.current.mode !== "hosted"
-    ) {
-      return;
-    }
-    hostedAuthEpochRef.current += 1;
-    setPublicConfig((current) =>
-      current ? { ...current, authenticated: false } : current,
-    );
-  }, []);
-
   const buildTransport = useCallback(
     (value: ConnectionDraft) =>
       createChatTransport(
@@ -855,6 +884,7 @@ export function useChatController() {
   const refreshModels = useCallback(
     async (value: ConnectionDraft = connection) => {
       const refreshEpoch = ++modelRefreshEpochRef.current;
+      const authScope = beginHostedAuthEpoch();
       setError(null);
       const scope = connectionScope(value);
       try {
@@ -905,7 +935,7 @@ export function useChatController() {
         }
         return nextDescriptors.map(({ id }) => id);
       } catch (cause) {
-        noteHostedAuthFailure(cause);
+        authScope.noteFailure(cause);
         const cachedModels = await requireServices()
           .modelLists.load(scope)
           .catch(() => []);
@@ -939,10 +969,10 @@ export function useChatController() {
       }
     },
     [
+      beginHostedAuthEpoch,
       buildTransport,
       connection,
       defaultModel,
-      noteHostedAuthFailure,
       publicConfig,
       requireServices,
       resolveCapability,
@@ -1223,16 +1253,17 @@ export function useChatController() {
     [updateImageGenerationParameters],
   );
 
-  const createHostedWebSearchUnauthorizedHandler = useCallback(() => {
-    const requestEpoch = hostedAuthEpochRef.current;
-    return () => {
-      if (requestEpoch !== hostedAuthEpochRef.current) return;
-      hostedAuthEpochRef.current += 1;
-      setPublicConfig((current) =>
-        current ? { ...current, authenticated: false } : current,
-      );
-    };
-  }, []);
+  /**
+   * Projects straight to `markUnauthenticated` because the error-code filter
+   * already ran at the call site: the web search client invokes this only for a
+   * Hosted-specific rejection, not for an origin `FORBIDDEN` or the
+   * deployment's own upstream `UNAUTHORIZED`. Epoch and mode are still checked
+   * inside `markUnauthenticated`.
+   */
+  const createHostedWebSearchUnauthorizedHandler = useCallback(
+    () => beginHostedAuthEpoch().markUnauthenticated,
+    [beginHostedAuthEpoch],
+  );
 
   const testWebSearch = useCallback(
     async (input: WebSearchConfiguration) => {
@@ -1395,6 +1426,7 @@ export function useChatController() {
       preparation: GenerationPreparation,
     ) => {
       const services = requireServices();
+      const authScope = beginHostedAuthEpoch();
       const endpointType = resolveModelEndpointType(
         connection,
         connection.modelId,
@@ -1543,7 +1575,7 @@ export function useChatController() {
                 createWebSearchExecutor(
                   webSearchSource,
                   webSearchConfig.maxResults,
-                  createHostedWebSearchUnauthorizedHandler(),
+                  authScope.markUnauthenticated,
                 ),
               ]
             : [],
@@ -1586,7 +1618,7 @@ export function useChatController() {
           },
         });
       } catch (cause) {
-        noteHostedAuthFailure(cause);
+        authScope.noteFailure(cause);
         const transportError =
           cause instanceof ChatTransportError
             ? cause
@@ -1635,12 +1667,11 @@ export function useChatController() {
       }
     },
     [
+      beginHostedAuthEpoch,
       capability,
       connection,
       loadConversation,
-      createHostedWebSearchUnauthorizedHandler,
       modelPreferences,
-      noteHostedAuthFailure,
       publicConfig,
       reasoningChoice,
       refreshLists,
@@ -1653,6 +1684,7 @@ export function useChatController() {
 
   const maybeGenerateTitle = useCallback(
     async (conversationId: string) => {
+      const authScope = beginHostedAuthEpoch();
       try {
         const services = requireServices();
         const [conversationRecord, messages, attempted] = await Promise.all([
@@ -1678,11 +1710,20 @@ export function useChatController() {
         const title = parseGeneratedTitle(await response.json());
         await services.conversations.setAiTitle(conversationId, title);
         await refreshLists();
-      } catch {
+      } catch (cause) {
         // 标题属于非关键增强；会话被删除或请求失败时保留本地标题。
+        // 但当前 epoch 的 Hosted 鉴权失败仍要更新认证状态，否则凭据真失效时无提示。
+        authScope.noteFailure(cause);
       }
     },
-    [buildTransport, connection, refreshLists, requireServices, titleModel],
+    [
+      beginHostedAuthEpoch,
+      buildTransport,
+      connection,
+      refreshLists,
+      requireServices,
+      titleModel,
+    ],
   );
 
   const runImageGeneration = useCallback(
@@ -1789,6 +1830,11 @@ export function useChatController() {
         timedOut = true;
         controller.abort();
       }, timeoutMs);
+      // Attachment loading and message persistence above are async, so the epoch
+      // and the access code must be read together here: binding earlier could
+      // pair this request's epoch with a code the user has since replaced.
+      const accessCode = connectionRef.current.accessCode;
+      const authScope = beginHostedAuthEpoch();
 
       try {
         const transport = new OpenAICompatibleImageTransport({
@@ -1796,9 +1842,7 @@ export function useChatController() {
             mode,
             baseUrl: profile.baseUrl,
             apiKey: profile.apiKey,
-            ...(mode === "hosted"
-              ? { accessCode: connectionRef.current.accessCode }
-              : {}),
+            ...(mode === "hosted" ? { accessCode } : {}),
           },
         });
         const result = await transport.generate(
@@ -1823,7 +1867,7 @@ export function useChatController() {
           result.images,
         );
       } catch (cause) {
-        noteHostedAuthFailure(cause);
+        authScope.noteFailure(cause);
         const error = imageGenerationTransportError(cause, timedOut);
         const stopped = error.code === "ABORTED" && !timedOut;
         await services.conversations.failImageGeneration(
@@ -1854,9 +1898,9 @@ export function useChatController() {
       }
     },
     [
+      beginHostedAuthEpoch,
       imageGenerationConfig,
       loadConversation,
-      noteHostedAuthFailure,
       publicConfig,
       refreshLists,
       requireServices,
