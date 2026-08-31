@@ -7,14 +7,14 @@
   <p>
     <a href="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml"><img src="https://github.com/lin-z-z/CherryChat/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
     <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
-    <img src="https://img.shields.io/badge/version-1.2.0-16a34a.svg" alt="CherryChat v1.2.0" />
+    <img src="https://img.shields.io/badge/version-1.2.1-16a34a.svg" alt="CherryChat v1.2.1" />
   </p>
 </div>
 
 > [!IMPORTANT]
-> CherryChat v1.2.0 makes hosted access validate its access code on every
-> request and adds original-image previews and downloads, on top of the stable
-> contracts established by v1.1.0. It does not provide accounts,
+> CherryChat v1.2.1 fixes a hosted authentication state defect, on top of the
+> per-request access-code validation and original-image previews introduced in
+> v1.2.0 and the stable contracts established by v1.1.0. It does not provide accounts,
 > cloud sync, organization permissions, centralized audit, or billing controls.
 > Review the [security](./docs/SECURITY.md) and
 > [deployment](./docs/DEPLOYMENT.md) boundaries before sharing a hosted-key

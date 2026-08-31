@@ -8,6 +8,58 @@ capabilities and limitations.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-31
+
+### Summary
+
+`v1.2.1` is a patch release that fixes a Hosted authentication state defect: a
+delayed request carrying a replaced access code could report the browser as
+unauthenticated after a newer code had already been verified successfully.
+
+### Fixed
+
+- Hosted authentication state is now owned by the request that started it.
+  Model refresh, chat generation, image generation, and automatic title
+  requests each bind the authentication epoch that was current when they began,
+  and only that epoch may report the browser as unauthenticated. A rejected
+  code that arrives after a newer code was verified no longer clears the newer
+  result.
+- An automatic title request that receives a Hosted authentication error now
+  updates authentication state. Previously the error was discarded, so a
+  genuinely revoked access code produced no signal on that path. Title
+  generation remains a silent non-critical enhancement and still reports no
+  error of its own.
+- Hosted image generation reads the access code and binds the epoch together,
+  immediately before the request. Reference-image loading is asynchronous, so
+  the previous ordering could pair one request with a code the user had since
+  replaced and discard a genuine rejection.
+- A Hosted authentication error that arrives after switching to BYOK no longer
+  changes Hosted authentication state.
+- Hosted web search treats only a Hosted-specific rejection as a failed access
+  code. An origin `FORBIDDEN` and the deployment's own upstream `UNAUTHORIZED`
+  still fail the search call without reporting the access code as invalid.
+
+Authentication failures continue to preserve the locally stored access code so
+it can be re-verified from settings. Upstream and BYOK 401, 429, 5xx, timeout,
+and cancellation remain isolated from Hosted authentication state.
+
+### Known limitations
+
+- The automatic title path shares the same authentication projection as the
+  other request paths but has no dedicated regression test; its behavior is
+  covered indirectly through the model refresh and web search paths.
+- Every limitation listed under `v1.2.0` still applies. This release changes no
+  authentication protocol, request header, server configuration, or stored data.
+
+### Upgrade and backup
+
+This release adds no IndexedDB schema migration and no configuration change.
+Local conversations, settings, and the stored access code are preserved, and no
+deployment credential needs to be updated.
+
+Because `v1.2.0` already ships the refresh prompt, a long-lived page can prompt
+for its own update to this release.
+
 ## [1.2.0] - 2026-08-30
 
 ### Summary

@@ -6,9 +6,9 @@
 [Contributing](../CONTRIBUTING.md) · [License](../LICENSE)
 
 CherryChat is a lightweight, privacy-first, self-hostable web AI client for
-individuals and small teams. Version `v1.2.0` makes Hosted access stateless by
-validating its access code on every request, on top of the stable contracts
-first established by `v1.1.0`. This directory contains
+individuals and small teams. Version `v1.2.1` fixes a Hosted authentication
+state defect, on top of the stateless per-request access-code validation added
+in `v1.2.0` and the stable contracts first established by `v1.1.0`. This directory contains
 the technical sources of truth that would make the main README too dense.
 
 ## Start here
@@ -36,8 +36,9 @@ the technical sources of truth that would make the main README too dense.
 
 ## Project maturity
 
-Version `v1.2.0` extends the documented stable product contracts with stateless
-Hosted access validation and is protected by repository quality gates.
+Version `v1.2.1` keeps the documented stable product contracts of `v1.2.0`,
+including stateless Hosted access validation, and is protected by repository
+quality gates.
 It does not promise long-term support, hosted service uptime, or an enterprise
 service commitment.
 
